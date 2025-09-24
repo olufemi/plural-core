@@ -1,0 +1,124 @@
+server:
+  port: ${GATEWAY_PORT:7443}
+#  ssl:
+#    enabled:
+#      ${ENABLE_SSL:false}
+#    keyStoreType:
+#      JKS
+#    key-store:
+#      file:${CERTIFICATE_KEY_STORE_PATH:/home/nextgen/AccessProxy/certificate/nextgen2.jks}
+#    key-store-password:
+#      ${CERTIFICATE_PASSWORD:Acc#$$Secured}
+#    key-alias:
+#      ${CERTIFICATE_ALIAS:mykey}
+#    enabled-protocols: [TLSv1.2]
+  tomcat:
+    maxThreads: ${TOMCAT_THREAD:200}
+spring:
+  application:
+    name: gateway-service
+  profiles:
+    active: ${GATEWAY_PROFILE:development}
+  zipkin:
+    base-url: ${ZIPKIN_SERVER_URL:http://localhost:9411}
+  sleuth:
+    sampler:
+      rate: 10 #sample 10% of requests
+  autoconfigure:
+      exclude:
+          - org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration
+          - org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration
+zuul:
+  ignored-patterns: /**/management/**
+  prefix: /api
+  strip-prefix: true
+  sensitive-headers: Cookie,Set-Cookie
+  semaphore: #com.netflix.hystrix.exception.HystrixRuntimeException: "microservice" could not acquire a semaphore for execution and no fallback available. https://stackoverflow.com/questions/35076743/difference-between-thread-isolated-and-semaphore-isolated-calls
+    max-semaphores: 2000
+  ratelimit:
+    key-prefix: gateway
+    enabled: true
+    repository: REDIS
+    behind-proxy: true
+    add-response-headers: true
+    default-policy-list: #optional - will apply unless specific policy exists
+      - limit: 1 #optional - request number limit per refresh interval window
+        quota: 1000 #optional - request time limit per refresh interval window (in seconds)
+        refresh-interval: 60 #default value (in seconds)
+        type: #optional
+          - origin
+          - url
+          - http_method
+  host:
+    connect-timeout-millis: ${ZUUL_HOST_CONNECT_TIME_OUT:20000}
+    socket-timeout-millis: ${ZUUL_HOST_SOCKET_TIME_OUT:60000}
+    max-per-route-connections: ${HOST_MAX_PER_ROUTE_CONNECTIONS:1}
+  #routes:
+#    nip-name-enquiry:
+#      path: /customer-detail/nip-name-enquiry-by-UUID/**
+#      url: ${NIP_CUSTOMER_DETAIL_HOST:http://localhost:9281}/nip-name-enquiry-by-UUID
+#    nip-customer-detail:
+#      path: /customer-detail/get-customer-detail/**
+#      url: ${NIP_CUSTOMER_DETAIL_HOST:http://localhost:9281}/get-customer-detail
+#    access-reward-manage-user:
+#      path: /user/user-management/access-reward-manage-user/**
+#      url: http://localhost:7080/access-reward-manage-user
+#    access-reward-fetch-user-point-details:
+#      path: /user/user-management/access-reward-fetch-user-point-details/**
+#      url: http://localhost:7080/access-reward-fetch-user-point-details
+#    access-reward-fetch-user-reward-transactions:
+#      path: /user/user-management/access-reward-fetch-user-reward-transactions/**
+#      url: http://localhost:7080/access-reward-fetch-user-reward-transactions
+#hystrix.command.default.execution.timeout.enabled: false
+ribbon:
+  ReadTimeout: 120000
+  SocketTimeout: 120000
+  MaxAutoRetries: 0
+  MaxAutoRetriesNextServer: 0
+  eureka.enabled: true
+eureka:
+  client:
+    serviceUrl.defaultZone: ${DISCOVERY_SERVICE_HOST:http://localhost:5088/eureka}
+    region: default
+    registryFetchIntervalSeconds: 5
+    preferIpAddress: false
+management.endpoints.web.exposure.include: "*" #for exposing actuator for health check
+management.server.port: 8567
+management.server.ssl.enabled: false
+#configure logFilters
+finacialwealth:
+  filter:
+    rate-limit:
+      disabled: ${ENABLE_RATE_LIMIT:false}
+      quota: 11 #this is like the overdraft to be used when rate-limit is exceeded
+      limit: 10 #number of calls permitted within time-in-seconds window
+      time-in-seconds: 1 #the time window in seconds
+    log:
+      log-request: true
+      log-request-body: false
+      log-request-headers: false
+      log-response: true
+      log-response-body: false
+    token:
+      disabled: false
+      white-list:
+        - /profiling/walletmgt/create-user
+        - /profiling/walletmgt/initiate-request-device-change
+        - /profiling/walletmgt/change-device
+        - /profiling/walletmgt/initiate-forget-password
+        - /profiling/walletmgt/change-password
+        - /profiling/walletmgt/resend-otp-new
+        - /session-manager/session/authenticate/admin-user   
+        - /session-manager/session/authenticate/customer
+        - /session-manager/session/authenticate/customer-mobile
+        - /session-manager/session/authenticate/customer-loginotp
+        - /session-manager/session/verify
+        - /session-manager/session/resend/otp
+        - /session-manager/session/registration/complete
+        - /session-manager/session/device/app-min-version 
+        - /transactions/webhooks/transfaar/payment-deposit
+       
+        
+logstash:
+  host: 41.78.156.173
+  port: ${LOGSTASH_PORT:9700}

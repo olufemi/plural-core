@@ -1,0 +1,16 @@
+logging:
+  level:
+    com.finacialwealth.service.gateway: DEBUG
+accessbank:
+  filter:
+    rate-limit:
+      disabled: true
+      quota: 1 #this is like the overdraft to be used when rate-limit is exceeded
+      limit: 1 #number of calls permitted within time-in-seconds window
+      time-in-seconds: 1 #the time window in seconds
+    log:
+      log-request: true
+      log-request-body: false
+      log-request-headers: false
+      log-response: true
+      log-response-body: false

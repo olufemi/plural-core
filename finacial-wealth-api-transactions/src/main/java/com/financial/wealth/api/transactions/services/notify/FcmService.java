@@ -2,7 +2,7 @@
  * Click nbfs://nbhost/SystemFileSystem/Templates/Licenses/license-default.txt to change this license
  * Click nbfs://nbhost/SystemFileSystem/Templates/Classes/Class.java to edit this template
  */
-package com.financial.wealth.api.transactions.services;
+package com.financial.wealth.api.transactions.services.notify;
 
 /**
  *
@@ -45,6 +45,77 @@ public class FcmService {
     private String serviceAccountPath;
 
     private volatile GoogleCredentials cachedCreds;
+
+    public void sendToTokenWithBroadCast(String deviceToken, String title, String body, Map<String, String> data) throws Exception {
+        String url = "https://fcm.googleapis.com/v1/projects/" + projectId + "/messages:send";
+
+        // ----- Common notification (shown on both platforms) -----
+        Notification n = new Notification();
+        n.title = (title == null ? "" : title);
+        n.body = (body == null ? "" : body);
+
+        // ----- ANDROID override (optional but recommended) -----
+        AndroidNotification an = new AndroidNotification();
+        an.tag = null;                   // set a collapse key/tag if you want dedupe
+        an.channel_id = "default";       // ensure the app created this channel
+
+        AndroidConfig android = new AndroidConfig();
+        android.priority = "HIGH";       // "HIGH" for time-sensitive
+        android.ttl = "86400s";          // 24h buffering if device is offline
+        android.notification = an;
+        android.collapse_key = null;     // set e.g. "inbox" to collapse older ones
+
+        // ----- APNs (iOS) override -----
+        ApnsConfig apns = new ApnsConfig();
+        apns.headers = new HashMap<>();
+        // 'alert' if you show a banner; use 'background' for silent data pushes
+        apns.headers.put("apns-push-type", "alert");     // or "background"
+        apns.headers.put("apns-priority", "10");         // 10: immediate; 5: power-saving
+        // Expiration epoch seconds for TTL (24h here)
+        long exp = (System.currentTimeMillis() / 1000L) + 86400;
+        apns.headers.put("apns-expiration", String.valueOf(exp));
+        // Optional: collapse id to coalesce similar notifications on iOS
+        // apns.headers.put("apns-collapse-id", "inbox");
+
+        // APNs payload (Apple 'aps' dictionary)
+        apns.payload = new HashMap<>();
+        Map<String, Object> aps = new HashMap<>();
+        // If you rely on the top-level 'notification' (title/body), you can leave 'alert' out.
+        // Include 'mutable-content' if you use a Notification Service Extension (e.g., images):
+        // aps.put("mutable-content", 1);
+        aps.put("badge", 1);             // the app should replace with actual unread count later
+        // For silent/background data pushes, use:
+        // aps.put("content-available", 1);
+        apns.payload.put("aps", aps);
+
+        // ----- Build message -----
+        Message msg = new Message();
+        msg.token = deviceToken;
+        msg.notification = n;                  // visible alert
+        msg.data = (data == null ? new HashMap<String, String>() : data);
+        msg.android = android;                 // Android override
+        msg.apns = apns;                       // iOS override
+
+        FcmV1Request req = new FcmV1Request();
+        req.message = msg;
+        req.validate_only = false;
+
+        String json = mapper.writeValueAsString(req);
+
+        HttpPost post = new HttpPost(url);
+        post.setHeader("Authorization", "Bearer " + getAccessToken());
+        post.setHeader("Content-Type", "application/json; charset=UTF-8");
+        post.setEntity(new StringEntity(json, StandardCharsets.UTF_8));
+
+        try (CloseableHttpClient http = HttpClients.createDefault(); CloseableHttpResponse resp = http.execute(post)) {
+            int code = resp.getStatusLine().getStatusCode();
+            String respBody = EntityUtils.toString(resp.getEntity(), StandardCharsets.UTF_8);
+            log.info("FCM response: {} {}", code, respBody);
+            if (code >= 400) {
+                throw new RuntimeException("FCM error " + code + ": " + respBody);
+            }
+        }
+    }
 
     /**
      * Java 8-friendly loader: absolute path -> filesystem, else classpath.
@@ -152,9 +223,13 @@ public class FcmService {
 
     static class Message {
 
+        public String token;       // OR topic OR condition
         public Notification notification;
         public Map<String, String> data;
-        public String token;
+        public AndroidConfig android;
+        public ApnsConfig apns;
+        public String topic;       // alternative to token
+        public String condition;   // alternative advanced audience
     }
 
     static class Notification {

@@ -5,6 +5,7 @@
  */
 package com.financial.wealth.api.transactions.services;
 
+import com.financial.wealth.api.transactions.services.notify.FcmService;
 import com.financial.wealth.api.transactions.domain.CommissionCfg;
 import com.financial.wealth.api.transactions.domain.DeviceChangeLimitConfig;
 import com.financial.wealth.api.transactions.domain.DeviceDetails;
@@ -51,6 +52,7 @@ import com.financial.wealth.api.transactions.repo.RegWalletCheckLogRepo;
 import com.financial.wealth.api.transactions.repo.RegWalletInfoRepository;
 import com.financial.wealth.api.transactions.repo.UserLimitConfigRepo;
 import com.financial.wealth.api.transactions.repo.WToWaletTransferRepo;
+import com.financial.wealth.api.transactions.services.notify.MessageCenterService;
 import com.financial.wealth.api.transactions.utils.DecodedJWTToken;
 import com.financial.wealth.api.transactions.utils.GlobalMethods;
 import com.financial.wealth.api.transactions.utils.StrongAES;
@@ -108,6 +110,7 @@ public class LocalTransferService {
     private static final int DEFAULT_DEVICE_LIMIT_DAYS = 2;
     private final FcmService fcmService;
     private final DeviceDetailsRepo deviceDetailsRepo;
+    private final MessageCenterService messageCenterService;
 
     @Qualifier("withEureka")
     @Autowired
@@ -129,7 +132,8 @@ public class LocalTransferService {
             LocalTLogRetrialDebitRepo localTLogRetrialDebitRepo,
             LocalBeneficiariesIndividualRepo localBeneficiariesIndividualRepo,
             FcmService fcmService,
-            DeviceDetailsRepo deviceDetailsRepo) {
+            DeviceDetailsRepo deviceDetailsRepo,
+            MessageCenterService messageCenterService) {
 
         this.localTransFailedTransInfoRepo = localTransFailedTransInfoRepo;
         this.regWalletInfoRepository = regWalletInfoRepository;
@@ -148,6 +152,7 @@ public class LocalTransferService {
         this.localBeneficiariesIndividualRepo = localBeneficiariesIndividualRepo;
         this.fcmService = fcmService;
         this.deviceDetailsRepo = deviceDetailsRepo;
+        this.messageCenterService = messageCenterService;
     }
 
     private static int parseDaysSafely(String raw, int fallback) {
@@ -2032,12 +2037,16 @@ public class LocalTransferService {
                                 data.putAll(puFire.getData());
                             }
 
-                            fcmService.sendToToken(
+                            messageCenterService.createAndPushToUser(getReceiverName.get(0).getWalletId(), puFire.getTitle(),
+                                    puFire.getBody(),
+                                    data, null, "");
+
+                            /*fcmService.sendToToken(
                                     puFire.getDeviceToken(),
                                     puFire.getTitle(),
                                     puFire.getBody(),
                                     data
-                            );
+                            );*/
                         }
 
                     }
@@ -2061,12 +2070,16 @@ public class LocalTransferService {
                                 data.putAll(puFireSender.getData());
                             }
 
-                            fcmService.sendToToken(
+                            /*fcmService.sendToToken(
                                     puFireSender.getDeviceToken(),
                                     puFireSender.getTitle(),
                                     puFireSender.getBody(),
                                     data
-                            );
+                            );*/
+
+                            messageCenterService.createAndPushToUser(getSenderName.get(0).getWalletId(), puFireSender.getTitle(),
+                                    puFireSender.getBody(),
+                                    data, null, "");
 
                         }
                     }

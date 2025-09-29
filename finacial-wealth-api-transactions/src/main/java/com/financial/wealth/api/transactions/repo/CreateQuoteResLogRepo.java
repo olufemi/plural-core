@@ -23,15 +23,15 @@ public interface CreateQuoteResLogRepo extends
 
     @Query("SELECT u FROM CreateQuoteResLog u where u.quoteId = :quoteId")
     List<CreateQuoteResLog> findByQuoteId(@Param("quoteId") String quoteId);
-    
+
     @Query("SELECT u FROM CreateQuoteResLog u where u.quoteId = :quoteId")
     CreateQuoteResLog findByQuoteIdUpdate(@Param("quoteId") String quoteId);
-    
+
     Optional<CreateQuoteResLog> findFirstByQuoteIdAndStatusAndIsAcceptedAndCreateQuoteResponseIsNotNull(
             String quoteId, String status, String isAccepted
     );
-    
-     Page<CreateQuoteResLog> findByEmailIgnoreCaseAndStatusAndIsAcceptedAndCreateQuoteResponseIsNotNull(
+
+    Page<CreateQuoteResLog> findByEmailIgnoreCaseAndStatusAndIsAcceptedAndCreateQuoteResponseIsNotNull(
             String email, String status, String isAccepted, Pageable pageable
     );
 

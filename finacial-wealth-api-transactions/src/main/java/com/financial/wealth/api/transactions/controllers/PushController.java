@@ -9,14 +9,18 @@ package com.financial.wealth.api.transactions.controllers;
  * @author olufemioshin
  */
 import com.financial.wealth.api.transactions.domain.DeviceDetails;
+import com.financial.wealth.api.transactions.models.BaseResponse;
 import com.financial.wealth.api.transactions.repo.DeviceDetailsRepo;
 import com.financial.wealth.api.transactions.repo.DeviceTokenRepositoryCustom;
-import com.financial.wealth.api.transactions.services.FcmService;
+import com.financial.wealth.api.transactions.services.notify.FcmService;
+import com.financial.wealth.api.transactions.services.notify.MessageCenterService;
 import com.financial.wealth.api.transactions.utils.DecodedJWTToken;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -28,6 +32,36 @@ public class PushController {
     private final DeviceDetailsRepo repo; // implement with JPA or JDBC
     private final FcmService fcmService;
     private final DeviceTokenRepositoryCustom deviceTokenRepositoryCustom;
+
+    private final MessageCenterService svc;
+
+    @GetMapping
+    public ResponseEntity<BaseResponse> list(
+            @RequestParam String userId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(defaultValue = "true") boolean unreadOnly) {
+
+        Page<Map<String, Object>> p = svc.listInbox(userId, page, size, unreadOnly);
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("page", p.getNumber());
+        data.put("size", p.getSize());
+        data.put("totalElements", p.getTotalElements());
+        data.put("totalPages", p.getTotalPages());
+        data.put("items", p.getContent());
+
+        BaseResponse br = new BaseResponse(200, "OK");
+        br.setData(data);
+        return ResponseEntity.ok(br);
+    }
+
+    @PostMapping("/{userNotificationId}/read")
+    public ResponseEntity<BaseResponse> markRead(
+            @PathVariable Long userNotificationId,
+            @RequestParam String userId) {
+        svc.markRead(userId, userNotificationId);
+        return ResponseEntity.ok(new BaseResponse(200, "Marked read"));
+    }
 
     @PostMapping("/register")
     public ResponseEntity<?> register(@RequestBody RegisterTokenRq rq) {

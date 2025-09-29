@@ -27,8 +27,9 @@ import com.financial.wealth.api.transactions.repo.DeviceDetailsRepo;
 import com.financial.wealth.api.transactions.repo.FinWealthPaymentTransactionRepo;
 import com.financial.wealth.api.transactions.repo.RegWalletInfoRepository;
 import com.financial.wealth.api.transactions.repo.SettlementFailureLogRepo;
-import com.financial.wealth.api.transactions.services.FcmService;
+import com.financial.wealth.api.transactions.services.notify.FcmService;
 import static com.financial.wealth.api.transactions.services.LocalTransferService.pushNotifyDebitWalletForWalletTransferSender;
+import com.financial.wealth.api.transactions.services.notify.MessageCenterService;
 import com.financial.wealth.api.transactions.utils.DecodedJWTToken;
 import com.financial.wealth.api.transactions.utils.StrongAES;
 import com.financial.wealth.api.transactions.utils.UttilityMethods;
@@ -65,6 +66,7 @@ public class WebhookKeyService {
     private final FinWealthPaymentTransactionRepo finWealthPaymentTransactionRepo;
     private final DeviceDetailsRepo deviceDetailsRepo;
     private final FcmService fcmService;
+     private final MessageCenterService messageCenterService;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -81,7 +83,8 @@ public class WebhookKeyService {
             UttilityMethods utilMeth, RegWalletInfoRepository regWalletInfoRepository,
             FinWealthPaymentTransactionRepo finWealthPaymentTransactionRepo,
             DeviceDetailsRepo deviceDetailsRepo,
-            FcmService fcmService) {
+            FcmService fcmService,
+            MessageCenterService messageCenterService) {
         // Example: pre-provision one key
         keys.put(transfaarClient, generateBase64Secret());
         this.createQuoteResLogRepo = createQuoteResLogRepo;
@@ -92,6 +95,7 @@ public class WebhookKeyService {
         this.finWealthPaymentTransactionRepo = finWealthPaymentTransactionRepo;
         this.deviceDetailsRepo = deviceDetailsRepo;
         this.fcmService = fcmService;
+        this.messageCenterService = messageCenterService;
     }
 
     public String findSecret(String keyId) {
@@ -220,12 +224,15 @@ public class WebhookKeyService {
                             data.putAll(puFireSender.getData());
                         }
 
-                        fcmService.sendToToken(
+                        /*fcmService.sendToToken(
                                 puFireSender.getDeviceToken(),
                                 puFireSender.getTitle(),
                                 puFireSender.getBody(),
                                 data
-                        );
+                        );*/
+                          messageCenterService.createAndPushToUser(getReceiverName.get(0).getWalletId(), puFireSender.getTitle(),
+                                    puFireSender.getBody(),
+                                    data, null, "");
 
                     }
                 }
@@ -458,13 +465,17 @@ public class WebhookKeyService {
                         if (puFireSender.getData() != null) {
                             data.putAll(puFireSender.getData());
                         }
+                        
+                          messageCenterService.createAndPushToUser(getReceiverName.get(0).getWalletId(), puFireSender.getTitle(),
+                                    puFireSender.getBody(),
+                                    data, null, "");
 
-                        fcmService.sendToToken(
+                       /* fcmService.sendToToken(
                                 puFireSender.getDeviceToken(),
                                 puFireSender.getTitle(),
                                 puFireSender.getBody(),
                                 data
-                        );
+                        );*/
 
                     }
                 }

@@ -303,6 +303,17 @@
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
+            <dependency>
+                <groupId>com.google.guava</groupId>
+                <artifactId>guava</artifactId>
+                <version>33.2.1-jre</version>
+            </dependency>
+            <!-- (Optional but recommended) pin google-auth-library too -->
+            <dependency>
+                <groupId>com.google.auth</groupId>
+                <artifactId>google-auth-library-oauth2-http</artifactId>
+                <version>1.24.0</version>
+            </dependency>
         </dependencies>
     </dependencyManagement>
    

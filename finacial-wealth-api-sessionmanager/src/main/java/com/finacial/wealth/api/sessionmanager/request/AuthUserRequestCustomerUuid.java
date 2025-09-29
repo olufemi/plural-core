@@ -67,4 +67,5 @@ public class AuthUserRequestCustomerUuid {
     @NotBlank
     @Expose*/
     private String pushNotificationToken;
+    private String appType;
 }

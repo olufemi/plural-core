@@ -35,32 +35,28 @@
     </dependencyManagement>
 
     <dependencies>
-        <!-- ShedLock core integration with Spring -->
+        <!-- ShedLock -->
         <dependency>
             <groupId>net.javacrumbs.shedlock</groupId>
             <artifactId>shedlock-spring</artifactId>
             <version>6.10.0</version>
         </dependency>
-
-        <!-- Choose ONE provider -->
-
-        <!-- Option A: JDBC (MySQL) – recommended when you already have a DataSource -->
         <dependency>
             <groupId>net.javacrumbs.shedlock</groupId>
             <artifactId>shedlock-provider-jdbc-template</artifactId>
             <version>6.10.0</version>
         </dependency>
-        <!-- OpenFeign -->
+
+        <!-- Spring Cloud -->
         <dependency>
             <groupId>org.springframework.cloud</groupId>
             <artifactId>spring-cloud-starter-openfeign</artifactId>
         </dependency>
-
-        <!-- (Optional) Client-side load-balancing if you call services by name -->
         <dependency>
             <groupId>org.springframework.cloud</groupId>
             <artifactId>spring-cloud-starter-loadbalancer</artifactId>
         </dependency>
+
         <!-- Spring Boot -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -86,12 +82,32 @@
             <artifactId>flyway-core</artifactId>
         </dependency>
 
+        <!-- OpenAPI / Swagger UI -->
+        <dependency>
+            <groupId>org.springdoc</groupId>
+            <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+            <version>2.5.0</version>
+        </dependency>
+
+        <!-- Email -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-mail</artifactId>
+        </dependency>
+
+        <!-- HTML → PDF (Flying Saucer + OpenPDF) for org.xhtmlrenderer.pdf.ITextRenderer -->
+        <dependency>
+            <groupId>org.xhtmlrenderer</groupId>
+            <artifactId>flying-saucer-pdf</artifactId>
+            <version>10.0.0</version>
+        </dependency>
+
+        <!-- Test -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
             <exclusions>
-                <!-- exclude JUnit4 Vintage unless you need to run JUnit4 tests -->
                 <exclusion>
                     <groupId>org.junit.vintage</groupId>
                     <artifactId>junit-vintage-engine</artifactId>
@@ -99,26 +115,48 @@
             </exclusions>
         </dependency>
 
-        <!-- keep only if you actually use it in tests -->
+        <!-- keep only if you truly use it in tests -->
         <dependency>
             <groupId>com.kloudtek.mule.elogging</groupId>
             <artifactId>mule-elogging-log4j2</artifactId>
             <version>0.9.3</version>
             <scope>test</scope>
         </dependency>
-        <dependency>
-            <groupId>com.github.krraghavan</groupId>
-            <artifactId>swagger-annotations</artifactId>
-            <version>2.0.8.1-RELEASE</version>
-            <type>bundle</type>
-        </dependency>
-        <dependency>
-            <groupId>io.swagger.core.v3</groupId>
-            <artifactId>swagger-annotations-jakarta</artifactId>
-            <version>2.2.31</version>
-            <type>jar</type>
-        </dependency>
     </dependencies>
+
+    <!-- Use -P{env} to pick profile; none are auto-activated to avoid clashes -->
+    <profiles>
+        <profile>
+            <id>local</id>
+            <properties>
+                <spring.profiles.active>local</spring.profiles.active>
+            </properties>
+        </profile>
+        <profile>
+            <id>dev</id>
+            <properties>
+                <spring.profiles.active>dev</spring.profiles.active>
+            </properties>
+        </profile>
+        <profile>
+            <id>prod</id>
+            <properties>
+                <spring.profiles.active>prod</spring.profiles.active>
+            </properties>
+        </profile>
+        <profile>
+            <id>pilot</id>
+            <properties>
+                <spring.profiles.active>pilot</spring.profiles.active>
+            </properties>
+        </profile>
+        <profile>
+            <id>staging</id>
+            <properties>
+                <spring.profiles.active>staging</spring.profiles.active>
+            </properties>
+        </profile>
+    </profiles>
 
     <build>
         <plugins>
@@ -132,13 +170,12 @@
                 </configuration>
             </plugin>
 
-            <!-- (Optional but recommended) Ensure JUnit Platform provider is used -->
+            <!-- JUnit Platform -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>3.2.5</version>
                 <configuration>
-                    <!-- avoids JPMS/module-path surprises on Java 21 projects -->
                     <useModulePath>false</useModulePath>
                 </configuration>
             </plugin>

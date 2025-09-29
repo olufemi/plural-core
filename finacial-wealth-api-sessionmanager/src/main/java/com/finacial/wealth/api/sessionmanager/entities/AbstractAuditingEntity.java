@@ -1,4 +1,4 @@
-package com.financial.wealth.api.transactions.domain;
+package com.finacial.wealth.api.sessionmanager.entities;
 
 import java.io.Serializable;
 

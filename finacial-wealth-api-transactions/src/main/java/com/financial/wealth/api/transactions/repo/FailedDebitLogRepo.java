@@ -6,6 +6,7 @@ package com.financial.wealth.api.transactions.repo;
 
 import com.financial.wealth.api.transactions.domain.CreateQuoteResLog;
 import com.financial.wealth.api.transactions.domain.FailedCreditLog;
+import com.financial.wealth.api.transactions.domain.FailedDebitLog;
 import java.util.List;
 import org.springframework.data.repository.CrudRepository;
 
@@ -13,9 +14,9 @@ import org.springframework.data.repository.CrudRepository;
  *
  * @author olufemioshin
  */
-public interface FailedCreditLogRepo extends
-        CrudRepository<FailedCreditLog, String> {
+public interface FailedDebitLogRepo extends
+        CrudRepository<FailedDebitLog, String> {
     
-    List<FailedCreditLog> findByResolvedFalse();
+    List<FailedDebitLog> findByResolvedFalse();
 
 }

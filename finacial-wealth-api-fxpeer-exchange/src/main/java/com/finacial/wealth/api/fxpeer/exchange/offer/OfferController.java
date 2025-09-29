@@ -47,16 +47,3 @@ public class OfferController {
         return ResponseEntity.noContent().build();
     }
 }
-
-record CreateOfferRq(@NotNull
-        CurrencyCode currencySell,
-        @NotNull
-        CurrencyCode currencyReceive,
-        @NotNull
-        @DecimalMin("0.000001")
-        BigDecimal rate,
-        @NotNull
-        @DecimalMin("0.01")
-        BigDecimal qtyTotal) {
-
-}

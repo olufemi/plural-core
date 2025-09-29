@@ -3,9 +3,9 @@
  * To change this template file, choose Tools | Templates
  * and open the template in the editor.
  */
-package com.finacial.wealth.api.profiling.repo;
+package com.finacial.wealth.api.sessionmanager.repository;
 
-import com.finacial.wealth.api.profiling.domain.RegWalletInfo;
+import com.finacial.wealth.api.sessionmanager.entities.RegWalletInfo;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.Query;

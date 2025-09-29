@@ -26,10 +26,10 @@ import org.springframework.data.annotation.LastModifiedDate;
  */
 @Entity
 @Data
-public class FailedCreditLog implements Serializable {
+public class FailedDebitLog implements Serializable {
 
     private static final long serialVersionUID = 1L;
-    private static final String SEQ_NAME = "FAILED_CREDIT_LOG_CFG_SEQ";
+    private static final String SEQ_NAME = "FAILED_DEBIT_LOG_CFG_SEQ";
     @Id
     @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "pooled")
     @GenericGenerator(

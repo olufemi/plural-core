@@ -11,17 +11,25 @@ package com.financial.wealth.api.transactions.tranfaar.services;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.financial.wealth.api.transactions.domain.CreateQuoteResLog;
+import com.financial.wealth.api.transactions.domain.DeviceDetails;
 import com.financial.wealth.api.transactions.domain.FinWealthPaymentTransaction;
 import com.financial.wealth.api.transactions.domain.RegWalletInfo;
 import com.financial.wealth.api.transactions.domain.SettlementFailureLog;
 import com.financial.wealth.api.transactions.models.BaseResponse;
 import com.financial.wealth.api.transactions.models.CreditWalletCaller;
+import com.financial.wealth.api.transactions.models.DebitWalletCaller;
+import com.financial.wealth.api.transactions.models.PushNotificationFireBase;
+import com.financial.wealth.api.transactions.models.tranfaar.outflow.WithdrawalOutflow;
 
 import com.financial.wealth.api.transactions.repo.AcceptQuoteResponseFailedRepo;
 import com.financial.wealth.api.transactions.repo.CreateQuoteResLogRepo;
+import com.financial.wealth.api.transactions.repo.DeviceDetailsRepo;
 import com.financial.wealth.api.transactions.repo.FinWealthPaymentTransactionRepo;
 import com.financial.wealth.api.transactions.repo.RegWalletInfoRepository;
 import com.financial.wealth.api.transactions.repo.SettlementFailureLogRepo;
+import com.financial.wealth.api.transactions.services.FcmService;
+import static com.financial.wealth.api.transactions.services.LocalTransferService.pushNotifyDebitWalletForWalletTransferSender;
+import com.financial.wealth.api.transactions.utils.DecodedJWTToken;
 import com.financial.wealth.api.transactions.utils.StrongAES;
 import com.financial.wealth.api.transactions.utils.UttilityMethods;
 import com.google.gson.Gson;
@@ -55,6 +63,8 @@ public class WebhookKeyService {
     private final UttilityMethods utilMeth;
     private final RegWalletInfoRepository regWalletInfoRepository;
     private final FinWealthPaymentTransactionRepo finWealthPaymentTransactionRepo;
+    private final DeviceDetailsRepo deviceDetailsRepo;
+    private final FcmService fcmService;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -69,7 +79,9 @@ public class WebhookKeyService {
             SettlementFailureLogRepo settlementFailureLogRepo,
             AcceptQuoteResponseFailedRepo acceptQuoteResponseFailedRepo,
             UttilityMethods utilMeth, RegWalletInfoRepository regWalletInfoRepository,
-            FinWealthPaymentTransactionRepo finWealthPaymentTransactionRepo) {
+            FinWealthPaymentTransactionRepo finWealthPaymentTransactionRepo,
+            DeviceDetailsRepo deviceDetailsRepo,
+            FcmService fcmService) {
         // Example: pre-provision one key
         keys.put(transfaarClient, generateBase64Secret());
         this.createQuoteResLogRepo = createQuoteResLogRepo;
@@ -78,6 +90,8 @@ public class WebhookKeyService {
         this.regWalletInfoRepository = regWalletInfoRepository;
         this.utilMeth = utilMeth;
         this.finWealthPaymentTransactionRepo = finWealthPaymentTransactionRepo;
+        this.deviceDetailsRepo = deviceDetailsRepo;
+        this.fcmService = fcmService;
     }
 
     public String findSecret(String keyId) {
@@ -88,6 +102,160 @@ public class WebhookKeyService {
         byte[] buf = new byte[32]; // 256-bit
         new SecureRandom().nextBytes(buf);
         return Base64.getEncoder().encodeToString(buf);
+    }
+
+    public BaseResponse processPaymentWithdrawal(WithdrawalOutflow rqq, String auth) {
+
+        BaseResponse responseModel = new BaseResponse();
+        int statusCode = 500;
+        String statusMessage = "Something went wrong";
+
+        try {
+            statusCode = 400;
+            DecodedJWTToken getDecoded = DecodedJWTToken.getDecoded(auth);
+
+            List<CreateQuoteResLog> getDee = createQuoteResLogRepo.findByQuoteId(rqq.getQuoteId());
+
+            if (getDee.size() <= 0) {
+                SettlementFailureLog conWall = new SettlementFailureLog("", "",
+                        "QuoteId is invalid!");
+                settlementFailureLogRepo.save(conWall);
+                responseModel.setDescription("QuoteId is invalid!");
+                responseModel.setStatusCode(statusCode);
+                return responseModel;
+
+            }
+
+            if (!getDee.get(0).getIsAccepted().equals("1")) {
+                SettlementFailureLog conWall = new SettlementFailureLog("", "",
+                        "Transaction was not accepted!");
+                settlementFailureLogRepo.save(conWall);
+                responseModel.setStatusCode(statusCode);
+                return responseModel;
+
+            }
+
+            if (getDee.get(0).getIsDebitedDescription().equals("PROCESSED") || getDee.get(0).getIsDebited().equals("1")) {
+                SettlementFailureLog conWall = new SettlementFailureLog("", "",
+                        "Transaction is already processed!");
+                settlementFailureLogRepo.save(conWall);
+                responseModel.setStatusCode(statusCode);
+                return responseModel;
+
+            }
+
+            if (!getDee.get(0).getAmount().equals(rqq.getAmount())) {
+                SettlementFailureLog conWall = new SettlementFailureLog("", "",
+                        "Amount is invalid!");
+                settlementFailureLogRepo.save(conWall);
+                responseModel.setStatusCode(statusCode);
+                return responseModel;
+
+            }
+
+            //update success
+            CreateQuoteResLog getDeeUp = createQuoteResLogRepo.findByQuoteIdUpdate(rqq.getQuoteId());
+            getDeeUp.setIsDebited("1");
+            getDeeUp.setIsDebitedDescription("PROCESSED");
+            getDeeUp.setLastModifiedDate(new Timestamp(System.currentTimeMillis()));
+
+            createQuoteResLogRepo.save(getDeeUp);
+
+            // TODO: validate amounts, ids, etc., then persist or enqueue
+            // 6) Build response
+            List<RegWalletInfo> regWalletInfo = regWalletInfoRepository.findByWalletIdList(getDee.get(0).getWalletNumber());
+            DebitWalletCaller rqC = new DebitWalletCaller();
+            rqC.setAuth("Receiver");
+            rqC.setFees("0.00");
+            rqC.setFinalCHarges(rqq.getAmount());
+            rqC.setNarration("Withdrawal");
+            rqC.setPhoneNumber(regWalletInfo.get(0).getPhoneNumber());
+            rqC.setTransAmount(rqq.getAmount());
+            rqC.setTransactionId(rqq.getQuoteId());
+            System.out.println("Credit Request TO core rqC ::::::::::::::::  %S  " + new Gson().toJson(rqC));
+
+            BaseResponse debitAcct = utilMeth.debitCustomerWithType(rqC, "CUSTOMER");
+
+            System.out.println("Debit Response from core creditAcct ::::::::::::::::  %S  " + new Gson().toJson(debitAcct));
+
+            //BaseResponse creditAcct = genLedgerProxy.creditOneTime(rqq);
+            if (debitAcct.getStatusCode() == 200) {
+
+                FinWealthPaymentTransaction kTrans2b = new FinWealthPaymentTransaction();
+                kTrans2b.setAmmount(new BigDecimal(rqq.getAmount()));
+                kTrans2b.setCreatedDate(Instant.now().plusSeconds(1));
+                kTrans2b.setFees(new BigDecimal(rqC.getFees()));
+                kTrans2b.setPaymentType("Withdrawal from Account");
+                kTrans2b.setReceiver(rqC.getPhoneNumber());
+                kTrans2b.setSender(rqC.getPhoneNumber());
+                kTrans2b.setTransactionId(rqq.getQuoteId());
+                kTrans2b.setSenderTransactionType("");
+                kTrans2b.setReceiverTransactionType("Withdrawal");
+
+                List<RegWalletInfo> getReceiverName = regWalletInfoRepository.findByPhoneNumberData(rqC.getPhoneNumber());
+
+                kTrans2b.setWalletNo(rqC.getPhoneNumber());
+                kTrans2b.setReceiverName(getReceiverName.get(0).getFullName());
+                kTrans2b.setSenderName(getReceiverName.get(0).getFullName());
+                kTrans2b.setSentAmount(rqq.getAmount());
+                kTrans2b.setTheNarration("Withdrawal");
+
+                finWealthPaymentTransactionRepo.save(kTrans2b);
+
+                PushNotificationFireBase puFireSender = new PushNotificationFireBase();
+                puFireSender.setBody(pushNotifyCreditWalletForWalletTransfer(new BigDecimal(rqq.getAmount()),
+                        "", "" + " " + ""
+                ));
+                List<DeviceDetails> getDepuFireSender = deviceDetailsRepo.findAllByWalletId(regWalletInfo.get(0).getWalletId());
+
+                puFireSender.setTitle("Withdrawal-From-wallet");
+                if (getDepuFireSender.size() > 0) {
+                    String getToken = getDepuFireSender.get(0).getToken() == null ? "" : getDepuFireSender.get(0).getToken();
+
+                    if (getToken != "") {
+                        puFireSender.setDeviceToken(getDepuFireSender.get(0).getToken());
+                        Map<String, String> data = new HashMap<String, String>();
+                        data.put("type", "ALERT");            // sample custom data
+                        if (puFireSender.getData() != null) {
+                            data.putAll(puFireSender.getData());
+                        }
+
+                        fcmService.sendToToken(
+                                puFireSender.getDeviceToken(),
+                                puFireSender.getTitle(),
+                                puFireSender.getBody(),
+                                data
+                        );
+
+                    }
+                }
+
+            }
+
+            // Credit BAAS CAD_GL
+            DebitWalletCaller cadGLCredit = new DebitWalletCaller();
+            cadGLCredit.setAuth("Receiver");
+            cadGLCredit.setFees("0.00");
+            cadGLCredit.setFinalCHarges(rqq.getAmount());
+            cadGLCredit.setNarration("CAD_Withdrawal");
+            cadGLCredit.setPhoneNumber(decryptData(utilMeth.getSETTING_KEY_WALLET_SYSTEM_SYSTEM_GG_CAD()));
+            cadGLCredit.setTransAmount(rqq.getAmount());
+            cadGLCredit.setTransactionId(rqq.getQuoteId());
+
+            utilMeth.debitCustomerWithType(cadGLCredit, "CAD_GL");
+            responseModel.setDescription("Successful");
+            responseModel.setStatusCode(200);
+            return responseModel;
+
+        } catch (Exception ex) {
+            responseModel.setDescription(statusMessage);
+            responseModel.setStatusCode(statusCode);
+
+            ex.printStackTrace();
+        }
+
+        return responseModel;
+
     }
 
     public ResponseEntity<?> processPayment(String rawBody) {
@@ -143,7 +311,7 @@ public class WebhookKeyService {
 
             if (getDee.get(0).getStatus().equals("RECEIVED")) {
                 SettlementFailureLog conWall = new SettlementFailureLog("", "",
-                        "Amount is invalid!");
+                        "Transaction is already processed!");
                 settlementFailureLogRepo.save(conWall);
 
                 PaymentNotificationResponse resp = PaymentNotificationResponse.builder()
@@ -234,17 +402,20 @@ public class WebhookKeyService {
 
             // TODO: validate amounts, ids, etc., then persist or enqueue
             // 6) Build response
+            List<RegWalletInfo> regWalletInfo = regWalletInfoRepository.findByWalletIdList(getDee.get(0).getWalletNumber());
             CreditWalletCaller rqC = new CreditWalletCaller();
             rqC.setAuth("Receiver");
             rqC.setFees("0.00");
             rqC.setFinalCHarges(amount);
             rqC.setNarration("Deposit");
-            rqC.setPhoneNumber(getDee.get(0).getWalletNumber());
+            rqC.setPhoneNumber(regWalletInfo.get(0).getPhoneNumber());
             rqC.setTransAmount(amount);
             rqC.setTransactionId(quoteId);
+            System.out.println("Credit Request TO core rqC ::::::::::::::::  %S  " + new Gson().toJson(rqC));
+
             BaseResponse creditAcct = utilMeth.creditCustomerWithType(rqC, "CUSTOMER");
 
-            System.out.println("Credit Response from core ::::::::::::::::  %S  " + new Gson().toJson(creditAcct));
+            System.out.println("Credit Response from core creditAcct ::::::::::::::::  %S  " + new Gson().toJson(creditAcct));
 
             //BaseResponse creditAcct = genLedgerProxy.creditOneTime(rqq);
             if (creditAcct.getStatusCode() == 200) {
@@ -270,6 +441,34 @@ public class WebhookKeyService {
 
                 finWealthPaymentTransactionRepo.save(kTrans2b);
 
+                PushNotificationFireBase puFireSender = new PushNotificationFireBase();
+                puFireSender.setBody(pushNotifyCreditWalletForWalletTransfer(new BigDecimal(amount),
+                        "", "" + " " + ""
+                ));
+                List<DeviceDetails> getDepuFireSender = deviceDetailsRepo.findAllByWalletId(regWalletInfo.get(0).getWalletId());
+
+                puFireSender.setTitle("Deposit-To-wallet");
+                if (getDepuFireSender.size() > 0) {
+                    String getToken = getDepuFireSender.get(0).getToken() == null ? "" : getDepuFireSender.get(0).getToken();
+
+                    if (getToken != "") {
+                        puFireSender.setDeviceToken(getDepuFireSender.get(0).getToken());
+                        Map<String, String> data = new HashMap<String, String>();
+                        data.put("type", "ALERT");            // sample custom data
+                        if (puFireSender.getData() != null) {
+                            data.putAll(puFireSender.getData());
+                        }
+
+                        fcmService.sendToToken(
+                                puFireSender.getDeviceToken(),
+                                puFireSender.getTitle(),
+                                puFireSender.getBody(),
+                                data
+                        );
+
+                    }
+                }
+
             }
 
             // Credit BAAS CAD_GL
@@ -285,7 +484,7 @@ public class WebhookKeyService {
             utilMeth.creditCustomerWithType(cadGLCredit, "CAD_GL");
 
             // Credit GLOBAL GL
-            CreditWalletCaller globalGLCredit = new CreditWalletCaller();
+            /*CreditWalletCaller globalGLCredit = new CreditWalletCaller();
             globalGLCredit.setAuth("Receiver");
             globalGLCredit.setFees("0.00");
             globalGLCredit.setFinalCHarges(amount);
@@ -294,14 +493,20 @@ public class WebhookKeyService {
             globalGLCredit.setTransAmount(amount);
             globalGLCredit.setTransactionId(quoteId);
 
-            utilMeth.creditCustomerWithType(globalGLCredit, "GLOBAL_GL");
-
+            utilMeth.creditCustomerWithType(globalGLCredit, "GLOBAL_GL");*/
             return ResponseEntity.ok(resp);
 
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Invalid JSON");
         }
 
+    }
+
+    public static String pushNotifyCreditWalletForWalletTransfer(BigDecimal amount, String recName, String senderName) {
+        String sMSMessage = "Dear " + "Customer" + ", "
+                + " your Wallet has been credited with " + "N" + amount + ", "
+                + " Thanks for using Plural.";
+        return sMSMessage;
     }
 
     private String decryptData(String data) throws NoSuchAlgorithmException, NoSuchPaddingException, InvalidKeyException, IllegalBlockSizeException, BadPaddingException {

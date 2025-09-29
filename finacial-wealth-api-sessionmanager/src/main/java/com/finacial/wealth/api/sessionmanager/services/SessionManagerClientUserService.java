@@ -1,7 +1,9 @@
 package com.finacial.wealth.api.sessionmanager.services;
 
+import com.finacial.wealth.api.sessionmanager.entities.DeviceDetails;
 import com.google.gson.Gson;
 import com.finacial.wealth.api.sessionmanager.entities.RegWalletCheckLog;
+import com.finacial.wealth.api.sessionmanager.entities.RegWalletInfo;
 import com.finacial.wealth.api.sessionmanager.entities.SessionServiceLog;
 import com.finacial.wealth.api.sessionmanager.exceptions.CustomApplicationException;
 import com.finacial.wealth.api.sessionmanager.repository.AuthenticationLogRepository;
@@ -53,6 +55,8 @@ import io.jsonwebtoken.SignatureAlgorithm;
 import lombok.RequiredArgsConstructor;
 import org.joda.time.DateTimeComparator;
 import com.finacial.wealth.api.sessionmanager.proxy.UtilityProxy;
+import com.finacial.wealth.api.sessionmanager.repository.DeviceDetailsRepo;
+import com.finacial.wealth.api.sessionmanager.repository.RegWalletInfoRepository;
 
 @Service
 @RequiredArgsConstructor
@@ -101,6 +105,8 @@ public class SessionManagerClientUserService {
     private final AuthenticationLogRepository authenticationLogRepository;
 
     private final RegWalletCheckLogRepo regWalletCheckLogRepo;
+    private final DeviceDetailsRepo deviceDetailsRepo;
+    private final RegWalletInfoRepository regWalletInfoRepository;
 
     @Autowired
     private final UtilityProxy utilityServiceFeignService;
@@ -192,6 +198,43 @@ public class SessionManagerClientUserService {
                     log.setMethod("Authentication-Wallet-User");
                     log.setCustomerType("Wallet");
                     log.setChannel(channel);
+
+                    List<RegWalletInfo> cumLog = regWalletInfoRepository.findByEmailList(rq.getEmailAddress());
+
+                    List<DeviceDetails> getDe = deviceDetailsRepo.findAllByWalletId(cumLog.get(0).getWalletId());
+                    logger.info(String.format("rq.getAppType() +++++++++++++ =>%s", rq.getAppType()));
+
+                    String getType = null;
+                    rq.setAppType(rq.getAppType() == null ? "" : rq.getAppType());
+
+                    if (!rq.getAppType().toUpperCase().equals("ANDROID") || !rq.getAppType().toUpperCase().equals("IOS") || rq.getAppType().equals("")) {
+                        getType = null;
+                    } else {
+                        getType = rq.getAppType().toUpperCase();
+                    }
+
+                    if (getDe.size() <= 0) {
+                        DeviceDetails deLog = new DeviceDetails();
+                        deLog.setCreatedDate(Instant.now());
+                        deLog.setCreatedBy("System");
+
+                        deLog.setPlatform(DeviceDetails.Platform.from(getType));
+                        deLog.setToken(rq.getPushNotificationToken());
+                        deLog.setUuid(rq.getUuid());
+                        deLog.setWalletId(cumLog.get(0).getWalletId());
+                        deviceDetailsRepo.save(deLog);
+                    } else {
+
+                        DeviceDetails getDeUp = deviceDetailsRepo.findAllByWalletIdUpdate(cumLog.get(0).getWalletId());
+                        getDeUp.setLastModifiedDate(Instant.now());
+                        getDeUp.setCreatedBy("System");
+                        getDeUp.setPlatform(DeviceDetails.Platform.from(getType));
+                        getDeUp.setToken(rq.getPushNotificationToken());
+                        getDeUp.setUuid(rq.getUuid());
+                        getDeUp.setLastModifiedBy("System");
+                        deviceDetailsRepo.save(getDeUp);
+
+                    }
 
                 } else {
                     baseResponse.setStatusCode(response.getStatusCode());

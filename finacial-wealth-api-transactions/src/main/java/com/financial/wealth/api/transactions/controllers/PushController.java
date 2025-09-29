@@ -12,6 +12,7 @@ import com.financial.wealth.api.transactions.domain.DeviceDetails;
 import com.financial.wealth.api.transactions.repo.DeviceDetailsRepo;
 import com.financial.wealth.api.transactions.repo.DeviceTokenRepositoryCustom;
 import com.financial.wealth.api.transactions.services.FcmService;
+import com.financial.wealth.api.transactions.utils.DecodedJWTToken;
 import java.util.HashMap;
 import java.util.Map;
 import lombok.Data;
@@ -21,7 +22,7 @@ import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequiredArgsConstructor
-@RequestMapping("/api/push")
+@RequestMapping("/push")
 public class PushController {
 
     private final DeviceDetailsRepo repo; // implement with JPA or JDBC
@@ -53,8 +54,10 @@ public class PushController {
     }
 
     // Fan-out to all of a user’s devices (optional helper)
-    @PostMapping("/sendToUser")
-    public ResponseEntity<?> sendToUser(@RequestBody SendToUserRq rq) throws Exception {
+    @PostMapping("/sendToUser-default")
+    public ResponseEntity<?> sendToUser(
+            //@RequestHeader(value = "authorization", required = true) String auth,
+            @RequestBody SendToUserRq rq) throws Exception {
         Map<String, String> data = new HashMap<String, String>();
         data.put("type", "ALERT");
         if (rq.getData() != null) {
@@ -64,6 +67,26 @@ public class PushController {
         for (DeviceDetails dt : repo.findAllByWalletId(rq.getUserId())) {
             fcmService.sendToToken(dt.getToken(), rq.getTitle(), rq.getBody(), data);
         }
+        return ResponseEntity.ok().build();
+    }
+
+    // Fan-out to all of a user’s devices (optional helper)
+    @PostMapping("/sendToUser")
+    public ResponseEntity<?> sendToUserTokenComingIn(
+            //@RequestHeader(value = "authorization", required = true) String auth,
+            @RequestBody SendToUserRqTokenComingIn rq) throws Exception {
+        //DecodedJWTToken getDecoded = DecodedJWTToken.getDecoded(auth);
+
+        Map<String, String> data = new HashMap<String, String>();
+        data.put("type", "ALERT");
+        if (rq.getData() != null) {
+            data.putAll(rq.getData());
+        }
+
+        // for (DeviceDetails dt : repo.findAllByWalletId(rq.getUserId())) {
+        fcmService.sendToToken(rq.getToken(), rq.getTitle(), rq.getBody(), data);
+
+        //}
         return ResponseEntity.ok().build();
     }
 
@@ -89,6 +112,16 @@ public class PushController {
     public static class SendToUserRq {
 
         private String userId;        // fan-out by user
+        private String title;
+        private String body;
+        private Map<String, String> data; // optional
+    }
+
+    @Data
+    public static class SendToUserRqTokenComingIn {
+
+        private String token;
+        // fan-out by user
         private String title;
         private String body;
         private Map<String, String> data; // optional

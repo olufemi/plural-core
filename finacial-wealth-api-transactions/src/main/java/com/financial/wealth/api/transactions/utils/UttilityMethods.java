@@ -7,10 +7,12 @@ package com.financial.wealth.api.transactions.utils;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.financial.wealth.api.transactions.domain.FailedCreditLog;
+import com.financial.wealth.api.transactions.domain.FailedDebitLog;
 import com.financial.wealth.api.transactions.models.BaseResponse;
 import com.financial.wealth.api.transactions.models.CreditWalletCaller;
 import com.financial.wealth.api.transactions.models.DebitWalletCaller;
 import com.financial.wealth.api.transactions.repo.FailedCreditLogRepo;
+import com.financial.wealth.api.transactions.repo.FailedDebitLogRepo;
 import com.google.common.collect.Range;
 import com.google.gson.Gson;
 import com.google.gson.JsonSyntaxException;
@@ -115,12 +117,15 @@ public class UttilityMethods {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final FailedCreditLogRepo failedCreditLogRepo;
+    private final FailedDebitLogRepo failedDebitLogRepo;
 
     public UttilityMethods(MemoryCache cache, RestTemplate restTemplate,
-            FailedCreditLogRepo failedCreditLogRepo) {
+            FailedCreditLogRepo failedCreditLogRepo,
+            FailedDebitLogRepo failedDebitLogRepo) {
         this.cache = cache;
         this.restTemplate = restTemplate;
         this.failedCreditLogRepo = failedCreditLogRepo;
+        this.failedDebitLogRepo = failedDebitLogRepo;
     }
 
     @PostConstruct
@@ -186,6 +191,46 @@ public class UttilityMethods {
                 baseResponse.setStatusCode(HttpServletResponse.SC_OK);
                 baseResponse.setData(reqres.getData());
             } else {
+                baseResponse.setDescription(reqres.getDescription());
+                baseResponse.setStatusCode(HttpServletResponse.SC_BAD_REQUEST);
+            }
+
+        } catch (Exception ex) {
+            baseResponse.setDescription(statusMessage);
+            baseResponse.setStatusCode(statusCode);
+
+            ex.printStackTrace();
+        }
+
+        return baseResponse;
+
+    }
+
+    public BaseResponse debitCustomerWithType(DebitWalletCaller rq, String type) {
+        BaseResponse baseResponse = new BaseResponse();
+        int statusCode = 500;
+        String statusMessage = "An error occured,please try again";
+        try {
+            statusCode = 400;
+
+            BaseResponse reqres = restTemplate.postForObject("http://" + "utilities-service" + "/walletmgt/account/debit-Wallet-phone",
+                    rq, BaseResponse.class);
+            System.out.println("debitCustomer Response from core ::::::::::::::::  %S  " + new Gson().toJson(reqres));
+
+            if (reqres.getStatusCode() == HttpServletResponse.SC_OK) {
+                baseResponse.setDescription(reqres.getDescription());
+                baseResponse.setStatusCode(HttpServletResponse.SC_OK);
+                baseResponse.setData(reqres.getData());
+            } else {
+                FailedDebitLog log = new FailedDebitLog();
+                log.setPayloadType(type);
+                log.setRequestJson(objectMapper.writeValueAsString(rq));
+                log.setTransactionId(rq.getTransactionId());
+                log.setNarration(rq.getNarration());
+                log.setRetryCount(0);
+                log.setResolved(false);
+                log.setCreatedDate(Instant.now());
+                failedDebitLogRepo.save(log);
                 baseResponse.setDescription(reqres.getDescription());
                 baseResponse.setStatusCode(HttpServletResponse.SC_BAD_REQUEST);
             }

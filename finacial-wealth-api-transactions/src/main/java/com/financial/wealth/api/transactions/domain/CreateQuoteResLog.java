@@ -62,6 +62,8 @@ public class CreateQuoteResLog implements Serializable {
     public String amount;
     public String paymentType;
     public String isAccepted;
+    public String isDebited;
+    public String isDebitedDescription;
     @Lob
     @Column(name = "CREATE_QUOTE_RESPONSE", length = 300000)
     private String createQuoteResponse;

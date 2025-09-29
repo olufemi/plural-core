@@ -7,6 +7,7 @@ package com.financial.wealth.api.transactions.services;
 
 import com.financial.wealth.api.transactions.domain.CommissionCfg;
 import com.financial.wealth.api.transactions.domain.DeviceChangeLimitConfig;
+import com.financial.wealth.api.transactions.domain.DeviceDetails;
 import com.financial.wealth.api.transactions.domain.FinWealthPayServiceConfig;
 import com.financial.wealth.api.transactions.domain.FinWealthPaymentTransaction;
 import com.financial.wealth.api.transactions.domain.GlobalLimitConfig;
@@ -31,11 +32,13 @@ import com.financial.wealth.api.transactions.models.LocalBeneficiariesFind;
 import com.financial.wealth.api.transactions.models.LocalTransferRequest;
 import com.financial.wealth.api.transactions.models.ProcLedgerRequestCreditOneTime;
 import com.financial.wealth.api.transactions.models.ProcLedgerRequestDebitOneTime;
+import com.financial.wealth.api.transactions.models.PushNotificationFireBase;
 import com.financial.wealth.api.transactions.models.SaveBeneficiary;
 import com.financial.wealth.api.transactions.models.WalletNoReq;
 import com.financial.wealth.api.transactions.models.local.trans.NameLookUp;
 import com.financial.wealth.api.transactions.repo.CommissionCfgRepo;
 import com.financial.wealth.api.transactions.repo.DeviceChangeLimitConfigRepo;
+import com.financial.wealth.api.transactions.repo.DeviceDetailsRepo;
 import com.financial.wealth.api.transactions.repo.FinWealthPayServiceConfigRepo;
 import com.financial.wealth.api.transactions.repo.FinWealthPaymentTransactionRepo;
 import com.financial.wealth.api.transactions.repo.GlobalLimitConfigRepo;
@@ -50,9 +53,12 @@ import com.financial.wealth.api.transactions.repo.UserLimitConfigRepo;
 import com.financial.wealth.api.transactions.repo.WToWaletTransferRepo;
 import com.financial.wealth.api.transactions.utils.DecodedJWTToken;
 import com.financial.wealth.api.transactions.utils.GlobalMethods;
+import com.financial.wealth.api.transactions.utils.StrongAES;
 import com.financial.wealth.api.transactions.utils.UttilityMethods;
 import com.google.gson.Gson;
 import java.math.BigDecimal;
+import java.security.InvalidKeyException;
+import java.security.NoSuchAlgorithmException;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -60,8 +66,13 @@ import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import javax.crypto.BadPaddingException;
+import javax.crypto.IllegalBlockSizeException;
+import javax.crypto.NoSuchPaddingException;
 import javax.servlet.http.HttpServletResponse;
 import org.apache.commons.lang.StringUtils;
 import org.joda.time.DateTime;
@@ -95,6 +106,8 @@ public class LocalTransferService {
     private final LocalTLogRetrialDebitRepo localTLogRetrialDebitRepo;
     private final LocalBeneficiariesIndividualRepo localBeneficiariesIndividualRepo;
     private static final int DEFAULT_DEVICE_LIMIT_DAYS = 2;
+    private final FcmService fcmService;
+    private final DeviceDetailsRepo deviceDetailsRepo;
 
     @Qualifier("withEureka")
     @Autowired
@@ -114,7 +127,9 @@ public class LocalTransferService {
             LocalBeneficiariesRepo localBeneficiariesRepo,
             FinWealthPaymentTransactionRepo finWealthPaymentTransactionRepo,
             LocalTLogRetrialDebitRepo localTLogRetrialDebitRepo,
-            LocalBeneficiariesIndividualRepo localBeneficiariesIndividualRepo) {
+            LocalBeneficiariesIndividualRepo localBeneficiariesIndividualRepo,
+            FcmService fcmService,
+            DeviceDetailsRepo deviceDetailsRepo) {
 
         this.localTransFailedTransInfoRepo = localTransFailedTransInfoRepo;
         this.regWalletInfoRepository = regWalletInfoRepository;
@@ -131,6 +146,8 @@ public class LocalTransferService {
         this.finWealthPaymentTransactionRepo = finWealthPaymentTransactionRepo;
         this.localTLogRetrialDebitRepo = localTLogRetrialDebitRepo;
         this.localBeneficiariesIndividualRepo = localBeneficiariesIndividualRepo;
+        this.fcmService = fcmService;
+        this.deviceDetailsRepo = deviceDetailsRepo;
     }
 
     private static int parseDaysSafely(String raw, int fallback) {
@@ -147,8 +164,6 @@ public class LocalTransferService {
     private String safeStr(String str) {
         return (str == null) ? "0" : str;
     }
-
-  
 
     private BaseResponse getTotalBal(String auth) {
         BaseResponse baseResponse = new BaseResponse();
@@ -1818,7 +1833,7 @@ public class LocalTransferService {
             rqD.setPhoneNumber(reqq.getPhonenumber());
             rqD.setTransAmount(rq.getAmount());
             rqD.setTransactionId(rq.getProcessId());
-            BaseResponse debitAcct = utilMeth.debitCustomer(rqD);
+            BaseResponse debitAcct = utilMeth.debitCustomerWithType(rqD, "CUSTOMER");
 
             System.out.println("Debit Response from core ::::::::::::::::  %S  " + new Gson().toJson(debitAcct));
 
@@ -1831,6 +1846,16 @@ public class LocalTransferService {
             System.out.println("verify locat transfer in long expiry" + "   ::::::::::::::::::::: " + expiry);
 
             if (debitAcct.getStatusCode() == 200) {
+                DebitWalletCaller debGLCredit = new DebitWalletCaller();
+                debGLCredit.setAuth("Sender");
+                debGLCredit.setFees("0.00");
+                debGLCredit.setFinalCHarges(amount);
+                debGLCredit.setNarration("CAD_Withdrawal");
+                debGLCredit.setPhoneNumber(decryptData(utilMeth.getSETTING_KEY_WALLET_SYSTEM_SYSTEM_GG_CAD()));
+                debGLCredit.setTransAmount(amount);
+                debGLCredit.setTransactionId(rq.getProcessId());
+
+                utilMeth.debitCustomerWithType(debGLCredit, "CAD_GL");
                 /* KuleanPaymentTransaction kTrans = new KuleanPaymentTransaction();
                 kTrans.setAmmount(amountToDebit);
                 kTrans.setCreatedDate(Instant.now());
@@ -1885,6 +1910,18 @@ public class LocalTransferService {
 
                 //BaseResponse creditAcct = genLedgerProxy.creditOneTime(rqq);
                 if (creditAcct.getStatusCode() == 200) {
+
+                    // Credit BAAS CAD_GL
+                    CreditWalletCaller cadGLCredit = new CreditWalletCaller();
+                    cadGLCredit.setAuth("Receiver");
+                    cadGLCredit.setFees("0.00");
+                    cadGLCredit.setFinalCHarges(amount);
+                    cadGLCredit.setNarration("CAD_Deposit");
+                    cadGLCredit.setPhoneNumber(decryptData(utilMeth.getSETTING_KEY_WALLET_SYSTEM_SYSTEM_GG_CAD()));
+                    cadGLCredit.setTransAmount(amount);
+                    cadGLCredit.setTransactionId(rq.getProcessId());
+
+                    utilMeth.creditCustomerWithType(cadGLCredit, "CAD_GL");
 
                     FinWealthPaymentTransaction kTrans2 = new FinWealthPaymentTransaction();
                     kTrans2.setAmmount(amountToDebit);
@@ -1977,20 +2014,62 @@ public class LocalTransferService {
                     List<RegWalletInfo> getReceiverName = regWalletInfoRepository.findByPhoneNumberData(rq.getReceiver());
                     List<RegWalletInfo> getSenderName = regWalletInfoRepository.findByPhoneNumberData(getDecoded.phoneNumber);
 
-                    /*PushNotificationFireBase puFire = new PushNotificationFireBase();
-                    puFire.setMessage(pushNotifyDebitWalletForWalletTransfer(new BigDecimal(rq.getAmount()),
+                    PushNotificationFireBase puFire = new PushNotificationFireBase();
+                    puFire.setBody(pushNotifyDebitWalletForWalletTransfer(new BigDecimal(rq.getAmount()),
                             rq.getReceiverName(), getSenderName.get(0).getFirstName() + " " + getSenderName.get(0).getLastName()
                     ));
+                    List<DeviceDetails> getDe = deviceDetailsRepo.findAllByWalletId(getReceiverName.get(0).getWalletId());
+
                     puFire.setTitle("Wallet-To-Wallet-Transfer");
-                    if (channel.equals("Mobile")) {
-                        if (getReceiverName.get(0).getUerDeviceCustomer().equals("1")) {
-                            puFire.setToken(getReceiverName.get(0).getPushNotificationToken());
-                            BaseResponse sendPushFireBase = utilitiesProxy.sendNotificationFireBase(puFire);
-                            System.out.println("sendPushFireBase res" + "  ::::::::::::::::::::: >>>>>>>>>>>>>>>>>>  " + sendPushFireBase.getDescription());
-                            System.out.println("sendPushFireBase res code" + "  ::::::::::::::::::::: >>>>>>>>>>>>>>>>>>  " + sendPushFireBase.getStatusCode());
+                    if (getDe.size() > 0) {
+                        String getToken = getDe.get(0).getToken() == null ? "" : getDe.get(0).getToken();
+
+                        if (getToken != "") {
+                            puFire.setDeviceToken(getDe.get(0).getToken());
+                            Map<String, String> data = new HashMap<String, String>();
+                            data.put("type", "ALERT");            // sample custom data
+                            if (puFire.getData() != null) {
+                                data.putAll(puFire.getData());
+                            }
+
+                            fcmService.sendToToken(
+                                    puFire.getDeviceToken(),
+                                    puFire.getTitle(),
+                                    puFire.getBody(),
+                                    data
+                            );
+                        }
+
+                    }
+                    PushNotificationFireBase puFireSender = new PushNotificationFireBase();
+                    puFireSender.setBody(pushNotifyDebitWalletForWalletTransferSender(new BigDecimal(rq.getAmount()),
+                            rq.getReceiverName(), getSenderName.get(0).getFirstName() + " " + getSenderName.get(0).getLastName()
+                    ));
+                    List<DeviceDetails> getDepuFireSender = deviceDetailsRepo.findAllByWalletId(getSenderName.get(0).getWalletId());
+
+                    puFireSender.setTitle("Wallet-To-Wallet-Transfer");
+                    if (getDepuFireSender.size() > 0) {
+
+                        String getToken = getDepuFireSender.get(0).getToken() == null ? "" : getDepuFireSender.get(0).getToken();
+
+                        if (getToken != "") {
+
+                            puFireSender.setDeviceToken(getDepuFireSender.get(0).getToken());
+                            Map<String, String> data = new HashMap<String, String>();
+                            data.put("type", "ALERT");            // sample custom data
+                            if (puFireSender.getData() != null) {
+                                data.putAll(puFireSender.getData());
+                            }
+
+                            fcmService.sendToToken(
+                                    puFireSender.getDeviceToken(),
+                                    puFireSender.getTitle(),
+                                    puFireSender.getBody(),
+                                    data
+                            );
 
                         }
-                    }*/
+                    }
                     responseModel.setDescription("Wallet to Wallet transfer, transfer performed successfully.");
                     //    List<WToWaletTransfer> getExistRec = wToWaletTransferRepo.findBySenderAndReceiver(getDecoded.phoneNumber, rq.getReceiver());
 
@@ -2092,6 +2171,31 @@ public class LocalTransferService {
         }
 
         return responseModel;
+    }
+
+    public static String pushNotifyDebitWalletForWalletTransfer(BigDecimal amount, String recName, String senderName) {
+        String sMSMessage = "Dear " + "Customer" + ", "
+                + " your Wallet has been credited with " + "N" + amount + " "
+                + "of a transfer from " + senderName + " to you," + ""
+                + " Thanks for using Plural.";
+        return sMSMessage;
+    }
+
+    public static String pushNotifyDebitWalletForWalletTransferSender(BigDecimal amount, String recName, String senderName) {
+        String sMSMessage = "Dear " + "Customer" + ", "
+                + " your Wallet has been debited with " + "N" + amount + " "
+                + "of a transfer to " + recName + "," + ""
+                + " Thanks for using Plural.";
+        return sMSMessage;
+    }
+
+    private String decryptData(String data) throws NoSuchAlgorithmException, NoSuchPaddingException, InvalidKeyException, IllegalBlockSizeException, BadPaddingException {
+
+        String decryptData = StrongAES.decrypt(data, encryptionKey);
+
+        // log.info("decryptData ::::: {} ", decryptData);
+        return decryptData;
+
     }
 
     public ApiResponseModel getUserTransactionsHistory(WalletNoReq rq, String channel, String auth) {

@@ -7,11 +7,14 @@ package com.financial.wealth.api.transactions.services;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import com.financial.wealth.api.transactions.domain.FailedCreditLog;
+import com.financial.wealth.api.transactions.domain.FailedDebitLog;
 import com.financial.wealth.api.transactions.domain.FinWealthPaymentTransaction;
 import com.financial.wealth.api.transactions.domain.RegWalletInfo;
 import com.financial.wealth.api.transactions.models.BaseResponse;
 import com.financial.wealth.api.transactions.models.CreditWalletCaller;
+import com.financial.wealth.api.transactions.models.DebitWalletCaller;
 import com.financial.wealth.api.transactions.repo.FailedCreditLogRepo;
+import com.financial.wealth.api.transactions.repo.FailedDebitLogRepo;
 import com.financial.wealth.api.transactions.repo.FinWealthPaymentTransactionRepo;
 import com.financial.wealth.api.transactions.repo.RegWalletInfoRepository;
 import com.financial.wealth.api.transactions.utils.UttilityMethods;
@@ -35,15 +38,18 @@ public class WalletCreditRetryScheduler {
     private final UttilityMethods utilMeth;
     private final RegWalletInfoRepository regWalletInfoRepository;
     private final FinWealthPaymentTransactionRepo finWealthPaymentTransactionRepo;
+    private final FailedDebitLogRepo failedDebitLogRepo;
 
     public WalletCreditRetryScheduler(FailedCreditLogRepo failedCreditLogRepository,
             UttilityMethods utilMeth,
             RegWalletInfoRepository regWalletInfoRepository,
-            FinWealthPaymentTransactionRepo finWealthPaymentTransactionRepo) {
+            FinWealthPaymentTransactionRepo finWealthPaymentTransactionRepo,
+            FailedDebitLogRepo failedDebitLogRepo) {
         this.failedCreditLogRepository = failedCreditLogRepository;
         this.utilMeth = utilMeth;
         this.regWalletInfoRepository = regWalletInfoRepository;
         this.finWealthPaymentTransactionRepo = finWealthPaymentTransactionRepo;
+        this.failedDebitLogRepo = failedDebitLogRepo;
     }
 
     @Scheduled(fixedDelay = 60000) // retry every 1 minute
@@ -87,6 +93,33 @@ public class WalletCreditRetryScheduler {
                 }
 
                 failedCreditLogRepository.save(log);
+            } catch (Exception ex) {
+                ex.printStackTrace(); // log if needed
+            }
+        }
+    }
+
+    @Scheduled(fixedDelay = 60000) // retry every 1 minute
+    public void retryFailedDebits() {
+        List<FailedDebitLog> pendingLogs = failedDebitLogRepo.findByResolvedFalse();
+
+        for (FailedDebitLog log : pendingLogs) {
+            try {
+                DebitWalletCaller request = objectMapper.readValue(log.getRequestJson(), DebitWalletCaller.class);
+                BaseResponse res = utilMeth.debitCustomer(request);
+
+                if (res.getStatusCode() == 200) {
+                    log.setResolved(true);
+                    log.setLastModifiedDate(Instant.now());
+                    if (log.getPayloadType().equals("CUSTOMER")) {
+
+                    }
+                } else {
+                    log.setRetryCount(log.getRetryCount() + 1);
+                    log.setLastModifiedDate(Instant.now());
+                }
+
+                failedDebitLogRepo.save(log);
             } catch (Exception ex) {
                 ex.printStackTrace(); // log if needed
             }

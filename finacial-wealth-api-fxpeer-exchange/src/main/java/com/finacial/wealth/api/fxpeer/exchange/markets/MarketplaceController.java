@@ -27,14 +27,16 @@ import java.util.Optional;
 public class MarketplaceController {
 
     private final OfferSearchService service;
+    private final MarketFacade facade;
 
-    public MarketplaceController(OfferSearchService service) {
+    public MarketplaceController(OfferSearchService service, MarketFacade facade) {
         this.service = service;
+        this.facade = facade;
     }
 
-    @Operation(summary = "Browse offers with filters (currency, rate range, min amount, sort)")
+    @Operation(summary = "Browse offers with filters + seller stats")
     @GetMapping("/offers")
-    public ResponseEntity<Page<Offer>> browse(@RequestParam(required = false) CurrencyCode ccySell,
+    public ResponseEntity<Page<OfferView>> browse(@RequestParam(required = false) CurrencyCode ccySell,
             @RequestParam(required = false) CurrencyCode ccyRecv,
             @RequestParam(required = false) BigDecimal rateMin,
             @RequestParam(required = false) BigDecimal rateMax,
@@ -42,7 +44,7 @@ public class MarketplaceController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
             @RequestParam(required = false, defaultValue = "bestRate") String sort) {
-        return ResponseEntity.ok(service.search(Optional.ofNullable(ccySell), Optional.ofNullable(ccyRecv),
+        return ResponseEntity.ok(facade.browse(Optional.ofNullable(ccySell), Optional.ofNullable(ccyRecv),
                 Optional.ofNullable(rateMin), Optional.ofNullable(rateMax), Optional.ofNullable(amountMin),
                 page, size, sort));
     }

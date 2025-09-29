@@ -1426,6 +1426,20 @@ public class WalletServices {
             cUser.setUserGroup(utilMeth.returnWalletUserGroupId());
             cUser.setUserName(resultOnboard.getFirstName());
 
+            WalletSystemResponse addUserToWalletSystem = addUserToWalletSystem(rq.getPhoneNumber());
+            if (addUserToWalletSystem.getStatusCode() != 200) {
+                responseModel.setDescription(addUserToWalletSystem.getDescription());
+                responseModel.setStatusCode(addUserToWalletSystem.getStatusCode());
+                ReceiverFailedTransInfo recFailTrans = new ReceiverFailedTransInfo("create-wallet",
+                        responseModel.getDescription(), processId, "", "", rq
+                        .getPhoneNumber());
+                wallFailTransRepo.save(recFailTrans);
+                responseModel.setDescription(responseModel.getDescription());
+                responseModel.setStatusCode(statusCode);
+
+                return responseModel;
+            }
+
             BaseResponse getRes = this
                     .createNewWalletUser(cUser, "");
 
@@ -1458,13 +1472,6 @@ public class WalletServices {
             }
             System.out.println("Validate emailAdd :::::::: add tier successfully"
                     + "  :::::::::::::::::::::  " + bAddLimitRes);
-
-            WalletSystemResponse addUserToWalletSystem = addUserToWalletSystem(rq.getPhoneNumber());
-            if (addUserToWalletSystem.getStatusCode() != 200) {
-                responseModel.setDescription(addUserToWalletSystem.getDescription());
-                responseModel.setStatusCode(addUserToWalletSystem.getStatusCode());
-                return responseModel;
-            }
 
             regWalletInfoRepo.save(resultOnboard);
 

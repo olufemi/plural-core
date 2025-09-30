@@ -11,6 +11,7 @@ import com.financial.wealth.api.transactions.models.WalletNo;
 
 import com.financial.wealth.api.transactions.models.tranfaar.inflow.CreateQuoteFE;
 import com.financial.wealth.api.transactions.models.tranfaar.inflow.GetPendingQuotes;
+import com.financial.wealth.api.transactions.models.tranfaar.outflow.CreateQuoteWithdrawalFE;
 
 import com.financial.wealth.api.transactions.tranfaar.services.CreateQuoteClient;
 import com.financial.wealth.api.transactions.tranfaar.services.QuoteLookupService;
@@ -81,6 +82,22 @@ public class QuoteController {
             @RequestBody @Valid AcceptQuoteFE rq) throws Exception {
 
         BaseResponse baseResponse = quoteService.acceptQuote(rq, auth);
+        return new ResponseEntity<>(baseResponse, HttpStatus.OK);
+    }
+    
+     @PostMapping("/create-quote-withdrawal")
+    public ResponseEntity<BaseResponse> createQuoteWithdrawal(@RequestHeader(value = "authorization", required = true) String auth,
+            @RequestBody @Valid CreateQuoteWithdrawalFE rq) throws Exception {
+
+        BaseResponse baseResponse = quoteService.createQuoteWithdrawal(rq, auth);
+        return new ResponseEntity<>(baseResponse, HttpStatus.OK);
+    }
+
+    @PostMapping("/accept-quote-withdrawal")
+    public ResponseEntity<BaseResponse> acceptQuoteWithdrawal(@RequestHeader(value = "authorization", required = true) String auth,
+            @RequestBody @Valid AcceptQuoteFE rq) throws Exception {
+
+        BaseResponse baseResponse = quoteService.acceptQuoteWithdrawal(rq, auth);
         return new ResponseEntity<>(baseResponse, HttpStatus.OK);
     }
 

@@ -1567,13 +1567,13 @@ public class LocalTransferService {
 
             }
 
-            System.out.println("getNameLookUpDe.get(0).getLTransServiceType() " + "  ::::::::::::::::::::: " + getNameLookUpDe.get(0).getLTransServiceType());
+           // System.out.println("getNameLookUpDe.get(0).getLTransServiceType() " + "  ::::::::::::::::::::: " + getNameLookUpDe.get(0).getLTransServiceType());
 
             Optional<FinWealthPayServiceConfig> getKul = kuleanPayServiceConfigRepo.findAllByServiceType(getNameLookUpDe.get(0).getLTransServiceType());
             BigDecimal kulFees = BigDecimal.ZERO;
 
-            System.out.println("getKul.get().getMinimumAmmount() " + "  ::::::::::::::::::::: " + getKul.get().getMinimumAmmount());
-            System.out.println("processTransfer rq.getAmount() " + "  ::::::::::::::::::::: " + rq.getAmount());
+           // System.out.println("getKul.get().getMinimumAmmount() " + "  ::::::::::::::::::::: " + getKul.get().getMinimumAmmount());
+            //System.out.println("processTransfer rq.getAmount() " + "  ::::::::::::::::::::: " + rq.getAmount());
 
             //check minimum amount
             String flagMinAmt = "amount cannot be less than N" + getKul.get().getMinimumAmmount() + ".00, please check!";
@@ -1625,12 +1625,12 @@ public class LocalTransferService {
             }
 
             //check if amount is the same
-            System.out.println("getNameLookUpDe.get(0).getLTransSessAmount() req " + "  ::::::::::::::::::::: " + getNameLookUpDe.get(0).getLTransSessAmount());
-            System.out.println("rq.getAmount() " + "  ::::::::::::::::::::: " + rq.getAmount());
+            // System.out.println("getNameLookUpDe.get(0).getLTransSessAmount() req " + "  ::::::::::::::::::::: " + getNameLookUpDe.get(0).getLTransSessAmount());
+            // System.out.println("rq.getAmount() " + "  ::::::::::::::::::::: " + rq.getAmount());
             String getNameLookUpDeAmount = getNameLookUpDe.get(0).getLTransSessAmount().toString();
             String amount = rq.getAmount().trim();
-            System.out.println("getNameLookUpDeAmount " + "  ::::::::::::::::::::: " + getNameLookUpDeAmount);
-            System.out.println("amount " + "  ::::::::::::::::::::: " + amount);
+            // System.out.println("getNameLookUpDeAmount " + "  ::::::::::::::::::::: " + getNameLookUpDeAmount);
+            // System.out.println("amount " + "  ::::::::::::::::::::: " + amount);
 
             String sanitizedAmount = rq.getAmount() == null ? "0" : rq.getAmount().trim().replace(",", "");
             BigDecimal requestAmount = new BigDecimal(sanitizedAmount);
@@ -1755,12 +1755,10 @@ public class LocalTransferService {
             BigDecimal amountToDebit = new BigDecimal(rq.getAmount()).add(kulFees);
             rq.setAmount(amountToDebit.toString());
 
-            System.out.println("final amount to Check " + "  ::::::::::::::::::::: " + rq.getAmount());
-
+            //  System.out.println("final amount to Check " + "  ::::::::::::::::::::: " + rq.getAmount());
             BaseResponse secondCheck = validateTransferOthers(rq, channel, auth);
 
-            System.out.println("secondCheck " + "  ::::::::::::::::::::: " + secondCheck);
-
+            //System.out.println("secondCheck " + "  ::::::::::::::::::::: " + secondCheck);
             if (secondCheck.getStatusCode() != 200) {
 
                 responseModel.setDescription(secondCheck.getDescription());
@@ -1782,7 +1780,7 @@ public class LocalTransferService {
 //                senderName = getSender.get(0).getFirstName();
 //            }
             senderName = getSender.get(0).getFirstName() + " " + getSender.get(0).getLastName();
-            System.out.println("senderName " + "  ::::::::::::::::::::: " + senderName);
+            //   System.out.println("senderName " + "  ::::::::::::::::::::: " + senderName);
 
             String getnarration;
 
@@ -1797,8 +1795,7 @@ public class LocalTransferService {
             String narration = "TRF/" + getnarration + "/FRM " + senderName + " TO "
                     + getNameLookUpDe.get(0).getLTransSessReceiverName();
 
-            System.out.println("narration " + "  ::::::::::::::::::::: " + narration);
-
+            // System.out.println("narration " + "  ::::::::::::::::::::: " + narration);
             if (wToWaletTransferRepo.existsByTransactionId(rq.getProcessId())) {
 
                 LocalTransFailedTransInfo procFailedTrans = new LocalTransFailedTransInfo(
@@ -1829,7 +1826,7 @@ public class LocalTransferService {
             reqq.setKuleanFess(getKul.get().getFees());
             reqq.setNarration(narration);
             reqq.setTransactionId(rq.getProcessId());
-            System.out.println("debitAcct :::::::: reqq" + "    ::::::::::::::::::::: " + new Gson().toJson(reqq));
+            //System.out.println("debitAcct :::::::: reqq" + "    ::::::::::::::::::::: " + new Gson().toJson(reqq));
             DebitWalletCaller rqD = new DebitWalletCaller();
             rqD.setAuth(auth);
             rqD.setFees(reqq.getKuleanFess());
@@ -1840,16 +1837,13 @@ public class LocalTransferService {
             rqD.setTransactionId(rq.getProcessId());
             BaseResponse debitAcct = utilMeth.debitCustomerWithType(rqD, "CUSTOMER");
 
-            System.out.println("Debit Response from core ::::::::::::::::  %S  " + new Gson().toJson(debitAcct));
-
+            //   System.out.println("Debit Response from core ::::::::::::::::  %S  " + new Gson().toJson(debitAcct));
             // BaseResponse debitAcct = genLedgerProxy.debitOneTime(reqq);
-            System.out.println("verify local transfer in long expiry" + "   ::::::::::::::::::::: " + utilMeth.ltExistingRunningWindow());
-
+            //    System.out.println("verify local transfer in long expiry" + "   ::::::::::::::::::::: " + utilMeth.ltExistingRunningWindow());
             LocalDateTime expireMinutes = LocalDateTime.now().plusMinutes(Long.valueOf(utilMeth.ltExistingRunningWindow()));
             long expiry = Timestamp.valueOf(expireMinutes).getTime();
 
-            System.out.println("verify locat transfer in long expiry" + "   ::::::::::::::::::::: " + expiry);
-
+            //   System.out.println("verify locat transfer in long expiry" + "   ::::::::::::::::::::: " + expiry);
             if (debitAcct.getStatusCode() == 200) {
                 DebitWalletCaller debGLCredit = new DebitWalletCaller();
                 debGLCredit.setAuth("Sender");
@@ -1911,7 +1905,7 @@ public class LocalTransferService {
                 rqC.setTransactionId(rq.getProcessId());
                 BaseResponse creditAcct = utilMeth.creditCustomer(rqC);
 
-                System.out.println("Credit Response from core ::::::::::::::::  %S  " + new Gson().toJson(creditAcct));
+              //  System.out.println("Credit Response from core ::::::::::::::::  %S  " + new Gson().toJson(creditAcct));
 
                 //BaseResponse creditAcct = genLedgerProxy.creditOneTime(rqq);
                 if (creditAcct.getStatusCode() == 200) {
@@ -2030,6 +2024,8 @@ public class LocalTransferService {
                         String getToken = getDe.get(0).getToken() == null ? "" : getDe.get(0).getToken();
 
                         if (getToken != "") {
+                            System.out.println("Receiver has token::::::::::::::::  %S  ");
+
                             puFire.setDeviceToken(getDe.get(0).getToken());
                             Map<String, String> data = new HashMap<String, String>();
                             data.put("type", "ALERT");            // sample custom data
@@ -2063,6 +2059,8 @@ public class LocalTransferService {
 
                         if (getToken != "") {
 
+                            System.out.println("Sender has token::::::::::::::::  %S  ");
+
                             puFireSender.setDeviceToken(getDepuFireSender.get(0).getToken());
                             Map<String, String> data = new HashMap<String, String>();
                             data.put("type", "ALERT");            // sample custom data
@@ -2076,7 +2074,6 @@ public class LocalTransferService {
                                     puFireSender.getBody(),
                                     data
                             );*/
-
                             messageCenterService.createAndPushToUser(getSenderName.get(0).getWalletId(), puFireSender.getTitle(),
                                     puFireSender.getBody(),
                                     data, null, "");

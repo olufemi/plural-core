@@ -11,6 +11,7 @@ package com.financial.wealth.api.transactions.services.notify;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.auth.oauth2.AccessToken;
 import com.google.auth.oauth2.GoogleCredentials;
+import com.google.gson.Gson;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.http.HttpEntity;
 import org.apache.http.client.methods.CloseableHttpResponse;
@@ -107,10 +108,14 @@ public class FcmService {
         post.setHeader("Content-Type", "application/json; charset=UTF-8");
         post.setEntity(new StringEntity(json, StandardCharsets.UTF_8));
 
+        //System.out.println("HttpPost::::::::::::::::  %S  " + new Gson().toJson(post));
         try (CloseableHttpClient http = HttpClients.createDefault(); CloseableHttpResponse resp = http.execute(post)) {
             int code = resp.getStatusLine().getStatusCode();
             String respBody = EntityUtils.toString(resp.getEntity(), StandardCharsets.UTF_8);
             log.info("FCM response: {} {}", code, respBody);
+            // System.out.println("code::::::::::::::::  %S  " + code);
+            //System.out.println("respBody::::::::::::::::  %S  " + new Gson().toJson(respBody));
+
             if (code >= 400) {
                 throw new RuntimeException("FCM error " + code + ": " + respBody);
             }
@@ -178,6 +183,7 @@ public class FcmService {
         post.setHeader("Authorization", "Bearer " + getAccessToken());
         post.setHeader("Content-Type", "application/json; charset=UTF-8");
         post.setEntity(new StringEntity(json, StandardCharsets.UTF_8));
+        //System.out.println("HttpPost::::::::::::::::  %S  " + new Gson().toJson(post));
 
         CloseableHttpClient http = HttpClients.createDefault();
         CloseableHttpResponse resp = null;

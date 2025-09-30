@@ -336,6 +336,17 @@ public class CreateQuoteClient {
                 return responseModel;
             }
 
+            String isDebited = getDee.get(0).getIsDebited() == null ? "0" : getDee.get(0).getIsDebited();
+
+            if (isDebited.equals("1")) {
+                SettlementFailureLog conWall = new SettlementFailureLog("", "",
+                        "Withdrawal is already processed!");
+                settlementFailureLogRepo.save(conWall);
+                responseModel.setDescription("Withdrawal is already processed!");
+                responseModel.setStatusCode(statusCode);
+                return responseModel;
+            }
+
             String encyrptedPin = uttilityMethods.encyrpt(String.valueOf(rq.getPin()), encryptionKey);
             String pin = senderWalletdetails.get(0).getPersonId();
             if (!encyrptedPin.equals(pin)) {

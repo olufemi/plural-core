@@ -17,6 +17,7 @@ import javax.persistence.ManyToOne;
 import javax.persistence.Temporal;
 import javax.persistence.TemporalType;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 import org.hibernate.annotations.GenericGenerator;
 import org.hibernate.annotations.Parameter;
 
@@ -26,7 +27,8 @@ import org.hibernate.annotations.Parameter;
  */
 @Data
 @Entity
-public class UserNotification implements Serializable {
+@EqualsAndHashCode(onlyExplicitlyIncluded = true)
+public class UserNotification extends AbstractAuditingEntity implements Serializable {
 
     private static final long serialVersionUID = 1L;
     private static final String SEQ_NAME = "NOTIFICATION_PUSHED_SEQ";

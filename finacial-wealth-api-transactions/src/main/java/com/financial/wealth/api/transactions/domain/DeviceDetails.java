@@ -58,13 +58,13 @@ public class DeviceDetails extends AbstractAuditingEntity implements Serializabl
         }
     }
 
-    @CreatedDate
+    /*@CreatedDate
     @Column(name = "CREATED_DATE", nullable = false, updatable = false, columnDefinition = "TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
     @JsonIgnore
     private Instant createdDate;
     @LastModifiedDate
     @Column(name = "LAST_MODIFIED_DATE", insertable = false, columnDefinition = "TIMESTAMP")
     @JsonIgnore
-    private Instant lastModifiedDate;
+    private Instant lastModifiedDate;*/
 
 }

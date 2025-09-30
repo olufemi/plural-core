@@ -19,6 +19,7 @@ import com.financial.wealth.api.transactions.models.BaseResponse;
 import com.financial.wealth.api.transactions.models.CreditWalletCaller;
 import com.financial.wealth.api.transactions.models.DebitWalletCaller;
 import com.financial.wealth.api.transactions.models.PushNotificationFireBase;
+import com.financial.wealth.api.transactions.models.tranfaar.inflow.DepositWebhook;
 import com.financial.wealth.api.transactions.models.tranfaar.outflow.WithdrawalOutflow;
 
 import com.financial.wealth.api.transactions.repo.AcceptQuoteResponseFailedRepo;
@@ -53,6 +54,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -66,7 +68,7 @@ public class WebhookKeyService {
     private final FinWealthPaymentTransactionRepo finWealthPaymentTransactionRepo;
     private final DeviceDetailsRepo deviceDetailsRepo;
     private final FcmService fcmService;
-     private final MessageCenterService messageCenterService;
+    private final MessageCenterService messageCenterService;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -108,6 +110,45 @@ public class WebhookKeyService {
         return Base64.getEncoder().encodeToString(buf);
     }
 
+    @Scheduled(fixedRateString = "${pool.process.webhook.withdrawal.ms:360000}")
+    public void processWebHookWithdrawal() {
+
+        List<CreateQuoteResLog> getData = createQuoteResLogRepo.findDebitPendingAndAccepted();
+        if (getData != null) {
+            for (CreateQuoteResLog proc : getData) {
+                WithdrawalOutflow witPoc = new WithdrawalOutflow();
+                witPoc.setAmount(proc.getAmount());
+                witPoc.setQuoteId(proc.getQuoteId());
+                BaseResponse bRes = processPaymentWithdrawal(witPoc, "");
+                System.out.println("schedule processPaymentWithdrawal::::::::::::::::  %S  " + new Gson().toJson(bRes));
+
+            }
+        }
+
+    }
+
+    @Scheduled(fixedRateString = "${pool.process.webhook.deposit.ms:360000}")
+    public void processWebHookDeposit() {
+
+        List<CreateQuoteResLog> getData = createQuoteResLogRepo.findAcceptedPendingDepositWithResponsePending();
+        if (getData != null) {
+            for (CreateQuoteResLog proc : getData) {
+
+                DepositWebhook witPoc = new DepositWebhook();
+                witPoc.setAmount(proc.getAmount());
+                witPoc.setQuote_id(proc.getQuoteId());
+                witPoc.setCurrency(proc.getCurrencyCode());
+                witPoc.setEmail(proc.getEmail());
+                witPoc.setPaymentType(proc.getPaymentType());
+                witPoc.setStatus(proc.getStatus());
+                ResponseEntity<?> xx = processPayment(witPoc.toString());
+                System.out.println("schedule processWebHookDeposit::::::::::::::::  %S  " + new Gson().toJson(xx));
+
+            }
+        }
+
+    }
+
     public BaseResponse processPaymentWithdrawal(WithdrawalOutflow rqq, String auth) {
 
         BaseResponse responseModel = new BaseResponse();
@@ -116,7 +157,7 @@ public class WebhookKeyService {
 
         try {
             statusCode = 400;
-            DecodedJWTToken getDecoded = DecodedJWTToken.getDecoded(auth);
+            // DecodedJWTToken getDecoded = DecodedJWTToken.getDecoded(auth);
 
             List<CreateQuoteResLog> getDee = createQuoteResLogRepo.findByQuoteId(rqq.getQuoteId());
 
@@ -139,7 +180,10 @@ public class WebhookKeyService {
 
             }
 
-            if (getDee.get(0).getIsDebitedDescription().equals("PROCESSED") || getDee.get(0).getIsDebited().equals("1")) {
+            String IsDebitedDescription = getDee.get(0).getIsDebitedDescription() == null ? "IN-PROGRESS" : getDee.get(0).getIsDebitedDescription();
+            String IsDebited = getDee.get(0).getIsDebited() == null ? "0" : getDee.get(0).getIsDebited();
+
+            if (IsDebitedDescription.equals("PROCESSED") || IsDebited.equals("1")) {
                 SettlementFailureLog conWall = new SettlementFailureLog("", "",
                         "Transaction is already processed!");
                 settlementFailureLogRepo.save(conWall);
@@ -180,7 +224,7 @@ public class WebhookKeyService {
 
             BaseResponse debitAcct = utilMeth.debitCustomerWithType(rqC, "CUSTOMER");
 
-            System.out.println("Debit Response from core creditAcct ::::::::::::::::  %S  " + new Gson().toJson(debitAcct));
+            System.out.println("Debit Response from core debitAcct ::::::::::::::::  %S  " + new Gson().toJson(debitAcct));
 
             //BaseResponse creditAcct = genLedgerProxy.creditOneTime(rqq);
             if (debitAcct.getStatusCode() == 200) {
@@ -230,9 +274,9 @@ public class WebhookKeyService {
                                 puFireSender.getBody(),
                                 data
                         );*/
-                          messageCenterService.createAndPushToUser(getReceiverName.get(0).getWalletId(), puFireSender.getTitle(),
-                                    puFireSender.getBody(),
-                                    data, null, "");
+                        messageCenterService.createAndPushToUser(getReceiverName.get(0).getWalletId(), puFireSender.getTitle(),
+                                puFireSender.getBody(),
+                                data, null, "");
 
                     }
                 }
@@ -465,18 +509,17 @@ public class WebhookKeyService {
                         if (puFireSender.getData() != null) {
                             data.putAll(puFireSender.getData());
                         }
-                        
-                          messageCenterService.createAndPushToUser(getReceiverName.get(0).getWalletId(), puFireSender.getTitle(),
-                                    puFireSender.getBody(),
-                                    data, null, "");
 
-                       /* fcmService.sendToToken(
+                        messageCenterService.createAndPushToUser(getReceiverName.get(0).getWalletId(), puFireSender.getTitle(),
+                                puFireSender.getBody(),
+                                data, null, "");
+
+                        /* fcmService.sendToToken(
                                 puFireSender.getDeviceToken(),
                                 puFireSender.getTitle(),
                                 puFireSender.getBody(),
                                 data
                         );*/
-
                     }
                 }
 

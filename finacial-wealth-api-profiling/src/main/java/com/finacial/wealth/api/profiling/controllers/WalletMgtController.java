@@ -17,7 +17,9 @@ import com.finacial.wealth.api.profiling.models.InitiateUserOnboarding;
 import com.finacial.wealth.api.profiling.models.OnBoardUserForSDK;
 import com.finacial.wealth.api.profiling.models.UserDeviceReqChange;
 import com.finacial.wealth.api.profiling.models.WalletNo;
+import com.finacial.wealth.api.profiling.models.accounts.AddAccountObj;
 import com.finacial.wealth.api.profiling.response.BaseResponse;
+import com.finacial.wealth.api.profiling.services.AddAccountService;
 import com.finacial.wealth.api.profiling.services.WalletServices;
 import com.finacial.wealth.api.profiling.services.WalletSystemProxyService;
 import com.finacial.wealth.api.profiling.utilities.models.OtpResendRequest;
@@ -49,6 +51,7 @@ public class WalletMgtController {
 
     private final WalletServices walletServices;
     private final WalletSystemProxyService walletSystemProxyService;
+    private final AddAccountService addAccountService;
 
     /*@PostMapping("/create-user-old")
     public ResponseEntity<BaseResponse> onboardUser(
@@ -57,6 +60,14 @@ public class WalletMgtController {
         BaseResponse baseResponse = walletServices.onboardUser(rq);
         return new ResponseEntity<>(baseResponse, HttpStatus.OK);
     }*/
+    @PostMapping("/add-other-currency-account")
+    public ResponseEntity<BaseResponse> addOtheCurrencyAccount(@RequestHeader(value = "authorization", required = true) String auth,
+            @RequestBody @Valid AddAccountObj rq) {
+
+        BaseResponse baseResponse = addAccountService.addAccount(rq, auth);
+        return new ResponseEntity<>(baseResponse, HttpStatus.OK);
+    }
+
     @PostMapping("/validate-pin")
     public ResponseEntity<BaseResponse> validatePin(@RequestHeader(value = "authorization", required = true) String auth,
             @RequestBody @Valid WalletNo rq) {

@@ -14,7 +14,6 @@ import lombok.Data;
 @Data
 public class AddAccountObj {
 
-    private String account;
     private String countryCode;
     private String walletId;
     private String country;

@@ -12,22 +12,46 @@ import com.finacial.wealth.api.fxpeer.exchange.common.*;
 
 import jakarta.persistence.*;
 import java.time.Instant;
+import lombok.Data;
 
 @Entity
 @Table(name = "escrows")
 public class Escrow extends AuditedBase {
 
+    // Optional: @Column(name = "order_id") if you want snake_case in DB
     private Long orderId;
+
     @Enumerated(EnumType.STRING)
     private EscrowStatus status;
+
     private Instant expiresAt;
+
     @Embedded
+    @AttributeOverrides({
+        @AttributeOverride(name = "userId", column = @Column(name = "buyer_user_id")),
+        @AttributeOverride(name = "currency", column = @Column(name = "buyer_currency")),
+        @AttributeOverride(name = "requiredAmount", column = @Column(name = "buyer_required_amount", precision = 18, scale = 2)),
+        @AttributeOverride(name = "fundedAmount", column = @Column(name = "buyer_funded_amount", precision = 18, scale = 2)),
+        @AttributeOverride(name = "fundedAt", column = @Column(name = "buyer_funded_at")),
+        @AttributeOverride(name = "ledgerTxnId", column = @Column(name = "buyer_ledger_txn_id"))
+    })
     private EscrowLeg buyerLeg;
+
     @Embedded
+    @AttributeOverrides({
+        @AttributeOverride(name = "userId", column = @Column(name = "seller_user_id")),
+        @AttributeOverride(name = "currency", column = @Column(name = "seller_currency")),
+        @AttributeOverride(name = "requiredAmount", column = @Column(name = "seller_required_amount", precision = 18, scale = 2)),
+        @AttributeOverride(name = "fundedAmount", column = @Column(name = "seller_funded_amount", precision = 18, scale = 2)),
+        @AttributeOverride(name = "fundedAt", column = @Column(name = "seller_funded_at")),
+        @AttributeOverride(name = "ledgerTxnId", column = @Column(name = "seller_ledger_txn_id"))
+    })
     private EscrowLeg sellerLeg;
+
     private boolean buyerReleased;
     private boolean sellerReleased;
 
+    // getters/setters...
     public Long getOrderId() {
         return orderId;
     }
@@ -83,4 +107,5 @@ public class Escrow extends AuditedBase {
     public void setSellerReleased(boolean sellerReleased) {
         this.sellerReleased = sellerReleased;
     }
+
 }

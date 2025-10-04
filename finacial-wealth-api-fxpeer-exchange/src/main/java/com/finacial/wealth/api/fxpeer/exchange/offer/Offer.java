@@ -34,9 +34,45 @@ public class Offer extends AuditedBase {
     @Column(nullable = false, precision = 18, scale = 2)
     private BigDecimal qtyAvailable;
     private Instant expiryAt;
+    private BigDecimal minAmount;
+    private BigDecimal maxAmount;
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private OfferStatus status;
+    private boolean showInTopDeals;
+    private String poweredBy;
+
+    public String getPoweredBy() {
+        return poweredBy;
+    }
+
+    public void setPoweredBy(String poweredBy) {
+        this.poweredBy = poweredBy;
+    }
+
+    public boolean isShowInTopDeals() {
+        return showInTopDeals;
+    }
+
+    public void setShowInTopDeals(boolean showInTopDeals) {
+        this.showInTopDeals = showInTopDeals;
+    }
+
+    public BigDecimal getMinAmount() {
+        return minAmount;
+    }
+
+    public void setMinAmount(BigDecimal minAmount) {
+        this.minAmount = minAmount;
+    }
+
+    public BigDecimal getMaxAmount() {
+        return maxAmount;
+    }
+
+    public void setMaxAmount(BigDecimal maxAmount) {
+        this.maxAmount = maxAmount;
+    }
 
 // getters/setters
     public Long getSellerUserId() {

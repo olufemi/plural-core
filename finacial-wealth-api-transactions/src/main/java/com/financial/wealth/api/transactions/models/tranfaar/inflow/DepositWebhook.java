@@ -4,6 +4,7 @@
  */
 package com.financial.wealth.api.transactions.models.tranfaar.inflow;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Data;
 
 /**
@@ -12,8 +13,8 @@ import lombok.Data;
  */
 @Data
 public class DepositWebhook {
-
-    private String quote_id;
+    @JsonProperty("quote_id")
+    private String quoteId;
     private String paymentType;
     private String currency;
     private String status;

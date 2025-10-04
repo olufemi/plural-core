@@ -19,11 +19,13 @@ import com.finacial.wealth.api.profiling.utils.DecodedJWTToken;
 import java.time.Instant;
 import java.util.Optional;
 import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Service;
 
 /**
  *
  * @author olufemioshin
  */
+@Service
 public class AddAccountService {
 
     private final AddFailedTransLoggRepo addFailedTransLoggRepo;
@@ -44,7 +46,7 @@ public class AddAccountService {
         this.countriesRepository = countriesRepository;
         this.addAccountDetailsRepo = addAccountDetailsRepo;
         this.uniqueIds = uniqueIds;
-        this.walletServices =walletServices;
+        this.walletServices = walletServices;
     }
 
     public BaseResponse addAccount(AddAccountObj rq, String auth) {
@@ -94,7 +96,7 @@ public class AddAccountService {
                 responseModel.setStatusCode(addUserToWalletSystem.getStatusCode());
                 return responseModel;
             }
-            
+
             addAccountDetailsRepo.save(addDe);
 
             //
@@ -103,7 +105,7 @@ public class AddAccountService {
             responseModel.setStatusCode(statusCode);
 
             AddFailedTransLog pinActTransFailed = new AddFailedTransLog("activate-wallet",
-                    http.INTERNAL_SERVER_ERROR.toString(), "", "", rq.getAccount());
+                    http.INTERNAL_SERVER_ERROR.toString(), "", "", "");
             addFailedTransLoggRepo.save(pinActTransFailed);
             ex.printStackTrace();
         }

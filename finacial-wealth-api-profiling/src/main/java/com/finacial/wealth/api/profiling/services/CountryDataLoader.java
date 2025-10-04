@@ -15,8 +15,9 @@ import org.springframework.boot.CommandLineRunner;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
-@Component
-public class CountryDataLoader implements CommandLineRunner {
+//@Component
+//public class CountryDataLoader implements CommandLineRunner {
+public class CountryDataLoader {
 
     private final CountriesRepository repo;
 
@@ -24,14 +25,13 @@ public class CountryDataLoader implements CommandLineRunner {
         this.repo = repo;
     }
 
-    @Override
+    /*@Override
     public void run(String... args) {
         seedIfEmpty();
-    }
-
-    @Transactional
+    }*/
+ /*@Transactional
     public void seedIfEmpty() {
-        if (repo.count() > 0) return;
+       if (repo.count() > 0) return;
 
         List<Countries> batch = new ArrayList<>();
         Set<String> seen = new HashSet<>();
@@ -60,13 +60,13 @@ public class CountryDataLoader implements CommandLineRunner {
         }
 
         repo.saveAll(batch);
-    }
+    }*/
 
-    private Currency safeCurrency(Locale locale) {
+ /*private Currency safeCurrency(Locale locale) {
         try {
             return Currency.getInstance(locale);
         } catch (Exception ex) {
             return null;
         }
-    }
+    }*/
 }

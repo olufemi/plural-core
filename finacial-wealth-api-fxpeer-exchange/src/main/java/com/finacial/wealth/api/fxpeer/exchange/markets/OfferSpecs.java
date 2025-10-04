@@ -14,7 +14,8 @@ import com.finacial.wealth.api.fxpeer.exchange.offer.Offer;
 import org.springframework.data.jpa.domain.Specification;
 
 import java.math.BigDecimal;
-
+import org.springframework.stereotype.Component;
+@Component
 public final class OfferSpecs {
 
     private OfferSpecs() {

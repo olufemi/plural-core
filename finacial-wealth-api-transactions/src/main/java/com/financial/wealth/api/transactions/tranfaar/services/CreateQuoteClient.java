@@ -454,6 +454,7 @@ public class CreateQuoteClient {
 
             getDeeUp.setIsAccepted("1");
             getDeeUp.setAcceptQuoteResponse("SUCCESS");
+            getDeeUp.setStatus("PENDING");
             createQuoteResLogRepo.save(getDeeUp);
 
             WithdrawalOutflow wSend = new WithdrawalOutflow();
@@ -647,7 +648,7 @@ public class CreateQuoteClient {
                 return responseModel;
             }
 
-            if (!getDee.get(0).getPaymentType().equals("WITHDRAWAL")) {
+            if (!getDee.get(0).getPaymentType().equals("DEPOSIT")) {
                 SettlementFailureLog conWall = new SettlementFailureLog("", "",
                         "PaymentTuype is mismatched!");
                 settlementFailureLogRepo.save(conWall);

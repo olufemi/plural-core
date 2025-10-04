@@ -72,6 +72,8 @@ import com.financial.wealth.api.transactions.models.SwapSlot;
 import com.financial.wealth.api.transactions.models.SwapSlotReq;
 import com.financial.wealth.api.transactions.models.ValidateReqReq;
 import com.financial.wealth.api.transactions.repo.SwapSlotDetailsRepo;
+import com.financial.wealth.api.transactions.services.grp.sav.fulfil.GroupSavingsCycle;
+import com.financial.wealth.api.transactions.services.grp.sav.fulfil.GroupSavingsCycleRepo;
 import com.financial.wealth.api.transactions.services.utils.ScheduleUtils;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
@@ -98,9 +100,9 @@ import java.util.Map;
  */
 @Service
 public class GroupSavingsService {
-    
+
     private static final DateTimeFormatter ISO = DateTimeFormatter.ofPattern("dd-MM-yyyy");
-    
+
     private final GroupSavingsDataRepo groupSavingsDataRepo;
     private final UttilityMethods utilMeth;
     private final ReceiverFailedTransInfoRepo receiverFailedTransInfoRepo;
@@ -118,7 +120,8 @@ public class GroupSavingsService {
     @Value("${spring.profiles.active}")
     private String environment;
     private final GroupSavingsScheduleEngine groupSavingsScheduleEngine;
-    
+    private final GroupSavingsCycleRepo groupSavingsCycleRepo;
+
     public GroupSavingsService(GroupSavingsDataRepo groupSavingsDataRepo,
             UttilityMethods utilMeth, ReceiverFailedTransInfoRepo receiverFailedTransInfoRepo,
             SettlementFailureLogRepo settlementFailureLogRepo,
@@ -127,8 +130,9 @@ public class GroupSavingsService {
             RegWalletInfoRepository regWalletInfoRepository,
             ConfiguedMembersNumberRepo configuedMembersNumberRepo,
             ConfiguredPayOutSlotsRepo configuredPayOutSlotsRepo, SwapSlotDetailsRepo swapSlotDetailsRepo,
-            GroupSavingsScheduleEngine groupSavingsScheduleEngine) {
-        
+            GroupSavingsScheduleEngine groupSavingsScheduleEngine,
+            GroupSavingsCycleRepo groupSavingsCycleRepo) {
+
         this.groupSavingsDataRepo = groupSavingsDataRepo;
         this.utilMeth = utilMeth;
         this.receiverFailedTransInfoRepo = receiverFailedTransInfoRepo;
@@ -140,8 +144,9 @@ public class GroupSavingsService {
         this.configuredPayOutSlotsRepo = configuredPayOutSlotsRepo;
         this.swapSlotDetailsRepo = swapSlotDetailsRepo;
         this.groupSavingsScheduleEngine = groupSavingsScheduleEngine;
+        this.groupSavingsCycleRepo = groupSavingsCycleRepo;
     }
-    
+
     public BaseResponse deleteGroupSaving(GroupSavingConf rq, String channel, String auth) {
         BaseResponse responseModel = new BaseResponse();
         int statusCode = 500;
@@ -161,43 +166,43 @@ public class GroupSavingsService {
                 responseModel.setStatusCode(statusCode);
                 return responseModel;
             }
-            
+
             List<RegWalletInfo> senderWalletdetails = regWalletInfoRepository.findByPhoneNumberData(getDecoded.phoneNumber);
             if (!senderWalletdetails.get(0).isActivation()) {
-                
+
                 SettlementFailureLog conWall = new SettlementFailureLog("", "",
                         "Customer has not created PIN!");
                 settlementFailureLogRepo.save(conWall);
-                
+
                 responseModel.setDescription("Customer has not created PIN!");
                 responseModel.setStatusCode(statusCode);
                 return responseModel;
             }
-            
+
             String encyrptedPin = utilMeth.encyrpt(String.valueOf(rq.getPin()), encryptionKey);
             String pin = senderWalletdetails.get(0).getPersonId();
             if (!encyrptedPin.equals(pin)) {
-                
+
                 SettlementFailureLog conWall = new SettlementFailureLog("", "",
                         "Invalid PIN!");
                 settlementFailureLogRepo.save(conWall);
-                
+
                 responseModel.setDescription("Invalid PIN!");
                 responseModel.setStatusCode(statusCode);
-                
+
                 return responseModel;
-                
+
             }
-            
+
             List<GroupSavingsData> chkPendId = groupSavingsDataRepo.findByInviteCode(rq.getInvitationCodeReqId());
             boolean itsId = false;
             boolean itsIdLink = false;
             List<GroupSavingsData> chkPendIdLink = groupSavingsDataRepo.findByTransactionIdLink(rq.getInvitationCodeReqId());
-            
+
             if (chkPendId.size() > 0) {
-                
+
                 if (chkPendId.get(0).getTransactionStatus().equals("4")) {
-                    
+
                     SettlementFailureLog conWall = new SettlementFailureLog("", "",
                             "This transaction is still active, contributions on going!");
                     settlementFailureLogRepo.save(conWall);
@@ -205,22 +210,22 @@ public class GroupSavingsService {
                     responseModel.setStatusCode(statusCode);
                     return responseModel;
                 }
-                
+
                 itsId = true;
-                
+
                 updateRecord = groupSavingsDataRepo.findByInviteCodeDe(rq.getInvitationCodeReqId());
                 updateRecord.setLastModifiedDate(Instant.now());
-                
+
                 updateRecord.setIsTrnsactionDeleted("1");
                 updateRecord.setIsTrnsactionDeletedDesc("Deleted");
-                
+
             }
-            
+
             System.out.println("itsId" + "  ::::::::::::::::::::: >>>>>>>>>>>>>>>>>>  " + itsId);
-            
+
             if (chkPendIdLink.size() > 0) {
                 if (chkPendIdLink.get(0).getTransactionStatus().equals("4")) {
-                    
+
                     SettlementFailureLog conWall = new SettlementFailureLog("", "",
                             "This transaction is still active, contributions on going!");
                     settlementFailureLogRepo.save(conWall);
@@ -229,16 +234,16 @@ public class GroupSavingsService {
                     return responseModel;
                 }
                 itsIdLink = true;
-                
+
                 updateRecord = groupSavingsDataRepo.findByTransactionIdLinkDe(rq.getInvitationCodeReqId());
                 updateRecord.setLastModifiedDate(Instant.now());
                 updateRecord.setIsTrnsactionDeleted("1");
                 updateRecord.setIsTrnsactionDeletedDesc("Deleted");
-                
+
             }
-            
+
             System.out.println("itsIdLink" + "  ::::::::::::::::::::: >>>>>>>>>>>>>>>>>>  " + itsIdLink);
-            
+
             if (itsId == false && itsIdLink == false) {
                 SettlementFailureLog conWall = new SettlementFailureLog("", "",
                         "The transaction request-id is invalid!");
@@ -247,21 +252,21 @@ public class GroupSavingsService {
                 responseModel.setStatusCode(statusCode);
                 return responseModel;
             }
-            
+
             groupSavingsDataRepo.save(updateRecord);
-            
+
             responseModel.setDescription("Transaction Created.");
             responseModel.setStatusCode(200);
         } catch (Exception ex) {
             responseModel.setDescription(statusMessage);
             responseModel.setStatusCode(statusCode);
-            
+
             ex.printStackTrace();
         }
-        
+
         return responseModel;
     }
-    
+
     public ApiResponseModel configuedMembersNumberData() {
         ApiResponseModel response = new ApiResponseModel();
         int statusCode = 500;
@@ -269,7 +274,7 @@ public class GroupSavingsService {
         try {
             List<ConfiguedMembersNumber> sData = configuedMembersNumberRepo.findAll();
             String sDataJson = cleanText(new Gson().toJson(sData));
-            
+
             statusCode = 400;
             statusMessage = "Invalid Parameter";
             if (!sData.isEmpty()) {
@@ -279,7 +284,7 @@ public class GroupSavingsService {
                 }.getType());
                 response.setData(ssData);
             }
-            
+
         } catch (Exception ex) {
             ex.printStackTrace();
         }
@@ -287,9 +292,9 @@ public class GroupSavingsService {
         response.setDescription(statusMessage);
         return response;
     }
-    
+
     public int[] StringToIntArray(String[] stringArray) {
-        
+
         System.out.println("StringToIntArray :::::::: " + stringArray);
 
         //  String[] stringArray = {"1", "2", "3", "4", "5"};
@@ -299,47 +304,47 @@ public class GroupSavingsService {
 
         //System.out.println(Arrays.toString(intArray)); // Output: [1, 2, 3, 4, 5]
         System.out.println("StringToIntArray :::::::: " + Arrays.toString(intArray));
-        
+
         return intArray;
-        
+
     }
-    
+
     public static String removeNumberAndConvertToString1(int[] array, int numberToRemove) {
         System.out.println("removeNumberAndConvertToString :::::::: ");
-        
+
         System.out.println("numberToRemove :::::::: " + numberToRemove);
         System.out.println("array :::::::: " + array);
-        
+
         return Arrays.toString(
                 Arrays.stream(array)
                         .filter(n -> n != numberToRemove)
                         .toArray()
         );
-        
+
     }
-    
+
     public static int[] removeNumberAndConvertToString(int[] array, int numberToRemove) {
         return Arrays.stream(array)
                 .filter(n -> n != numberToRemove)
                 .toArray();
     }
-    
+
     public int[] returnAraryumberOfSlots(int number) {
-        
+
         int[] array = new int[number];
         for (int i = 0; i < number; i++) {
             array[i] = i + 1;
         }
         System.out.println("returnAraryumberOfSlots :::::::: " + array);
-        
+
         return array;
-        
+
     }
-    
+
     private LocalDate parseIso(String s) {
         return LocalDate.parse(s, ISO);
     }
-    
+
     private void validateFrequencyPayload(InitiateGroupSavingsV2 rq) {
         ContributionFrequency freq = ContributionFrequency.valueOf(rq.getContributionFrequency().toUpperCase());
         if (freq == ContributionFrequency.WEEKLY || freq == ContributionFrequency.BIWEEKLY) {
@@ -354,7 +359,7 @@ public class GroupSavingsService {
         // payout policy
         PayoutPolicy.valueOf(rq.getPayoutPolicy().toUpperCase());
     }
-    
+
     private String slotsCsv(int numberOfMembers, int reservedAdminSlot) {
         // 1..N excluding admin reserved slot
         List<String> slots = new ArrayList<>();
@@ -365,7 +370,7 @@ public class GroupSavingsService {
         }
         return String.join(",", slots);
     }
-    
+
     public ApiResponseModel initiateGroupSavingsV2(InitiateGroupSavingsV2 rq, String channel, String auth) {
         ApiResponseModel responseModel = new ApiResponseModel();
         int statusCode = 500;
@@ -378,26 +383,26 @@ public class GroupSavingsService {
             BigDecimal fees = BigDecimal.ZERO;
             // BigDecimal transAmount = BigDecimal.ZERO;
             int number = rq.getSelectedSlot();
-            
+
             List<RegWalletInfo> wallDe = regWalletInfoRepository.findByPhoneNumberData(getDecoded.phoneNumber);
             if (!wallDe.get(0).isActivation()) {
-                
+
                 SettlementFailureLog conWall = new SettlementFailureLog("", "",
                         "Customer has not created PIN!");
                 settlementFailureLogRepo.save(conWall);
-                
+
                 responseModel.setDescription("Customer has not created PIN!");
                 responseModel.setStatusCode(60);
-                
+
                 return responseModel;
             }
-            
+
             String transactionId = "#" + String.valueOf(GlobalMethods.generateTransactionId());
-            
+
             String inviteCode = utilMeth.generateReferralCode("group-savings-generate-invite-code");
-            
+
             String transactionL = utilMeth.getSETTING_KEY_G_INVITE_CODE_URL() + inviteCode;
-            
+
             String inviteCodeLink = "<a href='transactionLink:" + transactionL + "'>" + "<b>" + transactionL + "<b>" + "</a>";
 
             //String payOutDateOfTheMonth = rq.getPayOutDateOfTheMonth();
@@ -414,7 +419,7 @@ public class GroupSavingsService {
             }*/
             //validate number of members
             String convertMems = String.valueOf(rq.getNumberOfMembers());
-            
+
             if (!utilMeth.getSETTING_KEY_G_SAVINGS_MEM_LIST(convertMems)) {
                 SettlementFailureLog conWall = new SettlementFailureLog("", "",
                         "Request No of Members is not reconized!");
@@ -423,10 +428,10 @@ public class GroupSavingsService {
                 responseModel.setStatusCode(statusCode);
                 return responseModel;
             }
-            
+
             System.out.println(" rq.getEmailAddress()" + "  :::::::::::::::::::::   " + rq.getEmailAddress());
             System.out.println("getDecoded.emailAddress" + "  :::::::::::::::::::::   " + getDecoded.emailAddress);
-            
+
             if (!getDecoded.emailAddress.equals(rq.getEmailAddress())) {
                 SettlementFailureLog conWall = new SettlementFailureLog("", "",
                         "Invalid User, Suspected Fraud!");
@@ -439,71 +444,71 @@ public class GroupSavingsService {
             List<CommissionCfg> pullData = findAllByTransactionType("groupsavings");
             if (pullData.size() > 0) {
                 if (pullData.isEmpty()) {
-                    
+
                     SettlementFailureLog conWall = new SettlementFailureLog("", "",
                             "Transaction Type does not exist!");
                     settlementFailureLogRepo.save(conWall);
-                    
+
                     responseModel.setStatusCode(400);
                     responseModel.setDescription("Transaction Type does not exist!");
                     return responseModel;
-                    
+
                 }
             } else {
-                
+
                 SettlementFailureLog conWall = new SettlementFailureLog("", "",
                         "Transaction Type does not exist!");
                 settlementFailureLogRepo.save(conWall);
-                
+
                 responseModel.setStatusCode(400);
                 responseModel.setDescription("Transaction Type does not exist!");
                 return responseModel;
             }
-            
+
             if (getConfList.size() <= 0) {
-                
+
                 SettlementFailureLog conWall = new SettlementFailureLog("", "",
                         "Service type not configured!");
                 settlementFailureLogRepo.save(conWall);
                 responseModel.setDescription("Service type not configured!");
                 responseModel.setStatusCode(statusCode);
                 return responseModel;
-                
+
             }
-            
+
             if (!getConfList.get(0).isEnabled()) {
-                
+
                 SettlementFailureLog conWall = new SettlementFailureLog("", "",
                         "Service type not configured!");
                 settlementFailureLogRepo.save(conWall);
                 responseModel.setDescription("Service type not configured!");
                 responseModel.setStatusCode(statusCode);
                 return responseModel;
-                
+
             }
             Optional<FinWealthServiceConfig> getKul = finWealthServiceConfigRepo.findAllByServiceType("groupsavings");
-            
+
             List<GroupSavingsData> checkDe = groupSavingsDataRepo.findByEmailAddress(getDecoded.emailAddress);
-            
+
             if (checkDe.size() > 0) {
                 //check through to see that customer can have active transaction above configured number of active
 
                 for (GroupSavingsData checkDeInt : checkDe) {
-                    
+
                     String gName = checkDeInt.getGroupSavingName().toUpperCase();
                     if (checkDeInt.getTransactionStatus().equals("0")) {
                         String isDeleted = checkDeInt.getTransactionStatus() == null ? "0" : checkDeInt.getTransactionStatus();
-                        
+
                         if (!isDeleted.equals("1")) {
                             SettlementFailureLog conWall = new SettlementFailureLog("", "",
                                     "You have an existing group( " + gName + " ) initiated but not yet created!");
                             settlementFailureLogRepo.save(conWall);
-                            
+
                             GroupSavingsDataModel doSave = new GroupSavingsDataModel();
-                            
+
                             doSave.setAllowPublicToJoin(checkDeInt.getAllowPublicToJoin());
                             doSave.setTransactionDate(formDate(checkDeInt.getCreatedDate()));
-                            
+
                             doSave.setGroupSavingDescription(checkDeInt.getGroupSavingDescription());
                             doSave.setGroupSavingName(checkDeInt.getGroupSavingName());
                             doSave.setNumberOfMembers(String.valueOf(checkDeInt.getNumberOfMembers()));
@@ -523,9 +528,9 @@ public class GroupSavingsService {
                             doSave.setGroupSavingFinalAmount(checkDeInt.getGroupSavingFinalAmount());
                             // String[] array = checkDeInt.getAvailablePayOutSlot().split(",");
                             doSave.setAvailablePayOutSlot(checkDeInt.getAvailablePayOutSlot());
-                            
+
                             responseModel.setData(doSave);
-                            
+
                             responseModel.setStatusCode(90);
                             responseModel.setDescription("You have an existing group( " + gName + " ) initiated but not yet created!");
                             //return responseModel;
@@ -534,11 +539,11 @@ public class GroupSavingsService {
                             checkDeUp.setLastModifiedDate(Instant.now());
                             groupSavingsDataRepo.save(checkDeUp);
                         }
-                        
+
                     }
-                    
+
                 }
-                
+
             }
             // === NEW: frequency validation ===
             rq.setContributionDayOfMonth(1);
@@ -600,10 +605,10 @@ public class GroupSavingsService {
             doSave.setTransactionStatusDesc("Initiated");
             doSave.setIsTrnsactionDeleted("0");
             doSave.setIsTrnsactionDeletedDesc("Not deleted");
-            
+
             doSave.setInviteCode(inviteCode);
             doSave.setTransactionIdLink(inviteCodeLink);
-            
+
             doSave.setWalletId(wallDe.get(0).getWalletId());
             doSave.setPhoneNumber(wallDe.get(0).getPhoneNumber());
             doSave.setEmailAddress(wallDe.get(0).getEmail());
@@ -643,13 +648,13 @@ public class GroupSavingsService {
                     break;
                 }
             }
-            
+
             if (found == true) {
                 int[] arrayT2 = doSave.getAvailablePayOutSlot();
                 int[] availablePayOutSlot = removeNumberAndConvertToString(arrayT2, rq.getSelectedSlot());
                 doSave.setAvailablePayOutSlot(availablePayOutSlot);
                 doSave.setAdminPayOutSlot(rq.getSelectedSlot());
-                
+
             }
 
             // ===== Fees (same logic you already have) =====
@@ -657,7 +662,7 @@ public class GroupSavingsService {
             // (keep your existing code; omitted here for brevity)
             for (CommissionCfg partData : pullData) {
                 if (getKul.get().getServiceType().trim().equals(partData.getTransType())) {
-                    
+
                     if (betweenTransBand(new BigDecimal(rq.getGroupSavingAmount()), new BigDecimal(partData.getAmountMin()), new BigDecimal(partData.getAmountMax())) == true) {
                         if (partData.getHasPercent().equals("1")) {
 
@@ -669,21 +674,21 @@ public class GroupSavingsService {
 
                             BigDecimal pFees = percentage(new BigDecimal(rq.getGroupSavingAmount()), partData.getCommPercent());
                             System.out.println(" pFees before added flatCharges" + "  :::::::::::::::::::::   " + pFees);
-                            
+
                             fees = pFees.add(partData.getCharges());
                             doSave.setGroupSavingAmount(transAmount);
                             doSave.setGroupSavingFinalAmount(transAmount.add(fees));
-                            
+
                         } else {
-                            
+
                             doSave.setGroupSavingAmount(transAmount);
                             doSave.setGroupSavingFinalAmount(transAmount.add(fees));
-                            
+
                         }
                     }
                 }
             }
-            
+
             groupSavingsDataRepo.save(doSave);
 
             // Optional: return preview schedule (first few dates) to client
@@ -695,7 +700,7 @@ public class GroupSavingsService {
             responseModel.setStatusCode(200);
             responseModel.setData(doSave); // or wrap with a response model including the preview
             return responseModel;
-            
+
         } catch (Exception ex) {
             responseModel.setDescription(statusMessage);
             responseModel.setStatusCode(statusCode);
@@ -703,7 +708,7 @@ public class GroupSavingsService {
             return responseModel;
         }
     }
-    
+
     public ApiResponseModel initiateGroupSavings(InitiateGroupSavings rq, String channel, String auth) {
         ApiResponseModel responseModel = new ApiResponseModel();
         int statusCode = 500;
@@ -714,32 +719,32 @@ public class GroupSavingsService {
             BigDecimal fees = BigDecimal.ZERO;
             BigDecimal transAmount = BigDecimal.ZERO;
             int number = rq.getSelectedSlot();
-            
+
             List<RegWalletInfo> wallDe = regWalletInfoRepository.findByPhoneNumberData(getDecoded.phoneNumber);
             if (!wallDe.get(0).isActivation()) {
-                
+
                 SettlementFailureLog conWall = new SettlementFailureLog("", "",
                         "Customer has not created PIN!");
                 settlementFailureLogRepo.save(conWall);
-                
+
                 responseModel.setDescription("Customer has not created PIN!");
                 responseModel.setStatusCode(60);
-                
+
                 return responseModel;
             }
-            
+
             String transactionId = "#" + String.valueOf(GlobalMethods.generateTransactionId());
-            
+
             String inviteCode = utilMeth.generateReferralCode("group-savings-generate-invite-code");
-            
+
             String transactionL = utilMeth.getSETTING_KEY_G_INVITE_CODE_URL() + inviteCode;
-            
+
             String inviteCodeLink = "<a href='transactionLink:" + transactionL + "'>" + "<b>" + transactionL + "<b>" + "</a>";
-            
+
             String payOutDateOfTheMonth = rq.getPayOutDateOfTheMonth();
-            
+
             ApiResponseModel getIfPayDateIsCorrect = checkIfDateIsAfterRequiredWorkingDays(payOutDateOfTheMonth);
-            
+
             if (getIfPayDateIsCorrect.getStatusCode() != 200) {
                 SettlementFailureLog conWall = new SettlementFailureLog("", "",
                         getIfPayDateIsCorrect.getDescription());
@@ -751,7 +756,7 @@ public class GroupSavingsService {
 
             //validate number of members
             String convertMems = String.valueOf(rq.getNumberOfMembers());
-            
+
             if (!utilMeth.getSETTING_KEY_G_SAVINGS_MEM_LIST(convertMems)) {
                 SettlementFailureLog conWall = new SettlementFailureLog("", "",
                         "Request No of Members is not reconized!");
@@ -790,7 +795,7 @@ public class GroupSavingsService {
             }*/
             System.out.println(" rq.getEmailAddress()" + "  :::::::::::::::::::::   " + rq.getEmailAddress());
             System.out.println("getDecoded.emailAddress" + "  :::::::::::::::::::::   " + getDecoded.emailAddress);
-            
+
             if (!getDecoded.emailAddress.equals(rq.getEmailAddress())) {
                 SettlementFailureLog conWall = new SettlementFailureLog("", "",
                         "Invalid User, Suspected Fraud!");
@@ -803,69 +808,69 @@ public class GroupSavingsService {
             List<CommissionCfg> pullData = findAllByTransactionType("groupsavings");
             if (pullData.size() > 0) {
                 if (pullData.isEmpty()) {
-                    
+
                     SettlementFailureLog conWall = new SettlementFailureLog("", "",
                             "Transaction Type does not exist!");
                     settlementFailureLogRepo.save(conWall);
-                    
+
                     responseModel.setStatusCode(400);
                     responseModel.setDescription("Transaction Type does not exist!");
                     return responseModel;
-                    
+
                 }
             } else {
-                
+
                 SettlementFailureLog conWall = new SettlementFailureLog("", "",
                         "Transaction Type does not exist!");
                 settlementFailureLogRepo.save(conWall);
-                
+
                 responseModel.setStatusCode(400);
                 responseModel.setDescription("Transaction Type does not exist!");
                 return responseModel;
             }
-            
+
             if (getConfList.size() <= 0) {
-                
+
                 SettlementFailureLog conWall = new SettlementFailureLog("", "",
                         "Service type not configured!");
                 settlementFailureLogRepo.save(conWall);
                 responseModel.setDescription("Service type not configured!");
                 responseModel.setStatusCode(statusCode);
                 return responseModel;
-                
+
             }
-            
+
             if (!getConfList.get(0).isEnabled()) {
-                
+
                 SettlementFailureLog conWall = new SettlementFailureLog("", "",
                         "Service type not configured!");
                 settlementFailureLogRepo.save(conWall);
                 responseModel.setDescription("Service type not configured!");
                 responseModel.setStatusCode(statusCode);
                 return responseModel;
-                
+
             }
             Optional<FinWealthServiceConfig> getKul = finWealthServiceConfigRepo.findAllByServiceType("groupsavings");
-            
+
             List<GroupSavingsData> checkDe = groupSavingsDataRepo.findByEmailAddress(getDecoded.emailAddress);
-            
+
             if (checkDe.size() > 0) {
                 //check through to see that customer can have active transaction above configured number of active
 
                 for (GroupSavingsData checkDeInt : checkDe) {
-                    
+
                     String gName = checkDeInt.getGroupSavingName().toUpperCase();
-                    
+
                     if (checkDeInt.getTransactionStatus().equals("0")) {
                         SettlementFailureLog conWall = new SettlementFailureLog("", "",
                                 "You have an existing group(" + gName + ") initiated but not yet created!");
                         settlementFailureLogRepo.save(conWall);
-                        
+
                         GroupSavingsDataModel doSave = new GroupSavingsDataModel();
-                        
+
                         doSave.setAllowPublicToJoin(checkDeInt.getAllowPublicToJoin());
                         doSave.setTransactionDate(formDate(checkDeInt.getCreatedDate()));
-                        
+
                         doSave.setGroupSavingDescription(checkDeInt.getGroupSavingDescription());
                         doSave.setGroupSavingName(checkDeInt.getGroupSavingName());
                         doSave.setNumberOfMembers(String.valueOf(checkDeInt.getNumberOfMembers()));
@@ -885,18 +890,18 @@ public class GroupSavingsService {
                         doSave.setGroupSavingFinalAmount(checkDeInt.getGroupSavingFinalAmount());
                         // String[] array = checkDeInt.getAvailablePayOutSlot().split(",");
                         doSave.setAvailablePayOutSlot(checkDeInt.getAvailablePayOutSlot());
-                        
+
                         responseModel.setData(doSave);
-                        
+
                         responseModel.setStatusCode(90);
                         responseModel.setDescription("You have an existing group(" + gName + ") initiated but not yet created!");
                         return responseModel;
                     }
-                    
+
                 }
-                
+
             }
-            
+
             GroupSavingsData doSave = new GroupSavingsData();
             String AllowPublicToJoin = "0";
             if (rq.isAllowPublicToJoin()) {
@@ -934,18 +939,18 @@ public class GroupSavingsService {
                     break;
                 }
             }
-            
+
             if (found == true) {
                 int[] arrayT2 = doSave.getAvailablePayOutSlot();
                 int[] availablePayOutSlot = removeNumberAndConvertToString(arrayT2, rq.getSelectedSlot());
                 doSave.setAvailablePayOutSlot(availablePayOutSlot);
                 doSave.setAdminPayOutSlot(rq.getSelectedSlot());
-                
+
             }
-            
+
             for (CommissionCfg partData : pullData) {
                 if (getKul.get().getServiceType().trim().equals(partData.getTransType())) {
-                    
+
                     if (betweenTransBand(new BigDecimal(rq.getGroupSavingAmount()), new BigDecimal(partData.getAmountMin()), new BigDecimal(partData.getAmountMax())) == true) {
                         if (partData.getHasPercent().equals("1")) {
 
@@ -957,38 +962,38 @@ public class GroupSavingsService {
 
                             BigDecimal pFees = percentage(new BigDecimal(rq.getGroupSavingAmount()), partData.getCommPercent());
                             System.out.println(" pFees before added flatCharges" + "  :::::::::::::::::::::   " + pFees);
-                            
+
                             fees = pFees.add(partData.getCharges());
                             doSave.setGroupSavingAmount(transAmount);
                             doSave.setGroupSavingFinalAmount(transAmount.add(fees));
-                            
+
                         } else {
-                            
+
                             doSave.setGroupSavingAmount(transAmount);
                             doSave.setGroupSavingFinalAmount(transAmount.add(fees));
-                            
+
                         }
                     }
                 }
             }
-            
+
             groupSavingsDataRepo.save(doSave);
-            
+
             responseModel.setDescription("Kindly confirm Group Creation.");
             responseModel.setStatusCode(200);
             responseModel.setData(doSave);
             return responseModel;
-            
+
         } catch (Exception ex) {
             responseModel.setDescription(statusMessage);
             responseModel.setStatusCode(statusCode);
-            
+
             ex.printStackTrace();
         }
-        
+
         return responseModel;
     }
-    
+
     public ApiResponseModel getUserInitiateGroupSavings(ReByEmailAddress rq, String channel, String auth) {
         ApiResponseModel responseModel = new ApiResponseModel();
         int statusCode = 500;
@@ -996,7 +1001,7 @@ public class GroupSavingsService {
         try {
             statusCode = 400;
             DecodedJWTToken getDecoded = DecodedJWTToken.getDecoded(auth);
-            
+
             if (!rq.getEmailAddress().equals(getDecoded.emailAddress)) {
                 SettlementFailureLog conWall = new SettlementFailureLog("", "",
                         "Suspected fraud!");
@@ -1017,10 +1022,10 @@ public class GroupSavingsService {
             }*/
             //get groups from aaded to groups
             List<GroupSavingsData> getALLGROUPS = groupSavingsDataRepo.findByInviteCode(rq.getEmailAddress());
-            
+
             if (getALLGROUPS.size() <= 0) {
                 chkGDetailsBool = false;
-                
+
             }
             if (chkGDetailsBool == false) {
                 SettlementFailureLog conWall = new SettlementFailureLog("", "",
@@ -1031,24 +1036,24 @@ public class GroupSavingsService {
                 return responseModel;
             }
             List<SavedGroupDetails> mapAll = new ArrayList<SavedGroupDetails>();
-            
+
             if (getALLGROUPS.size() > 0) {
                 //check through to see that customer can have active transaction above configured number of active
 
                 for (GroupSavingsData checkDeInt : getALLGROUPS) {
-                    
+
                     String gName = checkDeInt.getGroupSavingName().toUpperCase();
                     if (!checkDeInt.getIsTrnsactionDeleted().equals("1")) {
                         if (checkDeInt.getTransactionStatus().equals("0") && checkDeInt.getTransactionStatus().equals("Initiated")) {
                             SettlementFailureLog conWall = new SettlementFailureLog("", "",
                                     "You have an existing group(" + gName + ") initiated but not yet created!");
                             settlementFailureLogRepo.save(conWall);
-                            
+
                             GroupSavingsDataModel doSave = new GroupSavingsDataModel();
-                            
+
                             doSave.setAllowPublicToJoin(checkDeInt.getAllowPublicToJoin());
                             doSave.setTransactionDate(formDate(checkDeInt.getCreatedDate()));
-                            
+
                             doSave.setGroupSavingDescription(checkDeInt.getGroupSavingDescription());
                             doSave.setGroupSavingName(checkDeInt.getGroupSavingName());
                             doSave.setNumberOfMembers(String.valueOf(checkDeInt.getNumberOfMembers()));
@@ -1068,19 +1073,19 @@ public class GroupSavingsService {
                             doSave.setGroupSavingFinalAmount(checkDeInt.getGroupSavingFinalAmount());
                             // String[] array = checkDeInt.getAvailablePayOutSlot().split(",");
                             doSave.setAvailablePayOutSlot(checkDeInt.getAvailablePayOutSlot());
-                            
+
                             responseModel.setData(doSave);
-                            
+
                             responseModel.setStatusCode(90);
                             responseModel.setDescription("You have an existing group(" + gName + ") initiated but not yet created!");
                             return responseModel;
                         }
                     }
-                    
+
                 }
-                
+
             }
-            
+
             if (mapAll.isEmpty()) {
                 SettlementFailureLog conWall = new SettlementFailureLog("", "",
                         "Customer does not have an existing group!");
@@ -1089,22 +1094,22 @@ public class GroupSavingsService {
                 responseModel.setStatusCode(statusCode);
                 return responseModel;
             }
-            
+
             responseModel.setData(mapAll);
             responseModel.setDescription("Customer transactions pulled successfully.");
             responseModel.setStatusCode(200);
-            
+
         } catch (Exception ex) {
             responseModel.setDescription(statusMessage);
             responseModel.setStatusCode(statusCode);
-            
+
             ex.printStackTrace();
         }
-        
+
         return responseModel;
-        
+
     }
-    
+
     public BaseResponse confirmCreateTransaction(GroupSavingConf rq, String channel, String auth) {
         BaseResponse responseModel = new BaseResponse();
         int statusCode = 500;
@@ -1124,45 +1129,45 @@ public class GroupSavingsService {
                 responseModel.setStatusCode(statusCode);
                 return responseModel;
             }
-            
+
             List<RegWalletInfo> getWallDe = regWalletInfoRepository.findByPhoneNumberData(getDecoded.phoneNumber);
             if (!getWallDe.get(0).isActivation()) {
-                
+
                 SettlementFailureLog conWall = new SettlementFailureLog("", "",
                         "Customer has not created PIN!");
                 settlementFailureLogRepo.save(conWall);
-                
+
                 responseModel.setDescription("Customer has not created PIN!");
                 responseModel.setStatusCode(statusCode);
                 return responseModel;
             }
-            
+
             String encyrptedPin = utilMeth.encyrpt(String.valueOf(rq.getPin()), encryptionKey);
             String pin = getWallDe.get(0).getPersonId();
             if (!encyrptedPin.equals(pin)) {
-                
+
                 SettlementFailureLog conWall = new SettlementFailureLog("", "",
                         "Invalid PIN!");
                 settlementFailureLogRepo.save(conWall);
-                
+
                 responseModel.setDescription("Invalid PIN!");
                 responseModel.setStatusCode(statusCode);
-                
+
                 return responseModel;
-                
+
             }
-            
+
             List<GroupSavingsData> chkPendId = groupSavingsDataRepo.findByInviteCodeAndEmailAddress(rq.getInvitationCodeReqId(), rq.getEmailAddress());
             boolean itsId = false;
             boolean itsIdLink = false;
             List<GroupSavingsData> chkPendIdLink = groupSavingsDataRepo.findByTransactionIdLinkAndEmailAddress(rq.getInvitationCodeReqId(), rq.getEmailAddress());
             AddMembersModels adM = new AddMembersModels();
             String addedMeStr = "";
-            
+
             if (chkPendId.size() > 0) {
-                
+
                 if (chkPendId.get(0).getIsTrnsactionDeleted().equals("1")) {
-                    
+
                     SettlementFailureLog conWall = new SettlementFailureLog("", "",
                             "This transaction is deleted!");
                     settlementFailureLogRepo.save(conWall);
@@ -1170,9 +1175,9 @@ public class GroupSavingsService {
                     responseModel.setStatusCode(statusCode);
                     return responseModel;
                 }
-                
+
                 if (chkPendId.get(0).getTransactionStatus().equals("2")) {
-                    
+
                     SettlementFailureLog conWall = new SettlementFailureLog("", "",
                             "This transaction has already being confirmed!");
                     settlementFailureLogRepo.save(conWall);
@@ -1180,9 +1185,9 @@ public class GroupSavingsService {
                     responseModel.setStatusCode(statusCode);
                     return responseModel;
                 }
-                
+
                 itsId = true;
-                
+
                 updateRecord = groupSavingsDataRepo.findByInviteCodeDe(rq.getInvitationCodeReqId());
                 updateRecord.setLastModifiedDate(Instant.now());
                 updateRecord.setTransactionStatus("2");
@@ -1233,17 +1238,17 @@ public class GroupSavingsService {
                 addMee.add(adM);
                 addedMeStr = returnStringOject(addMee);
                 updateRecord.setAddedMembersModels(addedMeStr);
-                
+
                 responseModel.addData("InviteCode", chkPendId.get(0).getInviteCode());
                 responseModel.addData("transactionIdLink", chkPendId.get(0).getTransactionIdLink());
-                
+
             }
-            
+
             System.out.println("itsId" + "  ::::::::::::::::::::: >>>>>>>>>>>>>>>>>>  " + itsId);
-            
+
             if (chkPendIdLink.size() > 0) {
                 if (chkPendIdLink.get(0).getIsTrnsactionDeleted().equals("1")) {
-                    
+
                     SettlementFailureLog conWall = new SettlementFailureLog("", "",
                             "This transaction is deleted!");
                     settlementFailureLogRepo.save(conWall);
@@ -1252,7 +1257,7 @@ public class GroupSavingsService {
                     return responseModel;
                 }
                 if (chkPendIdLink.get(0).getTransactionStatus().equals("1")) {
-                    
+
                     SettlementFailureLog conWall = new SettlementFailureLog("", "",
                             "This transaction has already being confirmed!");
                     settlementFailureLogRepo.save(conWall);
@@ -1260,9 +1265,9 @@ public class GroupSavingsService {
                     responseModel.setStatusCode(statusCode);
                     return responseModel;
                 }
-                
+
                 itsIdLink = true;
-                
+
                 updateRecord = groupSavingsDataRepo.findByTransactionIdLinkDe(rq.getInvitationCodeReqId());
                 updateRecord.setLastModifiedDate(Instant.now());
                 updateRecord.setTransactionStatus("2");
@@ -1311,14 +1316,14 @@ public class GroupSavingsService {
                 addMee.add(adM);
                 addedMeStr = returnStringOject(addMee);
                 updateRecord.setAddedMembersModels(addedMeStr);
-                
+
                 responseModel.addData("InviteCode", chkPendIdLink.get(0).getInviteCode());
                 responseModel.addData("transactionIdLink", chkPendIdLink.get(0).getTransactionIdLink());
-                
+
             }
-            
+
             System.out.println("itsIdLink" + "  ::::::::::::::::::::: >>>>>>>>>>>>>>>>>>  " + itsIdLink);
-            
+
             if (itsId == false && itsIdLink == false) {
                 SettlementFailureLog conWall = new SettlementFailureLog("", "",
                         "The transaction request-id is invalid!");
@@ -1327,21 +1332,21 @@ public class GroupSavingsService {
                 responseModel.setStatusCode(statusCode);
                 return responseModel;
             }
-            
+
             groupSavingsDataRepo.save(updateRecord);
-            
+
             responseModel.setDescription("Transaction Created.");
             responseModel.setStatusCode(200);
         } catch (Exception ex) {
             responseModel.setDescription(statusMessage);
             responseModel.setStatusCode(statusCode);
-            
+
             ex.printStackTrace();
         }
-        
+
         return responseModel;
     }
-    
+
     public BaseResponse activateGroup(GroupSavingActivation rq, String channel, String auth) {
         BaseResponse responseModel = new BaseResponse();
         int statusCode = 500;
@@ -1360,36 +1365,36 @@ public class GroupSavingsService {
                 responseModel.setStatusCode(statusCode);
                 return responseModel;
             }
-            
+
             List<RegWalletInfo> getWallDe = regWalletInfoRepository.findByPhoneNumberData(getDecoded.phoneNumber);
             if (!getWallDe.get(0).isActivation()) {
-                
+
                 SettlementFailureLog conWall = new SettlementFailureLog("", "",
                         "Customer has not created PIN!");
                 settlementFailureLogRepo.save(conWall);
-                
+
                 responseModel.setDescription("Customer has not created PIN!");
                 responseModel.setStatusCode(statusCode);
                 return responseModel;
             }
-            
+
             String encyrptedPin = utilMeth.encyrpt(String.valueOf(rq.getPin()), encryptionKey);
             String pin = getWallDe.get(0).getPersonId();
             if (!encyrptedPin.equals(pin)) {
-                
+
                 SettlementFailureLog conWall = new SettlementFailureLog("", "",
                         "Invalid PIN!");
                 settlementFailureLogRepo.save(conWall);
-                
+
                 responseModel.setDescription("Invalid PIN!");
                 responseModel.setStatusCode(statusCode);
-                
+
                 return responseModel;
-                
+
             }
-            
+
             boolean valFormatD1 = utilMeth.isValidFormat(utilMeth.getSETTING_DATE_FORMATT(), rq.getActivationDate(), Locale.ENGLISH);
-            
+
             if (valFormatD1 == false) {
                 System.out.println("############# StartDate is invalid");
                 SettlementFailureLog conWall = new SettlementFailureLog("", "",
@@ -1398,38 +1403,38 @@ public class GroupSavingsService {
                 responseModel.setDescription("Invalid activation date format dd/MM/yyyy!");
                 responseModel.setStatusCode(statusCode);
                 return responseModel;
-                
+
             }
-            
+
             SimpleDateFormat formatter = new SimpleDateFormat(utilMeth.getSETTING_DATE_FORMATT());
             Date date = formatter.parse(rq.getActivationDate());
             System.out.println("Converted Date: " + date);
 
             //check if the activation date is after {48} hrs from now
             boolean getBool = checkIfDateIsAfterRequiredHours(date);
-            
+
             int numbDate = Integer.parseInt(utilMeth.getSETTING_CONFIGURE_NUMB_DAYS_BEFORE_ACTIVATION());
-            
+
             if (!getBool) {
-                
+
                 SettlementFailureLog conWall = new SettlementFailureLog("", "",
                         "Selected date must be at least " + numbDate + " hours from now.");
                 settlementFailureLogRepo.save(conWall);
                 responseModel.setDescription("Selected date must be at least " + numbDate + " hours from now.");
                 responseModel.setStatusCode(statusCode);
                 return responseModel;
-                
+
             }
-            
+
             List<GroupSavingsData> chkPendId = groupSavingsDataRepo.findByInviteCode(rq.getInvitationCodeReqId());
             boolean itsId = false;
             boolean itsIdLink = false;
             List<GroupSavingsData> chkPendIdLink = groupSavingsDataRepo.findByTransactionIdLink(rq.getInvitationCodeReqId());
-            
+
             if (chkPendId.size() > 0) {
-                
+
                 if (!chkPendId.get(0).getEmailAddress().equals(rq.getEmailAddress())) {
-                    
+
                     SettlementFailureLog conWall = new SettlementFailureLog("", "",
                             "Transaction owner mismatch!");
                     settlementFailureLogRepo.save(conWall);
@@ -1437,9 +1442,9 @@ public class GroupSavingsService {
                     responseModel.setStatusCode(statusCode);
                     return responseModel;
                 }
-                
+
                 if (chkPendId.get(0).getIsTrnsactionDeleted().equals("1")) {
-                    
+
                     SettlementFailureLog conWall = new SettlementFailureLog("", "",
                             "This transaction is deleted!");
                     settlementFailureLogRepo.save(conWall);
@@ -1447,9 +1452,9 @@ public class GroupSavingsService {
                     responseModel.setStatusCode(statusCode);
                     return responseModel;
                 }
-                
+
                 if (chkPendId.get(0).getTransactionStatus().equals("3")) {
-                    
+
                     SettlementFailureLog conWall = new SettlementFailureLog("", "",
                             "This transaction has already being activated!");
                     settlementFailureLogRepo.save(conWall);
@@ -1468,7 +1473,7 @@ public class GroupSavingsService {
                     return responseModel;
                 }*/
                 if (chkPendId.get(0).getIsTrnsactionDeleted().equals("1")) {
-                    
+
                     SettlementFailureLog conWall = new SettlementFailureLog("", "",
                             "This transaction no longer available!");
                     settlementFailureLogRepo.save(conWall);
@@ -1477,23 +1482,41 @@ public class GroupSavingsService {
                     return responseModel;
                 }
                 itsId = true;
-                
+
                 updateRecord = groupSavingsDataRepo.findByInviteCodeDe(rq.getInvitationCodeReqId());
                 updateRecord.setLastModifiedDate(Instant.now());
                 updateRecord.setTransactionStatus("3");
                 updateRecord.setTransactionStatusDesc("Activate");
+                List<GroupSavingsScheduleEngine.Cycle> plan
+                        = GroupSavingsScheduleEngine.buildSchedule(
+                                updateRecord.getContributionFrequency(),
+                                updateRecord.getCycleNumber(),
+                                updateRecord.getPayoutPolicy()
+                        );
+
+                int i = 1;
+                for (GroupSavingsScheduleEngine.Cycle c : plan) {
+                    GroupSavingsCycle row = new GroupSavingsCycle();
+                    row.setGroupId(updateRecord.getId());
+                    row.setCycleNumber(i++);
+                    row.setContributionDate(c.contributionDate);      // public final fields in your engine
+                    row.setContributionWindowEnd(c.contributionWindowEnd);
+                    row.setPayoutDate(c.payoutDate);                  // may be null for AFTER_ALL_CONTRIBUTIONS
+                    row.setStatus(GroupSavingsCycle.CycleStatus.PENDING);
+                    groupSavingsCycleRepo.save(row);
+                }
                 //add members
 
                 responseModel.addData("InviteCode", chkPendId.get(0).getInviteCode());
                 responseModel.addData("transactionIdLink", chkPendId.get(0).getTransactionIdLink());
-                
+
             }
-            
+
             System.out.println("itsId" + "  ::::::::::::::::::::: >>>>>>>>>>>>>>>>>>  " + itsId);
-            
+
             if (chkPendIdLink.size() > 0) {
                 if (!chkPendIdLink.get(0).getEmailAddress().equals(rq.getEmailAddress())) {
-                    
+
                     SettlementFailureLog conWall = new SettlementFailureLog("", "",
                             "Transaction owner mismatch!");
                     settlementFailureLogRepo.save(conWall);
@@ -1502,7 +1525,7 @@ public class GroupSavingsService {
                     return responseModel;
                 }
                 if (chkPendIdLink.get(0).getIsTrnsactionDeleted().equals("1")) {
-                    
+
                     SettlementFailureLog conWall = new SettlementFailureLog("", "",
                             "This transaction is deleted!");
                     settlementFailureLogRepo.save(conWall);
@@ -1511,7 +1534,7 @@ public class GroupSavingsService {
                     return responseModel;
                 }
                 if (chkPendIdLink.get(0).getTransactionStatus().equals("3")) {
-                    
+
                     SettlementFailureLog conWall = new SettlementFailureLog("", "",
                             "This transaction has already being activated!");
                     settlementFailureLogRepo.save(conWall);
@@ -1530,7 +1553,7 @@ public class GroupSavingsService {
                     return responseModel;
                 }*/
                 if (chkPendIdLink.get(0).getIsTrnsactionDeleted().equals("1")) {
-                    
+
                     SettlementFailureLog conWall = new SettlementFailureLog("", "",
                             "This transaction no longer available!");
                     settlementFailureLogRepo.save(conWall);
@@ -1539,18 +1562,37 @@ public class GroupSavingsService {
                     return responseModel;
                 }
                 itsIdLink = true;
-                
+
                 updateRecord = groupSavingsDataRepo.findByTransactionIdLinkDe(rq.getInvitationCodeReqId());
                 updateRecord.setLastModifiedDate(Instant.now());
                 updateRecord.setTransactionStatus("3");
                 updateRecord.setTransactionStatusDesc("Activate");
                 responseModel.addData("InviteCode", chkPendIdLink.get(0).getInviteCode());
                 responseModel.addData("transactionIdLink", chkPendIdLink.get(0).getTransactionIdLink());
-                
+
+                List<GroupSavingsScheduleEngine.Cycle> plan
+                        = GroupSavingsScheduleEngine.buildSchedule(
+                                updateRecord.getContributionFrequency(),
+                                updateRecord.getCycleNumber(),
+                                updateRecord.getPayoutPolicy()
+                        );
+
+                int i = 1;
+                for (GroupSavingsScheduleEngine.Cycle c : plan) {
+                    GroupSavingsCycle row = new GroupSavingsCycle();
+                    row.setGroupId(updateRecord.getId());
+                    row.setCycleNumber(i++);
+                    row.setContributionDate(c.contributionDate);      // public final fields in your engine
+                    row.setContributionWindowEnd(c.contributionWindowEnd);
+                    row.setPayoutDate(c.payoutDate);                  // may be null for AFTER_ALL_CONTRIBUTIONS
+                    row.setStatus(GroupSavingsCycle.CycleStatus.PENDING);
+                    groupSavingsCycleRepo.save(row);
+                }
+
             }
-            
+
             System.out.println("itsIdLink" + "  ::::::::::::::::::::: >>>>>>>>>>>>>>>>>>  " + itsIdLink);
-            
+
             if (itsId == false && itsIdLink == false) {
                 SettlementFailureLog conWall = new SettlementFailureLog("", "",
                         "The transaction request-id is invalid!");
@@ -1559,22 +1601,22 @@ public class GroupSavingsService {
                 responseModel.setStatusCode(statusCode);
                 return responseModel;
             }
-            
+
             groupSavingsDataRepo.save(updateRecord);
-            
+
             responseModel.setDescription("Transaction activated.");
             responseModel.setStatusCode(200);
         } catch (Exception ex) {
             responseModel.setDescription(statusMessage);
             responseModel.setStatusCode(statusCode);
-            
+
             ex.printStackTrace();
         }
-        
+
         return responseModel;
-        
+
     }
-    
+
     public BaseResponse getCusDetails(GetMemBerDe rq, String channel, String auth) {
         BaseResponse responseModel = new BaseResponse();
         int statusCode = 500;
@@ -1593,14 +1635,14 @@ public class GroupSavingsService {
                 responseModel.setStatusCode(statusCode);
                 return responseModel;
             }
-            
+
             boolean isWalletId = true;
             boolean isPhonenUmber = false;
-            
+
             if (!utilMeth.isValid10Num(rq.getMemberId().trim())) {
                 isWalletId = false;
                 isPhonenUmber = true;
-                
+
             }
 
             /* if (!utilMeth.isValid11Num(rq.getMemberId())) {
@@ -1609,70 +1651,70 @@ public class GroupSavingsService {
 
             }*/
             if (isWalletId == false && isPhonenUmber == false) {
-                
+
                 SettlementFailureLog conWall = new SettlementFailureLog("", "",
                         "Invalid MemberId!");
                 settlementFailureLogRepo.save(conWall);
                 responseModel.setDescription("Invalid MemberId!");
                 responseModel.setStatusCode(statusCode);
                 return responseModel;
-                
+
             }
-            
+
             if (isWalletId) {
-                
+
                 List<RegWalletInfo> wallDe = regWalletInfoRepository.findByWalletIdList(rq.getMemberId());
                 if (wallDe.size() <= 0) {
-                    
+
                     SettlementFailureLog conWall = new SettlementFailureLog("", "",
                             "MemberId does not exist!");
                     settlementFailureLogRepo.save(conWall);
                     responseModel.setDescription("MemberId does not exist!");
                     responseModel.setStatusCode(statusCode);
                     return responseModel;
-                    
+
                 }
-                
+
                 mp.put("WalletId", rq.getMemberId());
                 mp.put("Name", wallDe.get(0).getFullName());
                 mp.put("userId", wallDe.get(0).getWalletId());
-                
+
             }
-            
+
             if (isPhonenUmber) {
-                
+
                 List<RegWalletInfo> wallDe = regWalletInfoRepository.findByPhoneNumberData(rq.getMemberId());
                 if (wallDe.size() <= 0) {
-                    
+
                     SettlementFailureLog conWall = new SettlementFailureLog("", "",
                             "MemberId does not exist!");
                     settlementFailureLogRepo.save(conWall);
                     responseModel.setDescription("MemberId does not exist!");
                     responseModel.setStatusCode(statusCode);
                     return responseModel;
-                    
+
                 }
-                
+
                 mp.put("phoneNumber", rq.getMemberId());
                 mp.put("name", wallDe.get(0).getFullName());
                 mp.put("userId", wallDe.get(0).getWalletId());
-                
+
             }
             responseModel.setDescription("Member details gotten successfully.");
             responseModel.setStatusCode(200);
             responseModel.setData(mp);
-            
+
         } catch (Exception ex) {
             responseModel.setDescription(statusMessage);
             responseModel.setStatusCode(statusCode);
-            
+
             ex.printStackTrace();
         }
-        
+
         return responseModel;
-        
+
     }
-    
+
     public BaseResponse addMembers(AddedMembersFE rq, String channel, String auth) {
         BaseResponse responseModel = new BaseResponse();
         int statusCode = 500;
@@ -1694,14 +1736,14 @@ public class GroupSavingsService {
                 responseModel.setStatusCode(statusCode);
                 return responseModel;
             }
-            
+
             boolean isWalletId = true;
             boolean isPhonenUmber = false;
-            
+
             if (!utilMeth.isValid10Num(rq.getMemberId().trim())) {
                 isWalletId = false;
                 isPhonenUmber = true;
-                
+
             }
 
             /*if (!utilMeth.isValid11Num(rq.getMemberId())) {
@@ -1710,20 +1752,20 @@ public class GroupSavingsService {
 
             }*/
             List<RegWalletInfo> wallDeCr = regWalletInfoRepository.findByEmailsList(emailAddress);
-            
+
             if (isWalletId == false && isPhonenUmber == false) {
-                
+
                 SettlementFailureLog conWall = new SettlementFailureLog("", "",
                         "Invalid MemberId!");
                 settlementFailureLogRepo.save(conWall);
                 responseModel.setDescription("Invalid MemberId!");
                 responseModel.setStatusCode(statusCode);
                 return responseModel;
-                
+
             }
-            
+
             if (isWalletId) {
-                
+
                 if (wallDeCr.get(0).getWalletId().equals(rq.getMemberId())) {
                     SettlementFailureLog conWall = new SettlementFailureLog("", "",
                             "MemberId mismatch, initiator cannot add self!");
@@ -1732,19 +1774,19 @@ public class GroupSavingsService {
                     responseModel.setStatusCode(statusCode);
                     return responseModel;
                 }
-                
+
                 List<RegWalletInfo> wallDe = regWalletInfoRepository.findByWalletIdList(rq.getMemberId());
                 if (wallDe.size() <= 0) {
-                    
+
                     SettlementFailureLog conWall = new SettlementFailureLog("", "",
                             "MemberId does not exist!");
                     settlementFailureLogRepo.save(conWall);
                     responseModel.setDescription("MemberId does not exist!");
                     responseModel.setStatusCode(statusCode);
                     return responseModel;
-                    
+
                 }
-                
+
                 adM.setAdminEmailAddress(emailAddress);
                 adM.setInvitationCodeReqId(rq.getInvitationCodeReqId());
                 adM.setMemberId(wallDe.get(0).getWalletId());
@@ -1760,18 +1802,18 @@ public class GroupSavingsService {
                 adM.setCurrentMonthContributionStatusDesc("Not yet");
                 adM.setCurrentMonthContributionStatusId("3");
                 adM.setTotalMonthlyContribution(BigDecimal.ZERO);
-                
+
                 SwapSlot swP = new SwapSlot();
                 swP.setIsSwapActive("0");
                 swP.setIsSwapped("0");
                 swP.setReceiverSlot(0);
                 swP.setSenderSlot(0);
                 adM.setSwapSlot(swP);
-                
+
             }
-            
+
             if (isPhonenUmber) {
-                
+
                 if (wallDeCr.get(0).getPhoneNumber().equals(rq.getMemberId())) {
                     SettlementFailureLog conWall = new SettlementFailureLog("", "",
                             "MemberId mismatch, initiator cannot add self!");
@@ -1780,19 +1822,19 @@ public class GroupSavingsService {
                     responseModel.setStatusCode(statusCode);
                     return responseModel;
                 }
-                
+
                 List<RegWalletInfo> wallDe = regWalletInfoRepository.findByPhoneNumberData(rq.getMemberId());
                 if (wallDe.size() <= 0) {
-                    
+
                     SettlementFailureLog conWall = new SettlementFailureLog("", "",
                             "MemberId does not exist!");
                     settlementFailureLogRepo.save(conWall);
                     responseModel.setDescription("MemberId does not exist!");
                     responseModel.setStatusCode(statusCode);
                     return responseModel;
-                    
+
                 }
-                
+
                 adM.setAdminEmailAddress(emailAddress);
                 adM.setInvitationCodeReqId(rq.getInvitationCodeReqId());
                 adM.setMemberId(wallDe.get(0).getPhoneNumber());
@@ -1814,9 +1856,9 @@ public class GroupSavingsService {
                 swP.setReceiverSlot(0);
                 swP.setSenderSlot(0);
                 adM.setSwapSlot(swP);
-                
+
             }
-            
+
             List<GroupSavingsData> chkPendId = groupSavingsDataRepo.findByInviteCode(rq.getInvitationCodeReqId());
             boolean itsId = false;
             boolean itsIdLink = false;
@@ -1827,7 +1869,7 @@ public class GroupSavingsService {
 
                 //check if Adder is an admin
                 if (!chkPendId.get(0).getEmailAddress().equals(rq.getAdminEmailAddress())) {
-                    
+
                     SettlementFailureLog conWall = new SettlementFailureLog("", "",
                             "Transaction owner mismatch!");
                     settlementFailureLogRepo.save(conWall);
@@ -1835,9 +1877,9 @@ public class GroupSavingsService {
                     responseModel.setStatusCode(statusCode);
                     return responseModel;
                 }
-                
+
                 if (chkPendId.get(0).getIsTrnsactionDeleted().equals("1")) {
-                    
+
                     SettlementFailureLog conWall = new SettlementFailureLog("", "",
                             "This transaction is deleted!");
                     settlementFailureLogRepo.save(conWall);
@@ -1845,9 +1887,9 @@ public class GroupSavingsService {
                     responseModel.setStatusCode(statusCode);
                     return responseModel;
                 }
-                
+
                 if (chkPendId.get(0).getIsTrnsactionDeleted().equals("1")) {
-                    
+
                     SettlementFailureLog conWall = new SettlementFailureLog("", "",
                             "This transaction no longer available!");
                     settlementFailureLogRepo.save(conWall);
@@ -1857,21 +1899,21 @@ public class GroupSavingsService {
                 }
                 itsId = true;
                 numMems = chkPendId.get(0).getNumberOfMembers();
-                
+
                 getAddedMemberString = chkPendId.get(0).getAddedMembersModels();
                 updateRecord = groupSavingsDataRepo.findByInviteCodeDe(rq.getInvitationCodeReqId());
                 updateRecord.setLastModifiedDate(Instant.now());
-                
+
                 responseModel.addData("InviteCode", chkPendId.get(0).getInviteCode());
                 responseModel.addData("inviteCodeLink", chkPendId.get(0).getTransactionIdLink());
-                
+
             }
-            
+
             System.out.println("itsId" + "  ::::::::::::::::::::: >>>>>>>>>>>>>>>>>>  " + itsId);
-            
+
             if (chkPendIdLink.size() > 0) {
                 if (!chkPendIdLink.get(0).getEmailAddress().equals(rq.getAdminEmailAddress())) {
-                    
+
                     SettlementFailureLog conWall = new SettlementFailureLog("", "",
                             "Transaction owner mismatch!");
                     settlementFailureLogRepo.save(conWall);
@@ -1880,7 +1922,7 @@ public class GroupSavingsService {
                     return responseModel;
                 }
                 if (chkPendIdLink.get(0).getIsTrnsactionDeleted().equals("1")) {
-                    
+
                     SettlementFailureLog conWall = new SettlementFailureLog("", "",
                             "This transaction is deleted!");
                     settlementFailureLogRepo.save(conWall);
@@ -1888,9 +1930,9 @@ public class GroupSavingsService {
                     responseModel.setStatusCode(statusCode);
                     return responseModel;
                 }
-                
+
                 if (chkPendIdLink.get(0).getIsTrnsactionDeleted().equals("1")) {
-                    
+
                     SettlementFailureLog conWall = new SettlementFailureLog("", "",
                             "This transaction no longer available!");
                     settlementFailureLogRepo.save(conWall);
@@ -1900,19 +1942,19 @@ public class GroupSavingsService {
                 }
                 itsIdLink = true;
                 numMems = chkPendIdLink.get(0).getNumberOfMembers();
-                
+
                 getAddedMemberString = chkPendIdLink.get(0).getAddedMembersModels();
-                
+
                 updateRecord = groupSavingsDataRepo.findByInviteCodeDe(rq.getInvitationCodeReqId());
                 updateRecord.setLastModifiedDate(Instant.now());
-                
+
                 responseModel.addData("InviteCode", chkPendIdLink.get(0).getInviteCode());
                 responseModel.addData("inviteCodeLink", chkPendIdLink.get(0).getTransactionIdLink());
-                
+
             }
-            
+
             System.out.println("itsIdLink" + "  ::::::::::::::::::::: >>>>>>>>>>>>>>>>>>  " + itsIdLink);
-            
+
             if (itsId == false && itsIdLink == false) {
                 SettlementFailureLog conWall = new SettlementFailureLog("", "",
                         "The transaction request-id is invalid!");
@@ -1929,7 +1971,7 @@ public class GroupSavingsService {
             ObjectMapper mapper = new ObjectMapper();
             List<AddMembersModels> mems = mapper.readValue(getAddedMemberString, new TypeReference<List<AddMembersModels>>() {
             });
-            
+
             String memEmailAdd = adM.getMemberEmailAddress();
             for (AddMembersModels getMems : mems) {
                 String gottenMemEmail = getMems.getMemberEmailAddress() == null ? "empty" : getMems.getMemberEmailAddress();
@@ -1945,7 +1987,7 @@ public class GroupSavingsService {
                     numb = numb + 1;
                 }
             }
-            
+
             int convgetMaxNoOfMembers = Integer.valueOf(numMems);
             if (numb > convgetMaxNoOfMembers) {
                 SettlementFailureLog conWall = new SettlementFailureLog("", "",
@@ -1955,32 +1997,32 @@ public class GroupSavingsService {
                 responseModel.setStatusCode(statusCode);
                 return responseModel;
             }
-            
+
             List<AddMembersModels> addMee = mems;
             addMee.add(adM);
             addedMeStr = returnStringOject(addMee);
             updateRecord.setAddedMembersModels(addedMeStr);
             groupSavingsDataRepo.save(updateRecord);
-            
+
             responseModel.setDescription("Member added sucessfully.");
             responseModel.setStatusCode(200);
         } catch (Exception ex) {
             responseModel.setDescription(statusMessage);
             responseModel.setStatusCode(statusCode);
-            
+
             ex.printStackTrace();
         }
-        
+
         return responseModel;
     }
-    
+
     private BaseResponse validateRequest(ValidateReqReq rq) {
         BaseResponse responseModel = new BaseResponse();
         int statusCode = 500;
         String statusMessage = "An error occured, please try again.";
         try {
             statusCode = 400;
-            
+
             List<GroupSavingsData> chkPendId = groupSavingsDataRepo.findByInviteCode(rq.getInvitationCodeReqId());
             boolean itsId = false;
             boolean itsIdLink = false;
@@ -1989,7 +2031,7 @@ public class GroupSavingsService {
 
                 //check if the merid and the sender is in the group details
                 if (chkPendId.get(0).getIsTrnsactionDeleted().equals("1")) {
-                    
+
                     SettlementFailureLog conWall = new SettlementFailureLog("", "",
                             "This transaction is deleted!");
                     settlementFailureLogRepo.save(conWall);
@@ -1997,9 +2039,9 @@ public class GroupSavingsService {
                     responseModel.setStatusCode(statusCode);
                     return responseModel;
                 }
-                
+
                 if (chkPendId.get(0).getIsTrnsactionDeleted().equals("1")) {
-                    
+
                     SettlementFailureLog conWall = new SettlementFailureLog("", "",
                             "This transaction no longer available!");
                     settlementFailureLogRepo.save(conWall);
@@ -2007,9 +2049,9 @@ public class GroupSavingsService {
                     responseModel.setStatusCode(statusCode);
                     return responseModel;
                 }
-                
+
                 if (chkPendId.get(0).getIsTrnsactionDeleted().equals("4")) {
-                    
+
                     SettlementFailureLog conWall = new SettlementFailureLog("", "",
                             "This transaction contribution in progress, user can no longer join the group!");
                     settlementFailureLogRepo.save(conWall);
@@ -2018,18 +2060,18 @@ public class GroupSavingsService {
                     return responseModel;
                 }
                 itsId = true;
-                
+
                 responseModel.addData("InviteCode", chkPendId.get(0).getInviteCode());
                 responseModel.addData("inviteCodeLink", chkPendId.get(0).getTransactionIdLink());
-                
+
             }
-            
+
             System.out.println("itsId" + "  ::::::::::::::::::::: >>>>>>>>>>>>>>>>>>  " + itsId);
-            
+
             if (chkPendIdLink.size() > 0) {
-                
+
                 if (chkPendIdLink.get(0).getIsTrnsactionDeleted().equals("1")) {
-                    
+
                     SettlementFailureLog conWall = new SettlementFailureLog("", "",
                             "This transaction is deleted!");
                     settlementFailureLogRepo.save(conWall);
@@ -2037,9 +2079,9 @@ public class GroupSavingsService {
                     responseModel.setStatusCode(statusCode);
                     return responseModel;
                 }
-                
+
                 if (chkPendIdLink.get(0).getIsTrnsactionDeleted().equals("1")) {
-                    
+
                     SettlementFailureLog conWall = new SettlementFailureLog("", "",
                             "This transaction no longer available!");
                     settlementFailureLogRepo.save(conWall);
@@ -2048,14 +2090,14 @@ public class GroupSavingsService {
                     return responseModel;
                 }
                 itsIdLink = true;
-                
+
                 responseModel.addData("InviteCode", chkPendIdLink.get(0).getInviteCode());
                 responseModel.addData("inviteCodeLink", chkPendIdLink.get(0).getTransactionIdLink());
-                
+
             }
-            
+
             System.out.println("itsIdLink" + "  ::::::::::::::::::::: >>>>>>>>>>>>>>>>>>  " + itsIdLink);
-            
+
             if (itsId == false && itsIdLink == false) {
                 SettlementFailureLog conWall = new SettlementFailureLog("", "",
                         "The transaction request-id is invalid!");
@@ -2064,20 +2106,20 @@ public class GroupSavingsService {
                 responseModel.setStatusCode(statusCode);
                 return responseModel;
             }
-            
+
             responseModel.setDescription("Valid request!");
             responseModel.setStatusCode(200);
             return responseModel;
-            
+
         } catch (Exception ex) {
             responseModel.setDescription(statusMessage);
             responseModel.setStatusCode(statusCode);
-            
+
             ex.printStackTrace();
         }
-        
+
         return responseModel;
-        
+
     }
 
     //check if the merid exists in the group details
@@ -2088,14 +2130,14 @@ public class GroupSavingsService {
         String statusMessage = "An error occured,please try again";
         try {
             statusCode = 400;
-            
+
             System.out.println("checkIfMerIdExistsInTheDetails rq ::::::::::::::::  %S  " + new Gson().toJson(rq));
-            
+
             boolean chkGDetailsBool = true;
             List<GroupSavingsData> getALLGROUPS = groupSavingsDataRepo.findByInviteCode(rq.getInvitationCodeReqId());
             if (getALLGROUPS.size() <= 0) {
                 chkGDetailsBool = false;
-                
+
             }
             if (chkGDetailsBool == false) {
                 responseModel.setDescription("Transaction does not exist");
@@ -2105,13 +2147,13 @@ public class GroupSavingsService {
                 }
                 return responseModel;
             }
-            
+
             Map mp = new HashMap();
-            
+
             for (GroupSavingsData getByCodeI : getALLGROUPS) {
-                
+
                 if (!getByCodeI.getIsTrnsactionDeleted().equals("1")) {
-                    
+
                     if (getByCodeI.getAddedMembersModels() != null) {
 
                         //   System.out.println("getByCodeI.getAddedMembersModels() ::::::::::::::::  %S  " + new Gson().toJson(getByCodeI.getAddedMembersModels()));
@@ -2129,38 +2171,38 @@ public class GroupSavingsService {
                                 mp.put("slotNumber", getMemsByCode.getSlot() == 0 ? "" : getMemsByCode.getSlot());
                                 mp.put("memberEamil", getMemsByCode.getMemberEmailAddress() == null ? "" : getMemsByCode.getMemberEmailAddress());
                                 responseModel.setData(mp);
-                                
+
                                 responseModel.setDescription("success");
                                 responseModel.setStatusCode(200);
                                 if (environment.equals("staging")) {
                                     System.out.println("responseModel ::::::::::::::::  %S  " + new Gson().toJson(responseModel));
                                 }
-                                
+
                                 return responseModel;
                                 // }
                             }
                         }
-                        
+
                     }
                 }
-                
+
             }
-            
+
             responseModel.setDescription("Invalid request");
             responseModel.setStatusCode(400);
-            
+
             System.out.println("responseModel ::::::::::::::::  %S  " + new Gson().toJson(responseModel));
-            
+
         } catch (Exception ex) {
             responseModel.setDescription(statusMessage);
             responseModel.setStatusCode(statusCode);
-            
+
             ex.printStackTrace();
         }
-        
+
         return responseModel;
     }
-    
+
     public BaseResponse checkSenderDetailss(CheckIfMerIdExists rq) {
         BaseResponse responseModel = new BaseResponse();
         int statusCode = 500;
@@ -2168,14 +2210,14 @@ public class GroupSavingsService {
         String statusMessage = "An error occured,please try again";
         try {
             statusCode = 400;
-            
+
             System.out.println("checkSenderDetailss rq ::::::::::::::::  %S  " + new Gson().toJson(rq));
-            
+
             boolean chkGDetailsBool = true;
             List<GroupSavingsData> getALLGROUPS = groupSavingsDataRepo.findByInviteCode(rq.getInvitationCodeReqId());
             if (getALLGROUPS.size() <= 0) {
                 chkGDetailsBool = false;
-                
+
             }
             if (chkGDetailsBool == false) {
                 responseModel.setDescription("Transaction does not exist");
@@ -2185,22 +2227,22 @@ public class GroupSavingsService {
                 }
                 return responseModel;
             }
-            
+
             Map mp = new HashMap();
-            
+
             for (GroupSavingsData getByCodeI : getALLGROUPS) {
-                
+
                 if (!getByCodeI.getIsTrnsactionDeleted().equals("1")) {
-                    
+
                     if (getByCodeI.getAddedMembersModels() != null) {
-                        
+
                         ObjectMapper mappergetByCode = new ObjectMapper();
                         List<AddMembersModels> memsgetByCode = mappergetByCode.readValue(getByCodeI.getAddedMembersModels(), new TypeReference<List<AddMembersModels>>() {
                         });
                         for (AddMembersModels getMemsByCode : memsgetByCode) {
-                            
+
                             if (getMemsByCode.getMemberEmailAddress().equals(rq.getEmailAddress())) {
-                                
+
                                 responseModel.setDescription("Transaction exists");
                                 responseModel.setStatusCode(200);
                                 mp.put("slotNumber", getMemsByCode.getSlot());
@@ -2210,31 +2252,31 @@ public class GroupSavingsService {
                                 responseModel.setStatusCode(200);
                                 if (environment.equals("staging")) {
                                     System.out.println("responseModel ::::::::::::::::  %S  " + new Gson().toJson(responseModel));
-                                    
+
                                 }
-                                
+
                                 return responseModel;
-                                
+
                             }
-                            
+
                         }
-                        
+
                     }
                 }
-                
+
             }
-            
+
             responseModel.setDescription("Invalid request");
             responseModel.setStatusCode(400);
             System.out.println("responseModel ::::::::::::::::  %S  " + new Gson().toJson(responseModel));
-            
+
         } catch (Exception ex) {
             responseModel.setDescription(statusMessage);
             responseModel.setStatusCode(statusCode);
-            
+
             ex.printStackTrace();
         }
-        
+
         return responseModel;
     }
 
@@ -2247,7 +2289,7 @@ public class GroupSavingsService {
         try {
             statusCode = 400;
             DecodedJWTToken getDecoded = DecodedJWTToken.getDecoded(auth);
-            
+
             if (!rq.getEmailAddress().equals(getDecoded.emailAddress)) {
                 SettlementFailureLog conWall = new SettlementFailureLog("", "",
                         "Suspected fraud!");
@@ -2256,14 +2298,14 @@ public class GroupSavingsService {
                 responseModel.setStatusCode(statusCode);
                 return responseModel;
             }
-            
+
             System.out.println("pageNation :::::::: " + "    ::::::::::::::::::::: " + returnPagenation());
             boolean chkGDetailsBool = true;
-            
+
             List<GroupSavingsData> getALLGROUPS = groupSavingsDataRepo.findByInviteCode(rq.getInvitationCodeReqId());
             if (getALLGROUPS.size() <= 0) {
                 chkGDetailsBool = false;
-                
+
             }
             if (chkGDetailsBool == false) {
                 SettlementFailureLog conWall = new SettlementFailureLog("", "",
@@ -2273,17 +2315,17 @@ public class GroupSavingsService {
                 responseModel.setStatusCode(statusCode);
                 return responseModel;
             }
-            
+
             List<SavedGroupSlotDetails> mapAll = new ArrayList<SavedGroupSlotDetails>();
             SavedGroupSlotDetails logC = new SavedGroupSlotDetails();
-            
+
             String numMems = "0";
             int numb = 0;
             for (GroupSavingsData getByCodeI : getALLGROUPS) {
-                
+
                 if (!getByCodeI.getIsTrnsactionDeleted().equals("1")) {
                     numMems = getByCodeI.getNumberOfMembers();
-                    
+
                     if (getByCodeI.getAddedMembersModels() != null) {
 
                         // for (GroupSavingsData getByCodeI : getByCode) {
@@ -2293,7 +2335,7 @@ public class GroupSavingsService {
                         logC.setNumberOfMembers(getByCodeI.getNumberOfMembers());
                         logC.setAdminPayOutSlot(returnAraryumberOfSlots(getByCodeI.getAdminPayOutSlot()));
                         logC.setAvailablePayOutSlot(getByCodeI.getAvailablePayOutSlot());
-                        
+
                         ObjectMapper mappergetByCode = new ObjectMapper();
                         List<AddMembersModels> memsgetByCode = mappergetByCode.readValue(getByCodeI.getAddedMembersModels(), new TypeReference<List<AddMembersModels>>() {
                         });
@@ -2325,32 +2367,32 @@ public class GroupSavingsService {
                             swP.setSenderId(getMemsByCode.getSwapSlot().getSenderId() == null ? "" : getMemsByCode.getSwapSlot().getSenderId());
                             swP.setSenderSlot(getMemsByCode.getSwapSlot().getSenderSlot() == 0 ? 0 : getMemsByCode.getSwapSlot().getSenderSlot());
                             adM.setSwapSlot(swP);
-                            
+
                             addMeegetByCode.add(adM);
                             //numb = numb + 1;
 
                         }
-                        
+
                         logC.setAddMembersModels(addMeegetByCode);
 
                         //logC.setTransactionId(getKul.getTransactionId());
                         logC.setTransactionStatus(getByCodeI.getTransactionStatus());
                         logC.setTransactionStatusDesc(getByCodeI.getTransactionStatusDesc());
-                        
+
                         if (getByCodeI.getLastModifiedDate() == null) {
                             logC.setTransactionDate(formDate(getByCodeI.getCreatedDate()));
                         } else {
-                            
+
                             logC.setTransactionDate(formDate(getByCodeI.getLastModifiedDate()));
                         }
-                        
+
                         mapAll.add(logC);
-                        
+
                     }
                 }
-                
+
             }
-            
+
             if (mapAll.isEmpty()) {
                 SettlementFailureLog conWall = new SettlementFailureLog("", "",
                         "Customer does not have an existing group!");
@@ -2368,20 +2410,20 @@ public class GroupSavingsService {
                 responseModel.setStatusCode(statusCode);
                 return responseModel;
             }
-            
+
             responseModel.setData(mapAll);
             responseModel.setDescription("Customer transactions pulled successfully.");
             responseModel.setStatusCode(200);
-            
+
         } catch (Exception ex) {
             responseModel.setDescription(statusMessage);
             responseModel.setStatusCode(statusCode);
-            
+
             ex.printStackTrace();
         }
-        
+
         return responseModel;
-        
+
     }
 
     //swap slots
@@ -2407,13 +2449,13 @@ public class GroupSavingsService {
                 responseModel.setStatusCode(statusCode);
                 return responseModel;
             }
-            
+
             boolean isWalletId = true;
             boolean isPhonenUmber = false;
             CheckIfMerIdExists rr = new CheckIfMerIdExists();
-            
+
             List<SwapSlotDetails> getSw = swapSlotDetailsRepo.findBySenderEmailAddressAndMemberIdAndInvitationCodeReqId(emailAddress, rq.getMemberId(), rq.getInvitationCodeReqId());
-            
+
             if (getSw.size() > 0) {
                 if (getSw.get(0).getIsSlotSwappedStatus().equals("Pending") || getSw.get(0).getIsSlotSwapped().equals("0")) {
                     SettlementFailureLog conWall = new SettlementFailureLog("", "",
@@ -2423,7 +2465,7 @@ public class GroupSavingsService {
                     responseModel.setStatusCode(statusCode);
                     return responseModel;
                 }
-                
+
                 if (getSw.get(0).getIsSlotSwappedStatus().equals("Accepted")) {
                     SettlementFailureLog conWall = new SettlementFailureLog("", "",
                             "You have an an existing Swap Slot with the Receiver!");
@@ -2432,13 +2474,13 @@ public class GroupSavingsService {
                     responseModel.setStatusCode(statusCode);
                     return responseModel;
                 }
-                
+
             }
-            
+
             if (!utilMeth.isValid10Num(rq.getMemberId().trim())) {
                 isWalletId = false;
                 isPhonenUmber = true;
-                
+
             }
             /*if (!utilMeth.isValid11Num(rq.getMemberId())) {
 
@@ -2446,56 +2488,56 @@ public class GroupSavingsService {
 
             }*/
             if (isWalletId == false && isPhonenUmber == false) {
-                
+
                 SettlementFailureLog conWall = new SettlementFailureLog("", "",
                         "Invalid MemberId!");
                 settlementFailureLogRepo.save(conWall);
                 responseModel.setDescription("Invalid MemberId!");
                 responseModel.setStatusCode(statusCode);
                 return responseModel;
-                
+
             }
-            
+
             if (isWalletId) {
-                
+
                 List<RegWalletInfo> wallDe = regWalletInfoRepository.findByWalletIdList(rq.getMemberId());
                 if (wallDe.size() <= 0) {
-                    
+
                     SettlementFailureLog conWall = new SettlementFailureLog("", "",
                             "MemberId does not exist!");
                     settlementFailureLogRepo.save(conWall);
                     responseModel.setDescription("MemberId does not exist!");
                     responseModel.setStatusCode(statusCode);
                     return responseModel;
-                    
+
                 }
                 rr.setEmailAddress(wallDe.get(0).getEmail());
                 rr.setMemberId(rq.getMemberId());
                 rr.setMemberIdType("WalletId");
                 rr.setInvitationCodeReqId(rq.getInvitationCodeReqId());
-                
+
             }
-            
+
             if (isPhonenUmber) {
-                
+
                 List<RegWalletInfo> wallDe = regWalletInfoRepository.findByPhoneNumberData(rq.getMemberId());
                 if (wallDe.size() <= 0) {
-                    
+
                     SettlementFailureLog conWall = new SettlementFailureLog("", "",
                             "MemberId does not exist!");
                     settlementFailureLogRepo.save(conWall);
                     responseModel.setDescription("MemberId does not exist!");
                     responseModel.setStatusCode(statusCode);
                     return responseModel;
-                    
+
                 }
                 rr.setEmailAddress(wallDe.get(0).getEmail());
                 rr.setMemberId(rq.getMemberId());
                 rr.setMemberIdType("Phonenumber");
                 rr.setInvitationCodeReqId(rq.getInvitationCodeReqId());
-                
+
             }
-            
+
             if (rq.getSenderEmailAddress().equals(rr.getEmailAddress())) {
                 SettlementFailureLog conWall = new SettlementFailureLog("", "",
                         "You cannot swap with self, kindly check!");
@@ -2504,34 +2546,34 @@ public class GroupSavingsService {
                 responseModel.setStatusCode(statusCode);
                 return responseModel;
             }
-            
+
             List<RegWalletInfo> getWallDe = regWalletInfoRepository.findByPhoneNumberData(getDecoded.phoneNumber);
             if (!getWallDe.get(0).isActivation()) {
-                
+
                 SettlementFailureLog conWall = new SettlementFailureLog("", "",
                         "Customer has not created PIN!");
                 settlementFailureLogRepo.save(conWall);
-                
+
                 responseModel.setDescription("Customer has not created PIN!");
                 responseModel.setStatusCode(statusCode);
                 return responseModel;
             }
-            
+
             String encyrptedPin = utilMeth.encyrpt(String.valueOf(rq.getPin()), encryptionKey);
             String pin = getWallDe.get(0).getPersonId();
             if (!encyrptedPin.equals(pin)) {
-                
+
                 SettlementFailureLog conWall = new SettlementFailureLog("", "",
                         "Invalid PIN!");
                 settlementFailureLogRepo.save(conWall);
-                
+
                 responseModel.setDescription("Invalid PIN!");
                 responseModel.setStatusCode(statusCode);
-                
+
                 return responseModel;
-                
+
             }
-            
+
             SwapSlotDetails sw = new SwapSlotDetails();
             ValidateReqReq rqq = new ValidateReqReq();
             rqq.setAdminEmailAddress("");
@@ -2545,40 +2587,40 @@ public class GroupSavingsService {
                 responseModel.setStatusCode(checkMemberExists.getStatusCode());
                 return responseModel;
             }
-            
+
             int memSlotNo = (int) checkMemberExists.getData()
                     .get("slotNumber");
-            
+
             String memEmailAdd = (String) checkMemberExists.getData()
                     .get("memberEmail");
-            
+
             CheckIfMerIdExists rrSender = new CheckIfMerIdExists();
             rrSender.setEmailAddress(emailAddress);
             rrSender.setInvitationCodeReqId(rq.getInvitationCodeReqId());
             rrSender.setMemberId(memEmailAdd);
             rrSender.setMemberIdType(memEmailAdd);
-            
+
             BaseResponse checkSenderExists = this.checkSenderDetailss(rrSender);
             if (checkSenderExists.getStatusCode() != 200) {
                 responseModel.setDescription(checkSenderExists.getDescription());
                 responseModel.setStatusCode(checkSenderExists.getStatusCode());
                 return responseModel;
             }
-            
+
             int senderSlotNo = (int) checkSenderExists.getData()
                     .get("slotNumber");
-            
+
             String senderName = (String) checkMemberExists.getData()
                     .get("senderName");
-            
+
             BaseResponse valRe = this.validateRequest(rqq);
-            
+
             if (valRe.getStatusCode() != 200) {
                 responseModel.setDescription(valRe.getDescription());
                 responseModel.setStatusCode(valRe.getStatusCode());
                 return responseModel;
             }
-            
+
             sw.setCreatedDate(Instant.now());
             sw.setInvitationCodeReqId(rq.getInvitationCodeReqId());
             sw.setMemberId(rq.getMemberId());
@@ -2591,20 +2633,20 @@ public class GroupSavingsService {
             sw.setReceiverEmailAddress(rr.getEmailAddress());
             sw.setSenderFullName(senderName);
             swapSlotDetailsRepo.save(sw);
-            
+
         } catch (Exception ex) {
             responseModel.setDescription(statusMessage);
             responseModel.setStatusCode(statusCode);
-            
+
             ex.printStackTrace();
         }
-        
+
         responseModel.setDescription("Swap slot request sent successfully.");
         responseModel.setStatusCode(200);
-        
+
         return responseModel;
     }
-    
+
     public BaseResponse joinGroup(JoinGroupRequest rq, String channel, String auth) {
         BaseResponse responseModel = new BaseResponse();
         int statusCode = 500;
@@ -2624,14 +2666,14 @@ public class GroupSavingsService {
                 responseModel.setStatusCode(statusCode);
                 return responseModel;
             }
-            
+
             boolean isWalletId = true;
             boolean isPhonenUmber = false;
-            
+
             if (!utilMeth.isValid10Num(rq.getMemberId().trim())) {
                 isWalletId = false;
                 isPhonenUmber = true;
-                
+
             }
 
             /*if (!utilMeth.isValid11Num(rq.getMemberId())) {
@@ -2641,84 +2683,84 @@ public class GroupSavingsService {
             }*/
             // System.out.println("isWalletId" + "  ::::::::::::::::::::: >>>>>>>>>>>>>>>>>>  " + isWalletId);
             if (isWalletId == false && isPhonenUmber == false) {
-                
+
                 SettlementFailureLog conWall = new SettlementFailureLog("", "",
                         "Invalid MemberId!");
                 settlementFailureLogRepo.save(conWall);
                 responseModel.setDescription("Invalid MemberId!");
                 responseModel.setStatusCode(statusCode);
                 return responseModel;
-                
+
             }
-            
+
             if (isWalletId) {
-                
+
                 List<RegWalletInfo> wallDe = regWalletInfoRepository.findByWalletIdList(rq.getMemberId());
                 if (wallDe.size() <= 0) {
-                    
+
                     SettlementFailureLog conWall = new SettlementFailureLog("", "",
                             "MemberId does not exist!");
                     settlementFailureLogRepo.save(conWall);
                     responseModel.setDescription("MemberId does not exist!");
                     responseModel.setStatusCode(statusCode);
                     return responseModel;
-                    
+
                 }
 
                 // rr.setEmailAddress(wallDe.get(0).getEmail());
                 rr.setMemberId(rq.getMemberId());
                 rr.setMemberIdType("WalletId");
             }
-            
+
             if (isPhonenUmber) {
-                
+
                 List<RegWalletInfo> wallDe = regWalletInfoRepository.findByPhoneNumberData(rq.getMemberId());
                 if (wallDe.size() <= 0) {
-                    
+
                     SettlementFailureLog conWall = new SettlementFailureLog("", "",
                             "MemberId does not exist!");
                     settlementFailureLogRepo.save(conWall);
                     responseModel.setDescription("MemberId does not exist!");
                     responseModel.setStatusCode(statusCode);
                     return responseModel;
-                    
+
                 }
 
                 //rr.setEmailAddress(wallDe.get(0).getEmail());
                 rr.setMemberId(rq.getMemberId());
                 rr.setMemberIdType("Phonenumber");
-                
+
             }
-            
+
             List<RegWalletInfo> getWallDe = regWalletInfoRepository.findByPhoneNumberData(getDecoded.phoneNumber);
             if (!getWallDe.get(0).isActivation()) {
-                
+
                 SettlementFailureLog conWall = new SettlementFailureLog("", "",
                         "Customer has not created PIN!");
                 settlementFailureLogRepo.save(conWall);
-                
+
                 responseModel.setDescription("Customer has not created PIN!");
                 responseModel.setStatusCode(statusCode);
                 return responseModel;
             }
-            
+
             String encyrptedPin = utilMeth.encyrpt(String.valueOf(rq.getPin()), encryptionKey);
             String pin = getWallDe.get(0).getPersonId();
             if (!encyrptedPin.equals(pin)) {
-                
+
                 SettlementFailureLog conWall = new SettlementFailureLog("", "",
                         "Invalid PIN!");
                 settlementFailureLogRepo.save(conWall);
-                
+
                 responseModel.setDescription("Invalid PIN!");
                 responseModel.setStatusCode(statusCode);
-                
+
                 return responseModel;
-                
+
             }
-            
+
             rr.setEmailAddress(rq.getMemberEmailAddress());
-            
+
             rr.setInvitationCodeReqId(rq.getInvitationCodeReqId());
             BaseResponse checkMemberExists = this.checkIfMerIdExistsInTheDetails(rr);
             if (checkMemberExists.getStatusCode() != 200) {
@@ -2726,26 +2768,26 @@ public class GroupSavingsService {
                 responseModel.setStatusCode(checkMemberExists.getStatusCode());
                 return responseModel;
             }
-            
+
             ValidateReqReq rqq = new ValidateReqReq();
             rqq.setAdminEmailAddress("");
             rqq.setInvitationCodeReqId(rq.getInvitationCodeReqId());
             rqq.setSenderEmailAddress(rq.getMemberEmailAddress());
-            
+
             BaseResponse valRe = this.validateRequest(rqq);
-            
+
             if (valRe.getStatusCode() != 200) {
                 responseModel.setDescription(valRe.getDescription());
                 responseModel.setStatusCode(valRe.getStatusCode());
                 return responseModel;
             }
-            
+
             boolean chkGDetailsBool = true;
-            
+
             List<GroupSavingsData> getALLGROUPS = groupSavingsDataRepo.findByInviteCode(rq.getInvitationCodeReqId());
             if (getALLGROUPS.size() <= 0) {
                 chkGDetailsBool = false;
-                
+
             }
             if (chkGDetailsBool == false) {
                 SettlementFailureLog conWall = new SettlementFailureLog("", "",
@@ -2755,24 +2797,24 @@ public class GroupSavingsService {
                 responseModel.setStatusCode(statusCode);
                 return responseModel;
             }
-            
+
             GroupSavingsData getByInvite = groupSavingsDataRepo.findByInviteCodeDe(rq.getInvitationCodeReqId());
-            
+
             for (GroupSavingsData getByCodeI : getALLGROUPS) {
-                
+
                 if (!getByCodeI.getIsTrnsactionDeleted().equals("1")) {
-                    
+
                     if (getByCodeI.getAddedMembersModels() != null) {
-                        
+
                         ObjectMapper mappergetByCode = new ObjectMapper();
                         List<AddMembersModels> memsgetByCode = mappergetByCode.readValue(getByCodeI.getAddedMembersModels(), new TypeReference<List<AddMembersModels>>() {
                         });
                         for (AddMembersModels getMemsByCode : memsgetByCode) {
-                            
+
                             if (getMemsByCode.getMemberEmailAddress().equals(rq.getMemberEmailAddress())) {
                                 getMemsByCode.setSlot(rq.getSelectedSlot());
                                 getMemsByCode.setMemberJoined("1");
-                                
+
                                 String updatedJson = mappergetByCode.writeValueAsString(memsgetByCode);
                                 getByInvite.setAddedMembersModels(updatedJson);
                                 getByInvite.setLastModifiedDate(Instant.now());
@@ -2784,29 +2826,29 @@ public class GroupSavingsService {
                                         break;
                                     }
                                 }
-                                
+
                                 if (found == true) {
                                     System.out.println("found" + "  ::::::::::::::::::::: >>>>>>>>>>>>>>>>>>  " + found);
-                                    
+
                                     int[] arrayT = getByInvite.getAvailablePayOutSlot();
                                     int[] availablePayOutSlot = removeNumberAndConvertToString(arrayT, rq.getSelectedSlot());
                                     getByInvite.setAvailablePayOutSlot(availablePayOutSlot);
                                     // Save back to DB
                                     groupSavingsDataRepo.save(getByInvite);
-                                    
+
                                 }
-                                
+
                             }
-                            
+
                         }
-                        
+
                     }
                 }
-                
+
             }
-            
+
             GroupSavingsData getagain = groupSavingsDataRepo.findByInviteCodeDe(rq.getInvitationCodeReqId());
-            
+
             if (getagain.getAvailablePayOutSlot() != null || getagain.getAvailablePayOutSlot().length != 0) {
                 System.out.println("getagain.getAvailablePayOutSlot() == null || getagain.getAvailablePayOutSlot().length == 0" + "  :::::::::::::::::::::   ");
 
@@ -2816,39 +2858,39 @@ public class GroupSavingsService {
                 getagain.setTransactionStatusDesc(getagain.getTransactionStatusDesc());
                 getagain.setLastModifiedDate(Instant.now());
                 groupSavingsDataRepo.save(getagain);
-                
+
             }
-            
+
             responseModel.setDescription("Member joined successfuly.");
             responseModel.setStatusCode(200);
-            
+
         } catch (Exception ex) {
             responseModel.setDescription(statusMessage);
             responseModel.setStatusCode(statusCode);
-            
+
             ex.printStackTrace();
         }
-        
+
         return responseModel;
     }
-    
+
     public BaseResponse leaveGroup(LeaveGroupRequest rq, String channel, String auth) {
         BaseResponse responseModel = new BaseResponse();
         int statusCode = 500;
         String statusMessage = "An error occurred, please try again.";
-        
+
         try {
             statusCode = 400;
             DecodedJWTToken getDecoded = DecodedJWTToken.getDecoded(auth);
             String emailAddress = getDecoded.emailAddress;
-            
+
             if (!rq.getMemberEmailAddress().equals(emailAddress)) {
                 settlementFailureLogRepo.save(new SettlementFailureLog("", "", "Suspected fraud!"));
                 responseModel.setDescription("Suspected fraud!");
                 responseModel.setStatusCode(statusCode);
                 return responseModel;
             }
-            
+
             List<GroupSavingsData> groupList = groupSavingsDataRepo.findByInviteCode(rq.getInvitationCodeReqId());
             if (groupList.isEmpty()) {
                 settlementFailureLogRepo.save(new SettlementFailureLog("", "", "Group not found!"));
@@ -2856,47 +2898,47 @@ public class GroupSavingsService {
                 responseModel.setStatusCode(statusCode);
                 return responseModel;
             }
-            
+
             List<RegWalletInfo> getWallDe = regWalletInfoRepository.findByPhoneNumberData(getDecoded.phoneNumber);
             if (!getWallDe.get(0).isActivation()) {
-                
+
                 SettlementFailureLog conWall = new SettlementFailureLog("", "",
                         "Customer has not created PIN!");
                 settlementFailureLogRepo.save(conWall);
-                
+
                 responseModel.setDescription("Customer has not created PIN!");
                 responseModel.setStatusCode(statusCode);
                 return responseModel;
             }
-            
+
             String encyrptedPin = utilMeth.encyrpt(String.valueOf(rq.getPin()), encryptionKey);
             String pin = getWallDe.get(0).getPersonId();
             if (!encyrptedPin.equals(pin)) {
-                
+
                 SettlementFailureLog conWall = new SettlementFailureLog("", "",
                         "Invalid PIN!");
                 settlementFailureLogRepo.save(conWall);
-                
+
                 responseModel.setDescription("Invalid PIN!");
                 responseModel.setStatusCode(statusCode);
-                
+
                 return responseModel;
-                
+
             }
-            
+
             GroupSavingsData group = groupSavingsDataRepo.findByInviteCodeDe(rq.getInvitationCodeReqId());
             if (group == null || "1".equals(group.getIsTrnsactionDeleted())) {
                 responseModel.setDescription("Invalid or deleted group.");
                 responseModel.setStatusCode(statusCode);
                 return responseModel;
             }
-            
+
             ObjectMapper mapper = new ObjectMapper();
             List<AddMembersModels> activeMembers = mapper.readValue(
                     group.getAddedMembersModels(), new TypeReference<List<AddMembersModels>>() {
             }
             );
-            
+
             List<AddMembersModels> formerMembers = new ArrayList<>();
             if (group.getFormerMembersLog() != null) {
                 formerMembers = mapper.readValue(
@@ -2904,10 +2946,10 @@ public class GroupSavingsService {
                 }
                 );
             }
-            
+
             boolean removed = false;
             Integer slotToRestore = null;
-            
+
             Iterator<AddMembersModels> iterator = activeMembers.iterator();
             while (iterator.hasNext()) {
                 AddMembersModels member = iterator.next();
@@ -2919,7 +2961,7 @@ public class GroupSavingsService {
                     break;
                 }
             }
-            
+
             if (!removed) {
                 responseModel.setDescription("Member not found in group.");
                 responseModel.setStatusCode(statusCode);
@@ -2938,9 +2980,9 @@ public class GroupSavingsService {
             group.setAddedMembersModels(mapper.writeValueAsString(activeMembers));
             group.setFormerMembersLog(mapper.writeValueAsString(formerMembers));
             group.setLastModifiedDate(Instant.now());
-            
+
             groupSavingsDataRepo.save(group);
-            
+
             responseModel.setDescription("Member left the group successfully.");
             responseModel.setStatusCode(200);
         } catch (Exception ex) {
@@ -2948,10 +2990,10 @@ public class GroupSavingsService {
             responseModel.setDescription(statusMessage);
             responseModel.setStatusCode(statusCode);
         }
-        
+
         return responseModel;
     }
-    
+
     public ApiResponseModel getMemSwapSlotNotify(String auth) {
         ApiResponseModel responseModel = new ApiResponseModel();
         int statusCode = 500;
@@ -2959,14 +3001,14 @@ public class GroupSavingsService {
         try {
             statusCode = 400;
             DecodedJWTToken getDecoded = DecodedJWTToken.getDecoded(auth);
-            
+
             System.out.println("pageNation :::::::: " + "    ::::::::::::::::::::: " + returnPagenation());
             boolean chkGDetailsBool = true;
-            
+
             List<SwapSlotDetails> getALLSwapDe = swapSlotDetailsRepo.findByReceiverEmailAddress(getDecoded.emailAddress);
             if (getALLSwapDe.size() <= 0) {
                 chkGDetailsBool = false;
-                
+
             }
             if (chkGDetailsBool == false) {
                 SettlementFailureLog conWall = new SettlementFailureLog("", "",
@@ -2976,15 +3018,15 @@ public class GroupSavingsService {
                 responseModel.setStatusCode(statusCode);
                 return responseModel;
             }
-            
+
             List<GetSwapSlotDetailsResponse> mapAll = new ArrayList<GetSwapSlotDetailsResponse>();
             GetSwapSlotDetailsResponse logC = new GetSwapSlotDetailsResponse();
-            
+
             for (SwapSlotDetails getByCodeI : getALLSwapDe) {
-                
+
                 if (!getByCodeI.getIsSlotSwapped().equals("1")) {
                     if (getByCodeI.getIsSlotSwappedStatus().equals("Pending")) {
-                        
+
                         logC.setInvitationCodeReqId(getByCodeI.getInvitationCodeReqId());
                         logC.setIsSlotSwappedStatus(getByCodeI.getIsSlotSwappedStatus());
                         logC.setMemberId(getByCodeI.getMemberId());
@@ -2998,12 +3040,12 @@ public class GroupSavingsService {
                         mapAll.add(logC);
                     }
                 }
-                
+
             }
             if (environment.equals("staging")) {
                 System.out.println("getMemSwapSlotNotify::::mapAll :::::::: " + "    ::::::::::::::::::::: " + mapAll);
             }
-            
+
             if (mapAll.isEmpty()) {
                 SettlementFailureLog conWall = new SettlementFailureLog("", "",
                         "There are no awaiting notification for user!");
@@ -3012,22 +3054,22 @@ public class GroupSavingsService {
                 responseModel.setStatusCode(statusCode);
                 return responseModel;
             }
-            
+
             responseModel.setData(mapAll);
             responseModel.setDescription("Awaiting notification for User pulled successfully.");
             responseModel.setStatusCode(200);
-            
+
         } catch (Exception ex) {
             responseModel.setDescription(statusMessage);
             responseModel.setStatusCode(statusCode);
-            
+
             ex.printStackTrace();
         }
-        
+
         return responseModel;
-        
+
     }
-    
+
     public BaseResponse acceptDeclineSwap(AcceptDeclineSwapSlotReq rq, String channel, String auth) {
         BaseResponse responseModel = new BaseResponse();
         int statusCode = 500;
@@ -3046,7 +3088,7 @@ public class GroupSavingsService {
                 responseModel.setStatusCode(statusCode);
                 return responseModel;
             }
-            
+
             List<SwapSlotDetails> getSw = swapSlotDetailsRepo.findBySenderEmailAddressAndMemberIdAndInvitationCodeReqId(rq.getSenderEmailAddress(), rq.getMemberId(), rq.getInvitationCodeReqId());
             if (getSw.size() > 0) {
                 if (!getSw.get(0).getIsSlotSwappedStatus().equals("Pending")) {
@@ -3057,7 +3099,7 @@ public class GroupSavingsService {
                     responseModel.setStatusCode(statusCode);
                     return responseModel;
                 }
-                
+
             } else if (getSw.size() <= 0) {
                 SettlementFailureLog conWall = new SettlementFailureLog("", "",
                         "You do not have awaiting Swap Slot with Sender!");
@@ -3066,42 +3108,42 @@ public class GroupSavingsService {
                 responseModel.setStatusCode(statusCode);
                 return responseModel;
             }
-            
+
             boolean isAccepted = true;
-            
+
             if (rq.isAcceptOrDecline() == true) {
                 List<RegWalletInfo> getWallDe = regWalletInfoRepository.findByPhoneNumberData(getDecoded.phoneNumber);
                 if (!getWallDe.get(0).isActivation()) {
-                    
+
                     SettlementFailureLog conWall = new SettlementFailureLog("", "",
                             "Customer has not created PIN!");
                     settlementFailureLogRepo.save(conWall);
-                    
+
                     responseModel.setDescription("Customer has not created PIN!");
                     responseModel.setStatusCode(statusCode);
                     return responseModel;
                 }
-                
+
                 String encyrptedPin = utilMeth.encyrpt(String.valueOf(rq.getPin()), encryptionKey);
                 String pin = getWallDe.get(0).getPersonId();
                 if (!encyrptedPin.equals(pin)) {
-                    
+
                     SettlementFailureLog conWall = new SettlementFailureLog("", "",
                             "Invalid PIN!");
                     settlementFailureLogRepo.save(conWall);
-                    
+
                     responseModel.setDescription("Invalid PIN!");
                     responseModel.setStatusCode(statusCode);
-                    
+
                     return responseModel;
-                    
+
                 }
-                
+
             } else {
                 isAccepted = false;
-                
+
             }
-            
+
             if (isAccepted == false) {
                 //update table and return
 
@@ -3113,21 +3155,21 @@ public class GroupSavingsService {
                 SettlementFailureLog conWall = new SettlementFailureLog("", "",
                         "Customer declined Slot Swap!");
                 settlementFailureLogRepo.save(conWall);
-                
+
                 responseModel.setDescription("Customer declined Slot Swap!");
                 responseModel.setStatusCode(statusCode);
-                
+
                 return responseModel;
-                
+
             }
 
             //if accepted, swap slot
             boolean chkGDetailsBool = true;
-            
+
             List<GroupSavingsData> getALLGROUPS = groupSavingsDataRepo.findByInviteCode(rq.getInvitationCodeReqId());
             if (getALLGROUPS.size() <= 0) {
                 chkGDetailsBool = false;
-                
+
             }
             if (chkGDetailsBool == false) {
                 SettlementFailureLog conWall = new SettlementFailureLog("", "",
@@ -3137,23 +3179,23 @@ public class GroupSavingsService {
                 responseModel.setStatusCode(statusCode);
                 return responseModel;
             }
-            
+
             GroupSavingsData getByInvite = groupSavingsDataRepo.findByInviteCodeDe(rq.getInvitationCodeReqId());
-            
+
             for (GroupSavingsData getByCodeI : getALLGROUPS) {
-                
+
                 if (!getByCodeI.getIsTrnsactionDeleted().equals("1")) {
-                    
+
                     if (getByCodeI.getAddedMembersModels() != null) {
-                        
+
                         ObjectMapper mappergetByCode = new ObjectMapper();
                         List<AddMembersModels> memsgetByCode = mappergetByCode.readValue(getByCodeI.getAddedMembersModels(), new TypeReference<List<AddMembersModels>>() {
                         });
                         for (AddMembersModels getMemsByCode : memsgetByCode) {
-                            
+
                             if (getMemsByCode.getMemberEmailAddress().equals(getSw.get(0).getReceiverEmailAddress())) {
                                 getMemsByCode.setSlot(getSw.get(0).getSenderSlot());
-                                
+
                                 String updatedJson = mappergetByCode.writeValueAsString(memsgetByCode);
                                 getByInvite.setAddedMembersModels(updatedJson);
                                 getByInvite.setLastModifiedDate(Instant.now());
@@ -3161,7 +3203,7 @@ public class GroupSavingsService {
                                 // Save back to DB
                                 groupSavingsDataRepo.save(getByInvite);
                             }
-                            
+
                             if (getMemsByCode.getMemberEmailAddress().equals(getSw.get(0).getSenderEmailAddress())) {
                                 getMemsByCode.setSlot(getSw.get(0).getReceiverSlot());
                                 String updatedJson = mappergetByCode.writeValueAsString(memsgetByCode);
@@ -3171,33 +3213,33 @@ public class GroupSavingsService {
                                 // Save back to DB
                                 groupSavingsDataRepo.save(getByInvite);
                             }
-                            
+
                         }
-                        
+
                     }
                 }
-                
+
             }
-            
+
             SwapSlotDetails getSwUp = swapSlotDetailsRepo.findBySenderEmailAddressAndMemberIdAndInvitationCodeReqIdUpdate(rq.getSenderEmailAddress(), rq.getMemberId(), rq.getInvitationCodeReqId());
             getSwUp.setIsSlotSwapped("1");
             getSwUp.setIsSlotSwappedStatus("Accepted");
             getSwUp.setLastModifiedDate(Instant.now());
             swapSlotDetailsRepo.save(getSwUp);
-            
+
             responseModel.setDescription("Slots have been swapped successfuly.");
             responseModel.setStatusCode(200);
-            
+
         } catch (Exception ex) {
             responseModel.setDescription(statusMessage);
             responseModel.setStatusCode(statusCode);
-            
+
             ex.printStackTrace();
         }
-        
+
         return responseModel;
     }
-    
+
     public ApiResponseModel getAllTransactions(ReByEmailAddress rq, String channel, String auth) {
         ApiResponseModel responseModel = new ApiResponseModel();
         int statusCode = 500;
@@ -3205,7 +3247,7 @@ public class GroupSavingsService {
         try {
             statusCode = 400;
             DecodedJWTToken getDecoded = DecodedJWTToken.getDecoded(auth);
-            
+
             if (!rq.getEmailAddress().equals(getDecoded.emailAddress)) {
                 SettlementFailureLog conWall = new SettlementFailureLog("", "",
                         "Suspected fraud!");
@@ -3227,10 +3269,10 @@ public class GroupSavingsService {
             }*/
             //get groups from aaded to groups
             List<GroupSavingsData> getALLGROUPS = groupSavingsDataRepo.findAll();
-            
+
             if (getALLGROUPS.size() <= 0) {
                 chkGDetailsBool = false;
-                
+
             }
             if (chkGDetailsBool == false) {
                 SettlementFailureLog conWall = new SettlementFailureLog("", "",
@@ -3241,20 +3283,20 @@ public class GroupSavingsService {
                 return responseModel;
             }
             List<SavedGroupDetails> mapAll = new ArrayList<SavedGroupDetails>();
-            
+
             for (GroupSavingsData getAlG : getALLGROUPS) {
-                
+
                 if (!getAlG.getIsTrnsactionDeleted().equals("1")) {
                     if (!getAlG.getTransactionStatus().equals("1")) {
-                        
+
                         String addedMemModel = getAlG.getAddedMembersModels();
-                        
+
                         String addedMemInvCode = null;
-                        
+
                         if (getAlG.getEmailAddress().equals(rq.getEmailAddress())) {
-                            
+
                             SavedGroupDetails logC = new SavedGroupDetails();
-                            
+
                             logC.setAllowPublicToJoin(getAlG.getAllowPublicToJoin());
                             logC.setGroupSavingAmount(getAlG.getGroupSavingAmount());
                             logC.setGroupSavingDescription(getAlG.getGroupSavingDescription());
@@ -3268,7 +3310,7 @@ public class GroupSavingsService {
                             logC.setAdminPayOutSlot(returnAraryumberOfSlots(getAlG.getAdminPayOutSlot()));
                             //String[] array = getAlG.getAvailablePayOutSlot().split(",");
                             logC.setAvailablePayOutSlot(getAlG.getAvailablePayOutSlot());
-                            
+
                             ObjectMapper mapper = new ObjectMapper();
                             if (getAlG.getAddedMembersModels() != null) {
                                 List<AddMembersModels> mems = mapper.readValue(getAlG.getAddedMembersModels(), new TypeReference<List<AddMembersModels>>() {
@@ -3302,9 +3344,9 @@ public class GroupSavingsService {
                                     swP.setSenderId(getMems.getSwapSlot().getSenderId() == null ? "" : getMems.getSwapSlot().getSenderId());
                                     swP.setSenderSlot(getMems.getSwapSlot().getSenderSlot() == 0 ? 0 : getMems.getSwapSlot().getSenderSlot());
                                     adM.setSwapSlot(swP);
-                                    
+
                                     addMee.add(adM);
-                                    
+
                                 }
                                 logC.setAddMembersModels(addMee);
                             }
@@ -3312,24 +3354,24 @@ public class GroupSavingsService {
                             //logC.setTransactionId(getKul.getTransactionId());
                             logC.setTransactionStatus(getAlG.getTransactionStatus());
                             logC.setTransactionStatusDesc(getAlG.getTransactionStatusDesc());
-                            
+
                             if (getAlG.getLastModifiedDate() == null) {
                                 logC.setTransactionDate(formDate(getAlG.getCreatedDate()));
                             } else {
-                                
+
                                 logC.setTransactionDate(formDate(getAlG.getLastModifiedDate()));
                             }
-                            
+
                             mapAll.add(logC);
-                            
+
                         }
-                        
+
                         if (getAlG.getAddedMembersModels() != null) {
-                            
+
                             String jsonInput = getAlG.getAddedMembersModels();
-                            
+
                             JsonElement jsonElement = JsonParser.parseString(jsonInput);
-                            
+
                             String excludeEmail = rq.getEmailAddress(); // the email to exclude
                             boolean emailExists = false;
 
@@ -3351,11 +3393,11 @@ public class GroupSavingsService {
                                         }
                                     }
                                 }
-                                
+
                             } else {
                                 JsonObject root = JsonParser.parseString(jsonInput).getAsJsonObject();
                                 JsonArray membersArray = root.getAsJsonArray("addMembersModels");
-                                
+
                                 for (JsonElement element : membersArray) {
                                     JsonObject member = element.getAsJsonObject();
                                     if (member.has("memberEmailAddress") && !member.get("memberEmailAddress").isJsonNull()) {
@@ -3367,17 +3409,17 @@ public class GroupSavingsService {
                                     }
                                 }
                             }
-                            
+
                             ObjectMapper mapper = new ObjectMapper();
                             List<AddMembersModels> mems = mapper.readValue(getAlG.getAddedMembersModels(), new TypeReference<List<AddMembersModels>>() {
                             });
                             for (AddMembersModels getMems : mems) {
                                 System.out.println("emailExists :::::::: " + " " + emailExists);
-                                
+
                                 if (emailExists == true) {
-                                    
+
                                     boolean existsreqId = false;
-                                    
+
                                     addedMemInvCode = getMems.getInvitationCodeReqId();
                                     System.out.println("addedMemInvCode :::::::: " + " " + addedMemInvCode);
 
@@ -3386,20 +3428,20 @@ public class GroupSavingsService {
                                         if (environment.equals("staging")) {
                                             System.out.println("item.getInviteCode() :::::::: " + " " + item.getInviteCode());
                                         }
-                                        
+
                                         if (item.getInviteCode() != null && item.getInviteCode().equals(addedMemInvCode)) {
                                             existsreqId = true;
                                             break;
                                         }
                                     }
                                     System.out.println("existsreqId :::::::: " + " " + existsreqId);
-                                    
+
                                     if (existsreqId == true) {
                                         List<GroupSavingsData> getByCode = groupSavingsDataRepo.findByInviteCode(addedMemInvCode);
-                                        
+
                                         if (getByCode.size() > 0) {
                                             System.out.println("getByCode EXISTS :::::::: " + " " + getByCode);
-                                            
+
                                             for (GroupSavingsData getByCodeI : getByCode) {
                                                 SavedGroupDetails logC = new SavedGroupDetails();
 
@@ -3409,15 +3451,15 @@ public class GroupSavingsService {
                                                 List<AddMembersModels> memsgetByCode = mappergetByCode.readValue(getByCodeI.getAddedMembersModels(), new TypeReference<List<AddMembersModels>>() {
                                                 });
                                                 List<AddMembersModels> addMeegetByCode = new ArrayList<>();
-                                                
+
                                                 for (AddMembersModels getMemsByCode : memsgetByCode) {
                                                     System.out.println("getMemsByCode.getMemberEmailAddress() EXISTS :::::::: " + " " + getMemsByCode.getMemberEmailAddress());
-                                                    
+
                                                     if (!getDecoded.emailAddress.equals(getMemsByCode.getMemberEmailAddress())) {
-                                                        
+
                                                         System.out.println("getDecoded.emailAddress :::::::: " + " " + getDecoded.emailAddress);
                                                         System.out.println("getMemsByCode.getMemberEmailAddress() :::::::: " + " " + getMemsByCode.getMemberEmailAddress());
-                                                        
+
                                                         logC.setAllowPublicToJoin(getByCodeI.getAllowPublicToJoin());
                                                         logC.setGroupSavingAmount(getByCodeI.getGroupSavingAmount());
                                                         logC.setGroupSavingDescription(getByCodeI.getGroupSavingDescription());
@@ -3429,13 +3471,13 @@ public class GroupSavingsService {
                                                         logC.setNumberOfMembers(getByCodeI.getNumberOfMembers());
                                                         logC.setPayOutDateOfTheMonth(getByCodeI.getPayOutDateOfTheMonth());
                                                         logC.setAdminPayOutSlot(returnAraryumberOfSlots(getByCodeI.getAdminPayOutSlot()));
-                                                        
+
                                                         AddMembersModels adM = new AddMembersModels();
                                                         adM.setInvitationCodeReqId(getMemsByCode.getInvitationCodeReqId());
                                                         adM.setMemberId(getMemsByCode.getMemberId());
                                                         //adM.setAdminEmailAddress(getMems.getAdminEmailAddress());
                                                         adM.setIsAdmin("0");
-                                                        
+
                                                         adM.setMemberEmailAddress(getMemsByCode.getMemberEmailAddress());
                                                         adM.setMemberIdType(getMemsByCode.getMemberIdType());
                                                         adM.setMemberName(getMemsByCode.getMemberName());
@@ -3458,41 +3500,41 @@ public class GroupSavingsService {
                                                         swP.setSenderId(getMemsByCode.getSwapSlot().getSenderId() == null ? "" : getMemsByCode.getSwapSlot().getSenderId());
                                                         swP.setSenderSlot(getMemsByCode.getSwapSlot().getSenderSlot() == 0 ? 0 : getMemsByCode.getSwapSlot().getSenderSlot());
                                                         adM.setSwapSlot(swP);
-                                                        
+
                                                         addMeegetByCode.add(adM);
                                                     }
-                                                    
+
                                                 }
-                                                
+
                                                 logC.setAddMembersModels(addMeegetByCode);
 
                                                 //logC.setTransactionId(getKul.getTransactionId());
                                                 logC.setTransactionStatus(getByCodeI.getTransactionStatus());
                                                 logC.setTransactionStatusDesc(getByCodeI.getTransactionStatusDesc());
-                                                
+
                                                 if (getByCodeI.getLastModifiedDate() == null) {
                                                     logC.setTransactionDate(formDate(getByCodeI.getCreatedDate()));
                                                 } else {
-                                                    
+
                                                     logC.setTransactionDate(formDate(getByCodeI.getLastModifiedDate()));
                                                 }
-                                                
+
                                                 mapAll.add(logC);
                                             }
-                                            
+
                                         }
                                     }
-                                    
+
                                 }
-                                
+
                             }
-                            
+
                         }
                     }
                 }
-                
+
             }
-            
+
             if (mapAll.isEmpty()) {
                 SettlementFailureLog conWall = new SettlementFailureLog("", "",
                         "Customer does not have an existing group!");
@@ -3501,22 +3543,22 @@ public class GroupSavingsService {
                 responseModel.setStatusCode(statusCode);
                 return responseModel;
             }
-            
+
             responseModel.setData(mapAll);
             responseModel.setDescription("Customer transactions pulled successfully.");
             responseModel.setStatusCode(200);
-            
+
         } catch (Exception ex) {
             responseModel.setDescription(statusMessage);
             responseModel.setStatusCode(statusCode);
-            
+
             ex.printStackTrace();
         }
-        
+
         return responseModel;
-        
+
     }
-    
+
     public ApiResponseModel getAllTransactionsTEST(ReByEmailAddress rq, String channel, String auth) {
         ApiResponseModel responseModel = new ApiResponseModel();
         int statusCode = 500;
@@ -3524,7 +3566,7 @@ public class GroupSavingsService {
         try {
             statusCode = 400;
             DecodedJWTToken getDecoded = DecodedJWTToken.getDecoded(auth);
-            
+
             if (!rq.getEmailAddress().equals(getDecoded.emailAddress)) {
                 SettlementFailureLog conWall = new SettlementFailureLog("", "",
                         "Suspected fraud!");
@@ -3533,7 +3575,7 @@ public class GroupSavingsService {
                 responseModel.setStatusCode(statusCode);
                 return responseModel;
             }
-            
+
             System.out.println("pageNation :::::::: " + "    ::::::::::::::::::::: " + returnPagenation());
             //  List<KuleanPaymentTransaction> getKulTransPage = kuleanPaymentTransactionRepo.findByWalletNoListPage(getDecoded.phoneNumber, PageRequest.of(0, pageNation));
             boolean chkGDetailsBool = true;
@@ -3545,10 +3587,10 @@ public class GroupSavingsService {
             }*/
             //get groups from aaded to groups
             List<GroupSavingsData> getALLGROUPS = groupSavingsDataRepo.findAll();
-            
+
             if (getALLGROUPS.size() <= 0) {
                 chkGDetailsBool = false;
-                
+
             }
             if (chkGDetailsBool == false) {
                 SettlementFailureLog conWall = new SettlementFailureLog("", "",
@@ -3559,20 +3601,20 @@ public class GroupSavingsService {
                 return responseModel;
             }
             List<SavedGroupDetails> mapAll = new ArrayList<SavedGroupDetails>();
-            
+
             for (GroupSavingsData getAlG : getALLGROUPS) {
-                
+
                 if (!getAlG.getIsTrnsactionDeleted().equals("1")) {
                     if (!getAlG.getTransactionStatus().equals("1")) {
-                        
+
                         String addedMemModel = getAlG.getAddedMembersModels();
-                        
+
                         String addedMemInvCode = null;
-                        
+
                         if (getAlG.getEmailAddress().equals(rq.getEmailAddress())) {
-                            
+
                             SavedGroupDetails logC = new SavedGroupDetails();
-                            
+
                             logC.setAllowPublicToJoin(getAlG.getAllowPublicToJoin());
                             logC.setGroupSavingAmount(getAlG.getGroupSavingAmount());
                             logC.setGroupSavingDescription(getAlG.getGroupSavingDescription());
@@ -3586,7 +3628,7 @@ public class GroupSavingsService {
                             logC.setAdminPayOutSlot(returnAraryumberOfSlots(getAlG.getAdminPayOutSlot()));
                             //String[] array = getAlG.getAvailablePayOutSlot().split(",");
                             logC.setAvailablePayOutSlot(getAlG.getAvailablePayOutSlot());
-                            
+
                             ObjectMapper mapper = new ObjectMapper();
                             if (getAlG.getAddedMembersModels() != null) {
                                 List<AddMembersModels> mems = mapper.readValue(getAlG.getAddedMembersModels(), new TypeReference<List<AddMembersModels>>() {
@@ -3620,9 +3662,9 @@ public class GroupSavingsService {
                                     swP.setSenderId(getMems.getSwapSlot().getSenderId() == null ? "" : getMems.getSwapSlot().getSenderId());
                                     swP.setSenderSlot(getMems.getSwapSlot().getSenderSlot() == 0 ? 0 : getMems.getSwapSlot().getSenderSlot());
                                     adM.setSwapSlot(swP);
-                                    
+
                                     addMee.add(adM);
-                                    
+
                                 }
                                 logC.setAddMembersModels(addMee);
                             }
@@ -3630,22 +3672,22 @@ public class GroupSavingsService {
                             //logC.setTransactionId(getKul.getTransactionId());
                             logC.setTransactionStatus(getAlG.getTransactionStatus());
                             logC.setTransactionStatusDesc(getAlG.getTransactionStatusDesc());
-                            
+
                             if (getAlG.getLastModifiedDate() == null) {
                                 logC.setTransactionDate(formDate(getAlG.getCreatedDate()));
                             } else {
-                                
+
                                 logC.setTransactionDate(formDate(getAlG.getLastModifiedDate()));
                             }
-                            
+
                             mapAll.add(logC);
-                            
+
                         } else {
-                            
+
                             String jsonInput = getAlG.getAddedMembersModels();
-                            
+
                             JsonElement jsonElement = JsonParser.parseString(jsonInput);
-                            
+
                             String excludeEmail = rq.getEmailAddress(); // the email to exclude
                             boolean emailExists = false;
 
@@ -3667,11 +3709,11 @@ public class GroupSavingsService {
                                         }
                                     }
                                 }
-                                
+
                             } else {
                                 JsonObject root = JsonParser.parseString(jsonInput).getAsJsonObject();
                                 JsonArray membersArray = root.getAsJsonArray("addMembersModels");
-                                
+
                                 for (JsonElement element : membersArray) {
                                     JsonObject member = element.getAsJsonObject();
                                     if (member.has("memberEmailAddress") && !member.get("memberEmailAddress").isJsonNull()) {
@@ -3684,10 +3726,10 @@ public class GroupSavingsService {
                                 }
                             }
                             System.out.println("emailExists :::::::: " + " " + emailExists);
-                            
+
                             if (emailExists == true) {
                                 SavedGroupDetails logC = new SavedGroupDetails();
-                                
+
                                 logC.setAllowPublicToJoin(getAlG.getAllowPublicToJoin());
                                 logC.setGroupSavingAmount(getAlG.getGroupSavingAmount());
                                 logC.setGroupSavingDescription(getAlG.getGroupSavingDescription());
@@ -3701,7 +3743,7 @@ public class GroupSavingsService {
                                 logC.setAdminPayOutSlot(returnAraryumberOfSlots(getAlG.getAdminPayOutSlot()));
                                 //String[] array = getAlG.getAvailablePayOutSlot().split(",");
                                 logC.setAvailablePayOutSlot(getAlG.getAvailablePayOutSlot());
-                                
+
                                 ObjectMapper mapper = new ObjectMapper();
                                 if (getAlG.getAddedMembersModels() != null) {
                                     List<AddMembersModels> mems = mapper.readValue(getAlG.getAddedMembersModels(), new TypeReference<List<AddMembersModels>>() {
@@ -3735,9 +3777,9 @@ public class GroupSavingsService {
                                         swP.setSenderId(getMems.getSwapSlot().getSenderId() == null ? "" : getMems.getSwapSlot().getSenderId());
                                         swP.setSenderSlot(getMems.getSwapSlot().getSenderSlot() == 0 ? 0 : getMems.getSwapSlot().getSenderSlot());
                                         adM.setSwapSlot(swP);
-                                        
+
                                         addMee.add(adM);
-                                        
+
                                     }
                                     logC.setAddMembersModels(addMee);
                                 }
@@ -3745,16 +3787,16 @@ public class GroupSavingsService {
                                 //logC.setTransactionId(getKul.getTransactionId());
                                 logC.setTransactionStatus(getAlG.getTransactionStatus());
                                 logC.setTransactionStatusDesc(getAlG.getTransactionStatusDesc());
-                                
+
                                 if (getAlG.getLastModifiedDate() == null) {
                                     logC.setTransactionDate(formDate(getAlG.getCreatedDate()));
                                 } else {
-                                    
+
                                     logC.setTransactionDate(formDate(getAlG.getLastModifiedDate()));
                                 }
-                                
+
                                 mapAll.add(logC);
-                                
+
                             }
                         }
 
@@ -3922,9 +3964,9 @@ public class GroupSavingsService {
                         }*/
                     }
                 }
-                
+
             }
-            
+
             if (mapAll.isEmpty()) {
                 SettlementFailureLog conWall = new SettlementFailureLog("", "",
                         "Customer does not have an existing group!");
@@ -3933,22 +3975,22 @@ public class GroupSavingsService {
                 responseModel.setStatusCode(statusCode);
                 return responseModel;
             }
-            
+
             responseModel.setData(mapAll);
             responseModel.setDescription("Customer transactions pulled successfully.");
             responseModel.setStatusCode(200);
-            
+
         } catch (Exception ex) {
             responseModel.setDescription(statusMessage);
             responseModel.setStatusCode(statusCode);
-            
+
             ex.printStackTrace();
         }
-        
+
         return responseModel;
-        
+
     }
-    
+
     public ApiResponseModel getUserRequestDetails(ReByEmailAddress rq, String channel, String auth) {
         ApiResponseModel responseModel = new ApiResponseModel();
         int statusCode = 500;
@@ -3956,7 +3998,7 @@ public class GroupSavingsService {
         try {
             statusCode = 400;
             DecodedJWTToken getDecoded = DecodedJWTToken.getDecoded(auth);
-            
+
             if (!rq.getEmailAddress().equals(getDecoded.emailAddress)) {
                 SettlementFailureLog conWall = new SettlementFailureLog("", "",
                         "Suspected fraud!");
@@ -3965,7 +4007,7 @@ public class GroupSavingsService {
                 responseModel.setStatusCode(statusCode);
                 return responseModel;
             }
-            
+
             System.out.println("pageNation :::::::: " + "    ::::::::::::::::::::: " + returnPagenation());
             //  List<KuleanPaymentTransaction> getKulTransPage = kuleanPaymentTransactionRepo.findByWalletNoListPage(getDecoded.phoneNumber, PageRequest.of(0, pageNation));
             boolean chkGDetailsBool = true;
@@ -3977,10 +4019,10 @@ public class GroupSavingsService {
             }*/
             //get groups from aaded to groups
             List<GroupSavingsData> getALLGROUPS = groupSavingsDataRepo.findAll();
-            
+
             if (getALLGROUPS.size() <= 0) {
                 chkGDetailsBool = false;
-                
+
             }
             if (chkGDetailsBool == false) {
                 SettlementFailureLog conWall = new SettlementFailureLog("", "",
@@ -3991,24 +4033,24 @@ public class GroupSavingsService {
                 return responseModel;
             }
             List<SavedGroupDetails> mapAll = new ArrayList<SavedGroupDetails>();
-            
+
             for (GroupSavingsData getAlG : getALLGROUPS) {
-                
+
                 if (!getAlG.getIsTrnsactionDeleted().equals("1")) {
-                    
+
                     String addedMemModel = getAlG.getAddedMembersModels();
-                    
+
                     String addedMemInvCode = null;
-                    
+
                     if (getAlG.getAddedMembersModels() != null) {
-                        
+
                         ObjectMapper mapper = new ObjectMapper();
                         List<AddMembersModels> mems = mapper.readValue(addedMemModel, new TypeReference<List<AddMembersModels>>() {
                         });
                         System.out.println("mems ::::::::::::::::  %S  " + new Gson().toJson(mems));
                         for (AddMembersModels getMems : mems) {
                             String getMemEmailAdd = getMems.getMemberEmailAddress() == null ? "empty" : getMems.getMemberEmailAddress();
-                            
+
                             if (getMemEmailAdd.equals(rq.getEmailAddress()) && !"1".equals(getMems.getIsAdmin()) && !getMems.getMemberJoined().equals("1")) {
 
                                 //  if (!"1".equals(getMems.getIsAdmin())) {
@@ -4016,10 +4058,10 @@ public class GroupSavingsService {
                                 // }
                                 List<GroupSavingsData> getByCode = groupSavingsDataRepo.findByInviteCode(addedMemInvCode);
                                 SavedGroupDetails logC = new SavedGroupDetails();
-                                
+
                                 if (getByCode.size() > 0) {
                                     for (GroupSavingsData getByCodeI : getByCode) {
-                                        
+
                                         logC.setAllowPublicToJoin(getByCodeI.getAllowPublicToJoin());
                                         logC.setGroupSavingAmount(getByCodeI.getGroupSavingAmount());
                                         logC.setGroupSavingDescription(getByCodeI.getGroupSavingDescription());
@@ -4032,7 +4074,7 @@ public class GroupSavingsService {
                                         logC.setPayOutDateOfTheMonth(getByCodeI.getPayOutDateOfTheMonth());
                                         logC.setAdminPayOutSlot(returnAraryumberOfSlots(getByCodeI.getAdminPayOutSlot()));
                                         logC.setAvailablePayOutSlot(getByCodeI.getAvailablePayOutSlot());
-                                        
+
                                         ObjectMapper mappergetByCode = new ObjectMapper();
                                         List<AddMembersModels> memsgetByCode = mappergetByCode.readValue(getByCodeI.getAddedMembersModels(), new TypeReference<List<AddMembersModels>>() {
                                         });
@@ -4065,7 +4107,7 @@ public class GroupSavingsService {
                                             swP.setSenderId(getMemsByCode.getSwapSlot().getSenderId() == null ? "" : getMemsByCode.getSwapSlot().getSenderId());
                                             swP.setSenderSlot(getMemsByCode.getSwapSlot().getSenderSlot() == 0 ? 0 : getMemsByCode.getSwapSlot().getSenderSlot());
                                             adM.setSwapSlot(swP);
-                                            
+
                                             addMeegetByCode.add(adM);
                                             //   }
 
@@ -4149,28 +4191,28 @@ public class GroupSavingsService {
                                         //logC.setTransactionId(getKul.getTransactionId());
                                         logC.setTransactionStatus(getByCodeI.getTransactionStatus());
                                         logC.setTransactionStatusDesc(getByCodeI.getTransactionStatusDesc());
-                                        
+
                                         if (getByCodeI.getLastModifiedDate() == null) {
                                             logC.setTransactionDate(formDate(getByCodeI.getCreatedDate()));
                                         } else {
-                                            
+
                                             logC.setTransactionDate(formDate(getByCodeI.getLastModifiedDate()));
                                         }
-                                        
+
                                     }
                                     mapAll.add(logC);
-                                    
+
                                 }
-                                
+
                             }
-                            
+
                         }
-                        
+
                     }
                 }
-                
+
             }
-            
+
             if (mapAll.isEmpty()) {
                 SettlementFailureLog conWall = new SettlementFailureLog("", "",
                         "Customer does not have an existing group!");
@@ -4179,186 +4221,186 @@ public class GroupSavingsService {
                 responseModel.setStatusCode(statusCode);
                 return responseModel;
             }
-            
+
             responseModel.setData(mapAll);
             responseModel.setDescription("Customer transactions pulled successfully.");
             responseModel.setStatusCode(200);
-            
+
         } catch (Exception ex) {
             responseModel.setDescription(statusMessage);
             responseModel.setStatusCode(statusCode);
-            
+
             ex.printStackTrace();
         }
-        
+
         return responseModel;
-        
+
     }
-    
+
     public int returnPagenation() {
-        
+
         int pageNation = Integer.parseInt(utilMeth.getSETTING_KEY_TRANS_G_SAVINGS_LIST_PAGENATION());
-        
+
         return pageNation;
-        
+
     }
-    
+
     public BaseResponse validateHasPin(String channel, String auth) {
-        
+
         BaseResponse responseModel = new BaseResponse();
         int statusCode = 500;
         String statusMessage = "An error occured,please try again";
         try {
             statusCode = 400;
             DecodedJWTToken getDecoded = DecodedJWTToken.getDecoded(auth);
-            
+
             List<RegWalletInfo> senderWalletdetails = regWalletInfoRepository.findByPhoneNumberData(getDecoded.phoneNumber);
             if (!senderWalletdetails.get(0).isActivation()) {
-                
+
                 SettlementFailureLog conWall = new SettlementFailureLog("", "",
                         "Customer has not created PIN!");
                 settlementFailureLogRepo.save(conWall);
-                
+
                 responseModel.setDescription("Customer has not created PIN!");
                 responseModel.setStatusCode(60);
-                
+
                 return responseModel;
             }
-            
+
             responseModel.setDescription("Customer has activated PIN.");
             responseModel.setStatusCode(200);
-            
+
         } catch (Exception ex) {
             responseModel.setDescription(statusMessage);
             responseModel.setStatusCode(statusCode);
-            
+
             ex.printStackTrace();
         }
-        
+
         return responseModel;
     }
-    
+
     public List<CommissionCfg> findAllByTransactionType(String transType) {
-        
+
         List<CommissionCfg> getAllPartActiveNoti = commissionCfgRepo.findAllByTransactionType(transType);
-        
+
         return getAllPartActiveNoti;
     }
-    
+
     public static boolean betweenTransBand(BigDecimal i, BigDecimal minValueInclusive, BigDecimal maxValueInclusive) {
         return i.subtract(minValueInclusive).signum() >= 0 && i.subtract(maxValueInclusive).signum() <= 0;
-        
+
     }
-    
+
     public static BigDecimal percentage(BigDecimal base, BigDecimal pct) {
         return base.multiply(pct).divide(ONE_HUNDRED);
     }
-    
+
     private String formDate(Instant datte) {
-        
+
         LocalDateTime datetime = LocalDateTime.ofInstant(datte, ZoneOffset.UTC);
         String formatted = DateTimeFormatter.ofPattern("MMM dd, yyyy").format(datetime);
         // System.out.println(formatted);
 
         return formatted;
     }
-    
+
     private static String cleanText(String text) {
         text = text.replaceAll("[^\\x00-\\x7F]", "");
         text = text.replaceAll("[\\p{Cntrl}&&[^\r\n\t]]", "");
         text = text.replaceAll("\\p{C}", "");
         return text.trim();
     }
-    
+
     public boolean checkIfDateIsAfterRequiredHours(Date date) {
-        
+
         boolean isValid = true;
-        
+
         LocalDateTime submittedDateTime = date
                 .toInstant()
                 .atZone(ZoneId.systemDefault())
                 .toLocalDateTime();
-        
+
         LocalDateTime now = LocalDateTime.now();
-        
+
         int numbDate = Integer.parseInt(utilMeth.getSETTING_CONFIGURE_NUMB_DAYS_BEFORE_ACTIVATION());
 
         // Check if submitted date is at least 48 hours from now
         if (Duration.between(now, submittedDateTime).toHours() < numbDate) {
-            
+
             System.out.println("Selected date must be at least " + numbDate + " hours from now.");
             isValid = false;
-            
+
         }
-        
+
         return isValid;
     }
-    
+
     public ApiResponseModel checkIfDateIsAfterRequiredWorkingDays(String day) {
-        
+
         ApiResponseModel responseModel = new ApiResponseModel();
         int statusCode = 500;
         String statusMessage = "An error occured,please try again";
         try {
             statusCode = 400;
-            
+
             int numbWorkingDays = Integer.parseInt(utilMeth.getSETTING_KEY_TRANS_G_SAVINGS_LIST_PAYMENT_WORK_DAYS());
-            
+
             int enteredDay = Integer.parseInt(day);
-            
+
             if (enteredDay < 1 || enteredDay > 31) {
-                
+
                 System.out.println("Invalid day of the month: " + enteredDay);
                 responseModel.setStatusCode(statusCode);
                 responseModel.setDescription("Invalid day of the month: " + enteredDay + "!");
                 return responseModel;
-                
+
             }
-            
+
             LocalDate minWorkingDay = addWorkingDays(LocalDate.now(), numbWorkingDays);
             LocalDate validDate = findNextValidDate(enteredDay, minWorkingDay);
-            
+
             if (validDate.isBefore(minWorkingDay)) {
-                
+
                 System.out.println("The next date matching day " + enteredDay
                         + " is before 20 working days from today (" + minWorkingDay + ").");
                 responseModel.setStatusCode(statusCode);
                 responseModel.setDescription("The next date matching day " + enteredDay
                         + " is before 20 working days from today (" + minWorkingDay + ")." + "!");
-                
+
             }
-            
+
             responseModel.setStatusCode(200);
             responseModel.setDescription("Payment date is valid.");
-            
+
         } catch (Exception ex) {
             ex.printStackTrace();
             responseModel.setStatusCode(statusCode);
             responseModel.setDescription(statusMessage);
         }
-        
+
         return responseModel;
     }
 
     // Finds the next date with the entered day (e.g., 15th) after or equal to the reference date
     private LocalDate findNextValidDate(int targetDay, LocalDate referenceDate) {
         LocalDate candidate = referenceDate.withDayOfMonth(1);
-        
+
         while (true) {
             YearMonth ym = YearMonth.of(candidate.getYear(), candidate.getMonth());
             int maxDay = ym.lengthOfMonth();
-            
+
             if (targetDay <= maxDay) {
                 LocalDate potentialDate = candidate.withDayOfMonth(targetDay);
                 if (!potentialDate.isBefore(referenceDate)) {
                     return potentialDate;
                 }
             }
-            
+
             candidate = candidate.plusMonths(1);
         }
     }
-    
+
     private LocalDate addWorkingDays(LocalDate startDate, int workingDays) {
         LocalDate date = startDate;
         int addedDays = 0;
@@ -4371,23 +4413,23 @@ public class GroupSavingsService {
         }
         return date;
     }
-    
+
     public String returnStringOject(List<AddMembersModels> user) {
-        
+
         ObjectMapper mapper = new ObjectMapper();
         String json = null;
         try {
             json = mapper.writeValueAsString(user);
             System.out.println(json);  // Output: {"name":"Alice","age":25}
             System.out.println("added to array AddMembersModels" + " :::::::::::::::::::::   " + json);
-            
+
         } catch (JsonProcessingException e) {
             e.printStackTrace();
         }
-        
+
         return json;
     }
-    
+
     public ApiResponseModel configuredPayOutSlotsData() {
         ApiResponseModel response = new ApiResponseModel();
         int statusCode = 500;
@@ -4395,7 +4437,7 @@ public class GroupSavingsService {
         try {
             List<ConfiguredPayOutSlots> sData = configuredPayOutSlotsRepo.findAll();
             String sDataJson = cleanText(new Gson().toJson(sData));
-            
+
             statusCode = 400;
             statusMessage = "Invalid Parameter";
             if (!sData.isEmpty()) {
@@ -4405,7 +4447,7 @@ public class GroupSavingsService {
                 }.getType());
                 response.setData(ssData);
             }
-            
+
         } catch (Exception ex) {
             ex.printStackTrace();
         }
@@ -4413,5 +4455,5 @@ public class GroupSavingsService {
         response.setDescription(statusMessage);
         return response;
     }
-    
+
 }

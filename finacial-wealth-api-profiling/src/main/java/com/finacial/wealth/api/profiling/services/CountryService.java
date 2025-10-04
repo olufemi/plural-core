@@ -21,7 +21,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 
-
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -46,6 +45,10 @@ public class CountryService {
                 .stream()
                 .map(c -> new CountryDto(c.getCountryCode(), c.getCountry()))
                 .collect(Collectors.toList());
+    }
+
+    public List<Countries> getAllExistingCountries() {
+        return repo.findAll(); // returns List<Countries>
     }
 
     /**

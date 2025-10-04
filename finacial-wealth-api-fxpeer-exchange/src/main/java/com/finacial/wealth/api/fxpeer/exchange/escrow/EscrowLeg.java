@@ -21,14 +21,19 @@ import java.time.Instant;
 public class EscrowLeg {
 
     private Long userId;
+
     @Enumerated(EnumType.STRING)
     private CurrencyCode currency;
+
     @Column(precision = 18, scale = 2)
     private BigDecimal requiredAmount;
+
     @Column(precision = 18, scale = 2)
     private BigDecimal fundedAmount;
+
     private Instant fundedAt;
     private String ledgerTxnId;
+    // getters/setters...'
 
     public Long getUserId() {
         return userId;
@@ -77,4 +82,5 @@ public class EscrowLeg {
     public void setLedgerTxnId(String ledgerTxnId) {
         this.ledgerTxnId = ledgerTxnId;
     }
+
 }

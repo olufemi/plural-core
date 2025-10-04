@@ -18,6 +18,7 @@ import com.financial.wealth.api.transactions.repo.FailedDebitLogRepo;
 import com.financial.wealth.api.transactions.repo.FinWealthPaymentTransactionRepo;
 import com.financial.wealth.api.transactions.repo.RegWalletInfoRepository;
 import com.financial.wealth.api.transactions.utils.UttilityMethods;
+import com.google.gson.Gson;
 import java.math.BigDecimal;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
@@ -52,12 +53,15 @@ public class WalletCreditRetryScheduler {
         this.failedDebitLogRepo = failedDebitLogRepo;
     }
 
-    @Scheduled(fixedDelay = 60000) // retry every 1 minute
+    //@Scheduled(fixedDelay = 60000) // retry every 1 minute
     public void retryFailedCredits() {
+           System.out.println("schedule retryFailedCredits ::::::::::::::::  %S  " );
+
         List<FailedCreditLog> pendingLogs = failedCreditLogRepository.findByResolvedFalse();
 
         for (FailedCreditLog log : pendingLogs) {
             try {
+                
                 CreditWalletCaller request = objectMapper.readValue(log.getRequestJson(), CreditWalletCaller.class);
                 BaseResponse res = utilMeth.creditCustomer(request);
 
@@ -99,8 +103,9 @@ public class WalletCreditRetryScheduler {
         }
     }
 
-    @Scheduled(fixedDelay = 60000) // retry every 1 minute
+   // @Scheduled(fixedDelay = 60000) // retry every 1 minute
     public void retryFailedDebits() {
+         System.out.println("schedule retryFailedDebits ::::::::::::::::  %S  " );
         List<FailedDebitLog> pendingLogs = failedDebitLogRepo.findByResolvedFalse();
 
         for (FailedDebitLog log : pendingLogs) {

@@ -1,0 +1,27 @@
+/*
+ * Click nbfs://nbhost/SystemFileSystem/Templates/Licenses/license-default.txt to change this license
+ * Click nbfs://nbhost/SystemFileSystem/Templates/Classes/Class.java to edit this template
+ */
+package com.finacial.wealth.api.fxpeer.exchange.offer;
+
+import java.math.BigDecimal;
+import lombok.Data;
+
+/**
+ *
+ * @author olufemioshin
+ */
+@Data
+public class CreateOfferCaller {
+
+    String currencySell;
+    String currencyReceive;
+    String rate;
+    String qtyTotal;
+    private String expiredAt;
+    private String minAmount;
+    private String maxAmount;
+    private boolean showInTopDeals;
+    private String pin;
+
+}

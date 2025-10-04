@@ -8,6 +8,7 @@ package com.finacial.wealth.api.profiling.controllers;
  *
  * @author olufemioshin
  */
+import com.finacial.wealth.api.profiling.domain.Countries;
 import com.finacial.wealth.api.profiling.models.accounts.CountryCurrencyDto;
 import com.finacial.wealth.api.profiling.models.accounts.CountryDto;
 import com.finacial.wealth.api.profiling.models.accounts.ValidationResponse;
@@ -26,6 +27,11 @@ public class CountriesController {
 
     public CountriesController(CountryService service) {
         this.service = service;
+    }
+
+    @GetMapping("/all/existing")
+    public List<Countries> listAllExistingCountries() {
+        return service.getAllExistingCountries();
     }
 
     @GetMapping("/without-currency")

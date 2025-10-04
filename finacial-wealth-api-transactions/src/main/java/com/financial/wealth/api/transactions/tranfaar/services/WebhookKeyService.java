@@ -8,6 +8,7 @@ package com.financial.wealth.api.transactions.tranfaar.services;
  *
  * @author olufemioshin
  */
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.financial.wealth.api.transactions.domain.CreateQuoteResLog;
@@ -47,10 +48,13 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import javax.annotation.PostConstruct;
 import javax.crypto.BadPaddingException;
 import javax.crypto.IllegalBlockSizeException;
 import javax.crypto.NoSuchPaddingException;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -59,6 +63,8 @@ import org.springframework.stereotype.Service;
 
 @Service
 public class WebhookKeyService {
+
+    private static final Logger log = LoggerFactory.getLogger(WebhookKeyService.class.getName());
 
     private final CreateQuoteResLogRepo createQuoteResLogRepo;
     private final SettlementFailureLogRepo settlementFailureLogRepo;
@@ -78,6 +84,11 @@ public class WebhookKeyService {
     private String encryptionKey;
     // keyId -> secret (store hashed at rest in real systems)
     private final Map<String, String> keys = Collections.synchronizedMap(new HashMap<>());
+
+    @Value("${pool.process.webhook.withdrawal.ms}")
+    private String wMs;
+    @Value("${pool.process.webhook.deposit.ms}")
+    private String dMs;
 
     public WebhookKeyService(CreateQuoteResLogRepo createQuoteResLogRepo,
             SettlementFailureLogRepo settlementFailureLogRepo,
@@ -100,6 +111,10 @@ public class WebhookKeyService {
         this.messageCenterService = messageCenterService;
     }
 
+    /*@PostConstruct
+    void logIt() {
+        log.info("withdrawal.ms={}, deposit.ms={}", wMs, dMs);
+    }*/
     public String findSecret(String keyId) {
         return keys.get(keyId);
     }
@@ -110,43 +125,63 @@ public class WebhookKeyService {
         return Base64.getEncoder().encodeToString(buf);
     }
 
-    @Scheduled(fixedRateString = "${pool.process.webhook.withdrawal.ms:360000}")
+    /*@Scheduled(
+            initialDelayString = "${pool.process.webhook.withdrawal.initial.ms:0}",
+            fixedRateString = "${pool.process.webhook.withdrawal.ms:360000}"
+    )*/
     public void processWebHookWithdrawal() {
-
-        List<CreateQuoteResLog> getData = createQuoteResLogRepo.findDebitPendingAndAccepted();
-        if (getData != null) {
-            for (CreateQuoteResLog proc : getData) {
-                WithdrawalOutflow witPoc = new WithdrawalOutflow();
-                witPoc.setAmount(proc.getAmount());
-                witPoc.setQuoteId(proc.getQuoteId());
-                BaseResponse bRes = processPaymentWithdrawal(witPoc, "");
-                System.out.println("schedule processPaymentWithdrawal::::::::::::::::  %S  " + new Gson().toJson(bRes));
-
+        try {
+            log.info("processWebHookWithdrawal tick");
+            List<CreateQuoteResLog> rows = createQuoteResLogRepo.findDebitPendingAndAccepted();
+            if (rows != null) {
+                for (CreateQuoteResLog proc : rows) {
+                    WithdrawalOutflow req = new WithdrawalOutflow();
+                    req.setAmount(proc.getAmount());
+                    req.setQuoteId(proc.getQuoteId());
+                    BaseResponse res = processPaymentWithdrawal(req, "");
+                    log.info("Withdrawal response: {}", new Gson().toJson(res));
+                }
             }
+        } catch (Exception e) {
+            log.error("processWebHookWithdrawal failed", e);
         }
-
     }
 
-    @Scheduled(fixedRateString = "${pool.process.webhook.deposit.ms:360000}")
+    /*@Scheduled(
+            initialDelayString = "${pool.process.webhook.deposit.initial.ms:0}",
+            fixedRateString = "${pool.process.webhook.deposit.ms:360000}"
+    )*/
     public void processWebHookDeposit() {
+        log.info("processWebHookDeposit tick");
 
-        List<CreateQuoteResLog> getData = createQuoteResLogRepo.findAcceptedPendingDepositWithResponsePending();
-        if (getData != null) {
-            for (CreateQuoteResLog proc : getData) {
-
-                DepositWebhook witPoc = new DepositWebhook();
-                witPoc.setAmount(proc.getAmount());
-                witPoc.setQuote_id(proc.getQuoteId());
-                witPoc.setCurrency(proc.getCurrencyCode());
-                witPoc.setEmail(proc.getEmail());
-                witPoc.setPaymentType(proc.getPaymentType());
-                witPoc.setStatus(proc.getStatus());
-                ResponseEntity<?> xx = processPayment(witPoc.toString());
-                System.out.println("schedule processWebHookDeposit::::::::::::::::  %S  " + new Gson().toJson(xx));
-
-            }
+        List<CreateQuoteResLog> rows = createQuoteResLogRepo.findAcceptedPendingDepositWithResponsePending();
+        if (rows == null || rows.isEmpty()) {
+            return;
         }
 
+        for (CreateQuoteResLog proc : rows) {
+            try {
+                DepositWebhook req = new DepositWebhook();
+                req.setAmount(proc.getAmount());
+                // Prefer camelCase in Java:
+                req.setQuoteId(proc.getQuoteId());
+                req.setCurrency(proc.getCurrencyCode());
+                req.setEmail(proc.getEmail());
+                req.setPaymentType(proc.getPaymentType());
+                req.setStatus(proc.getStatus());
+
+                // Serialize safely (catch the checked exception)
+                String json = objectMapper.writeValueAsString(req);
+                ResponseEntity<?> resp = processPayment(json);
+
+                log.info("Deposit processed: status={}, body={}", resp.getStatusCode(), resp.getBody());
+            } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+                // handle just this row and continue
+                log.error("JSON serialize failed for quoteId={}", proc.getQuoteId(), e);
+            } catch (Exception e) {
+                log.error("processWebHookDeposit failed for quoteId={}", proc.getQuoteId(), e);
+            }
+        }
     }
 
     public BaseResponse processPaymentWithdrawal(WithdrawalOutflow rqq, String auth) {
@@ -205,6 +240,7 @@ public class WebhookKeyService {
             CreateQuoteResLog getDeeUp = createQuoteResLogRepo.findByQuoteIdUpdate(rqq.getQuoteId());
             getDeeUp.setIsDebited("1");
             getDeeUp.setIsDebitedDescription("PROCESSED");
+            getDeeUp.setStatus("SENT");
             getDeeUp.setLastModifiedDate(new Timestamp(System.currentTimeMillis()));
 
             createQuoteResLogRepo.save(getDeeUp);
@@ -251,7 +287,7 @@ public class WebhookKeyService {
                 finWealthPaymentTransactionRepo.save(kTrans2b);
 
                 PushNotificationFireBase puFireSender = new PushNotificationFireBase();
-                puFireSender.setBody(pushNotifyCreditWalletForWalletTransfer(new BigDecimal(rqq.getAmount()),
+                puFireSender.setBody(pushNotifyDebitWalletForWalletTransfer(new BigDecimal(rqq.getAmount()),
                         "", "" + " " + ""
                 ));
                 List<DeviceDetails> getDepuFireSender = deviceDetailsRepo.findAllByWalletId(regWalletInfo.get(0).getWalletId());
@@ -559,6 +595,13 @@ public class WebhookKeyService {
     public static String pushNotifyCreditWalletForWalletTransfer(BigDecimal amount, String recName, String senderName) {
         String sMSMessage = "Dear " + "Customer" + ", "
                 + " your Wallet has been credited with " + "N" + amount + ", "
+                + " Thanks for using Plural.";
+        return sMSMessage;
+    }
+    
+     public static String pushNotifyDebitWalletForWalletTransfer(BigDecimal amount, String recName, String senderName) {
+        String sMSMessage = "Dear " + "Customer" + ", "
+                + " your Wallet has been debited with " + "N" + amount + ", "
                 + " Thanks for using Plural.";
         return sMSMessage;
     }

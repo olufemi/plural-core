@@ -41,6 +41,15 @@ public class Offer extends AuditedBase {
     private OfferStatus status;
     private boolean showInTopDeals;
     private String poweredBy;
+    private String correlationId;
+
+    public String getCorrelationId() {
+        return correlationId;
+    }
+
+    public void setCorrelationId(String correlationId) {
+        this.correlationId = correlationId;
+    }
 
     public String getPoweredBy() {
         return poweredBy;

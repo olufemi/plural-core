@@ -14,11 +14,12 @@ import com.finacial.wealth.api.fxpeer.exchange.domain.AddAccountDetailsRepo;
 import com.finacial.wealth.api.fxpeer.exchange.feign.ProfilingProxies;
 import com.finacial.wealth.api.fxpeer.exchange.feign.TransactionServiceProxies;
 import com.finacial.wealth.api.fxpeer.exchange.ledger.LedgerClient;
-import com.finacial.wealth.api.fxpeer.exchange.ledger.model.WalletInfo;
+
 import com.finacial.wealth.api.fxpeer.exchange.model.AddAccountObj;
 import com.finacial.wealth.api.fxpeer.exchange.model.ApiResponseModel;
 import com.finacial.wealth.api.fxpeer.exchange.model.BaseResponse;
 import com.finacial.wealth.api.fxpeer.exchange.model.WalletNo;
+import com.finacial.wealth.api.fxpeer.exchange.util.GlobalMethods;
 import com.finacial.wealth.api.fxpeer.exchange.util.UtilService;
 
 import io.micrometer.common.lang.Nullable;
@@ -39,6 +40,7 @@ import java.time.format.DateTimeParseException;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 
 @Service
@@ -135,6 +137,13 @@ public class OfferService {
 
     }
 
+    @Transactional(readOnly = true)
+    public Page<Offer> getAllOffers(@Nullable OfferStatus status, Pageable pageable) {
+
+        return repo.findMarket(status, pageable);
+
+    }
+
     public ResponseEntity<ApiResponseModel> getAllOffersExceptLoggedInUserCaller(String auth,
             Pageable pageable) {
 
@@ -174,6 +183,87 @@ public class OfferService {
             resp.setStatusCode(500);
             resp.setDescription("Failed to fetch offers: " + e.getMessage());
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(resp);
+        }
+    }
+
+    public ResponseEntity<ApiResponseModel> getAllOffersCaller(String auth,
+            Pageable pageable) {
+
+        int statusCode = 500;
+
+        ApiResponseModel resp = new ApiResponseModel();
+        try {
+            statusCode = 400;
+            String phoneNumber = utilService.getClaimFromJwt(auth, "phoneNumber"); // preferred if your JWT has sellerId
+            //Optional<RegWalletInfo> getRec = regWalletInfoRepository.findByPhoneNumber(phoneNumber);
+
+            OfferStatus status = null;
+            Page<Offer> page = getAllOffers(status.LIVE, pageable);
+
+            Page<OfferListItemDto> dtoPage = page.map(OfferMapper::toListItem);
+
+            if (dtoPage.isEmpty()) {
+                resp.setStatusCode(statusCode);
+                resp.setDescription("No offers found.");
+                return ResponseEntity.ok(resp);
+
+            }
+            resp.setData(Map.of(
+                    "items", dtoPage.getContent(),
+                    "page", dtoPage.getNumber(),
+                    "size", dtoPage.getSize(),
+                    "totalPages", dtoPage.getTotalPages(),
+                    "totalElements", dtoPage.getTotalElements(),
+                    "hasNext", dtoPage.hasNext(),
+                    "hasPrevious", dtoPage.hasPrevious()
+            ));
+            resp.setDescription("Offers fetched successfully.");
+            resp.setStatusCode(200);
+            return ResponseEntity.ok(resp);
+
+        } catch (Exception e) {
+            resp.setStatusCode(500);
+            resp.setDescription("Failed to fetch offers: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(resp);
+        }
+    }
+
+    public ResponseEntity<ApiResponseModel> updateOfferCaller(UpdateOfferCallerReq rq, String auth) {
+        final ApiResponseModel res = new ApiResponseModel();
+
+        try {
+
+            String phoneNumber = utilService.getClaimFromJwt(auth, "phoneNumber"); // preferred if your JWT has sellerId
+            Optional<RegWalletInfo> getRec = regWalletInfoRepository.findByPhoneNumber(phoneNumber);
+            //validate pin
+            BaseResponse bResPin = new BaseResponse();
+            WalletNo wSend = new WalletNo();
+            wSend.setPin(rq.getPin());
+
+            wSend.setWalletId(getRec.get().getWalletId());
+            bResPin = transactionServiceProxies.validatePin(wSend);
+            if (bResPin.getStatusCode() != 200) {
+                return bad(res, bResPin.getDescription());
+            }
+
+            long logSellerId = Long.valueOf(getRec.get().getWalletId());
+
+            List<Offer> offerDe = repo.findByCorrelationIdData(rq.getCorrelationId());
+            if (offerDe.size() <= 0) {
+                return bad(res, "Offer does not exist!");
+            }
+
+            Offer updateOffer = updateRate(offerDe.get(0).getId(), new BigDecimal(rq.getNewRate()), logSellerId);
+            res.setStatusCode(200);
+            res.setDescription("Offer created.");
+            res.setData(updateOffer); // or map to a lightweight DTO
+            return ResponseEntity.ok(res);
+
+        } catch (BusinessException be) {
+            return bad(res, be.getMessage());
+        } catch (Exception ex) {
+            ex.printStackTrace();
+            return bad(res, "An error occurred, please try again.");
         }
     }
 
@@ -275,6 +365,10 @@ public class OfferService {
             BigDecimal setMin = new BigDecimal(rq.getMinAmount());
             BigDecimal setMax = new BigDecimal(rq.getMaxAmount());
 
+            if (this.isMinLeMax(setMin, setMax) == false) {
+                return bad(res, "MinAmount must be ≤ MaxAmount.");
+            }
+
             // 3) Build domain request and delegate
             CreateOfferRq coreRq = new CreateOfferRq(currencySell, currencyReceive, rate, qtyTotal, expiryAt);
             Offer created = createOffer(coreRq, Long.valueOf(sellerId), setMin, setMax, rq.isShowInTopDeals(), getRec.get().getFirstName());
@@ -293,26 +387,32 @@ public class OfferService {
         }
     }
 
-    // ---- helpers ----
-    private static boolean isBlank(String s) {
-        return s == null || s.trim().isEmpty();
-    }
-
-    private ResponseEntity<ApiResponseModel> bad(ApiResponseModel res, String msg) {
-        res.setStatusCode(400);
-        res.setDescription(msg);
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(res);
-    }
-
     @Transactional
     public Offer createOffer(CreateOfferRq rq, long sellerId, BigDecimal minAmt,
             BigDecimal maxAmt, boolean showInTopDeals, String creators) {
-        ledger.ensureWallet(sellerId, rq.getCurrencySell().name());
-        ledger.ensureWallet(sellerId, rq.getCurrencyReceive().name());
-        WalletInfo w = ledger.getWallet(sellerId, rq.getCurrencySell().name());
+        BaseResponse bRes = new BaseResponse();
+        //ledger.ensureWallet(sellerId, rq.getCurrencySell().name());
+        // ledger.ensureWallet(sellerId, rq.getCurrencyReceive().name());
+        String correlationId = String.valueOf(GlobalMethods.generateTransactionId());
+        /*WalletInfo w = ledger.getWallet(sellerId, rq.getCurrencySell().name());
         if (w.available().compareTo(rq.getQtyTotal()) < 0) {
             throw new BusinessException("Insufficient balance to list qtyTotal");
+        }*/
+        List<AddAccountDetails> getAdDe = addAccountDetailsRepo.findByWalletIdrData(String.valueOf(sellerId));
+
+        WalletInfoValAcct wSend = new WalletInfoValAcct();
+        wSend.setAccountNumber(getAdDe.get(0).getAccountNumber());
+        wSend.setCorrelationId(correlationId);
+        wSend.setCurrencyToBuy(rq.getCurrencySell().toString());
+        wSend.setCurrencyToSell(rq.getCurrencySell().toString());
+        wSend.setTransactionAmmount(rq.getQtyTotal());
+        wSend.setWalletId(String.valueOf(sellerId));
+
+        bRes = transactionServiceProxies.createOffervalidateAccount(wSend);
+        if (bRes.getStatusCode() != 200) {
+            throw new BusinessException(bRes.getDescription());
         }
+
         Offer o = new Offer();
         o.setSellerUserId(sellerId);
         o.setCurrencySell(rq.getCurrencySell());
@@ -325,6 +425,7 @@ public class OfferService {
         o.setMinAmount(minAmt);
         o.setShowInTopDeals(showInTopDeals);
         o.setPoweredBy(creators);
+        o.setCorrelationId(correlationId);
         return repo.save(o);
     }
 
@@ -339,6 +440,25 @@ public class OfferService {
         }
         o.setRate(newRate);
         return repo.save(o);
+    }
+
+    //@jakarta.validation.constraints.AssertTrue(message = "min must be ≤ max")
+    public boolean isMinLeMax(BigDecimal min, BigDecimal max) {
+        if (min == null || max == null) {
+            return true; // @NotNull handles nulls
+        }
+        return min.compareTo(max) <= 0;
+    }
+
+    // ---- helpers ----
+    private static boolean isBlank(String s) {
+        return s == null || s.trim().isEmpty();
+    }
+
+    private ResponseEntity<ApiResponseModel> bad(ApiResponseModel res, String msg) {
+        res.setStatusCode(400);
+        res.setDescription(msg);
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(res);
     }
 
     @Transactional

@@ -4,6 +4,7 @@
  */
 package com.finacial.wealth.api.fxpeer.exchange.offer;
 
+import jakarta.validation.constraints.NotNull;
 import java.math.BigDecimal;
 import lombok.Data;
 
@@ -19,7 +20,11 @@ public class CreateOfferCaller {
     String rate;
     String qtyTotal;
     private String expiredAt;
+
+    @NotNull(message = "min is required")
     private String minAmount;
+
+    @NotNull(message = "max is required")
     private String maxAmount;
     private boolean showInTopDeals;
     private String pin;

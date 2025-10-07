@@ -8,14 +8,13 @@ package com.finacial.wealth.api.fxpeer.exchange.offer;
  *
  * @author olufemioshin
  */
-import com.finacial.wealth.api.fxpeer.exchange.common.CurrencyCode;
+
 import com.finacial.wealth.api.fxpeer.exchange.common.OfferStatus;
 import com.finacial.wealth.api.fxpeer.exchange.model.ApiResponseModel;
-import com.google.gson.Gson;
-import com.google.gson.JsonObject;
+
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMin;
-import jakarta.validation.constraints.NotNull;
+
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -24,7 +23,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
-import org.springframework.http.HttpStatus;
+
 
 @RestController
 @RequestMapping("/api/offers")
@@ -34,6 +33,16 @@ public class OfferController {
 
     public OfferController(OfferService service) {
         this.service = service;
+    }
+    
+    @GetMapping("/get-all-live-offers")
+    public ResponseEntity<ApiResponseModel> getAllOffers(
+            @RequestHeader(value = "authorization", required = true) String auth,
+            @PageableDefault(size = 20, sort = "id", direction = Sort.Direction.DESC) Pageable pageable) {
+
+        ResponseEntity<ApiResponseModel> baseResponse = service.getAllOffersCaller(auth, pageable);
+        return baseResponse;
+
     }
 
     @GetMapping("/get-all-other-offers")
@@ -54,6 +63,23 @@ public class OfferController {
         ResponseEntity<ApiResponseModel> baseResponse = service.getMyOffersCaller(auth, pageable);
         return baseResponse;
 
+    }
+
+    @PostMapping("/create-offer")
+    public ResponseEntity<ApiResponseModel> createOfferCaller(
+            @RequestHeader(value = "authorization", required = true) String auth,
+            @RequestBody @Valid CreateOfferCaller rq) {
+
+        ResponseEntity<ApiResponseModel> baseResponse = service.createOfferCaller(rq, auth);
+        return baseResponse;
+    }
+
+    @PostMapping("/update-offer")
+    public ResponseEntity<ApiResponseModel> updateOfferCaller(@RequestHeader(value = "authorization", required = true) String auth,
+            @RequestBody @Valid UpdateOfferCallerReq rq) {
+
+        ResponseEntity<ApiResponseModel> baseResponse = service.updateOfferCaller(rq, auth);
+        return baseResponse;
     }
 
     @GetMapping("/{id}")

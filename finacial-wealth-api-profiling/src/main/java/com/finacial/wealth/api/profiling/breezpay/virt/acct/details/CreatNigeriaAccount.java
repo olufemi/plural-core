@@ -2,9 +2,8 @@
  * Click nbfs://nbhost/SystemFileSystem/Templates/Licenses/license-default.txt to change this license
  * Click nbfs://nbhost/SystemFileSystem/Templates/Classes/Class.java to edit this template
  */
-package com.finacial.wealth.api.profiling.models.accounts;
+package com.finacial.wealth.api.profiling.breezpay.virt.acct.details;
 
-import com.finacial.wealth.api.profiling.repo.AddFailedTransLoggRepo;
 import lombok.Data;
 
 /**
@@ -12,12 +11,13 @@ import lombok.Data;
  * @author olufemioshin
  */
 @Data
-public class AddAccountObj {
+public class CreatNigeriaAccount {
 
-    private String countryCode;
-    private String walletId;
-    private String country;
     private String bvn;
+    private String walletId;
+    private String emailAddress;
+    private String countryCode;
+    private String fullName;
     private String phoneNumber;
 
 }

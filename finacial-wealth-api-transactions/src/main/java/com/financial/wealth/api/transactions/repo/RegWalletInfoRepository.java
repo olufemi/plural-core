@@ -43,7 +43,6 @@ public interface RegWalletInfoRepository extends
     @Query("SELECT u FROM RegWalletInfo u where u.phoneNumber = :phoneNumber")
     List<RegWalletInfo> findByPhoneNumberData(@Param("phoneNumber") String phoneNumber);
 
-   
     @Query("SELECT u FROM RegWalletInfo u where u.referralCode = :referralCode")
     List<RegWalletInfo> findByReferralCode(@Param("referralCode") String referralCode);
 
@@ -55,6 +54,9 @@ public interface RegWalletInfoRepository extends
 
     @Query("SELECT u FROM RegWalletInfo u where u.walletId = :walletId")
     RegWalletInfo findByWalletId(@Param("walletId") String walletId);
+
+    @Query("SELECT u FROM RegWalletInfo u where u.walletId = :walletId")
+    Optional<RegWalletInfo> findByWalletIdOptional(@Param("walletId") String walletId);
 
     Optional<RegWalletInfo> findByEmail(String email);
 

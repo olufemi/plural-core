@@ -2,16 +2,19 @@
  * Click nbfs://nbhost/SystemFileSystem/Templates/Licenses/license-default.txt to change this license
  * Click nbfs://nbhost/SystemFileSystem/Templates/Classes/Class.java to edit this template
  */
-package com.finacial.wealth.api.profiling.domain;
+package com.financial.wealth.api.transactions.services.fx.p2.p2.wallet;
 
+import com.financial.wealth.api.transactions.domain.*;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import java.io.Serializable;
+import java.math.BigDecimal;
 import java.time.Instant;
 import javax.persistence.Column;
 import javax.persistence.Entity;
 import javax.persistence.GeneratedValue;
 import javax.persistence.GenerationType;
 import javax.persistence.Id;
+import javax.persistence.Table;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import org.hibernate.annotations.GenericGenerator;
@@ -25,12 +28,13 @@ import org.springframework.data.annotation.LastModifiedDate;
  */
 @Entity
 @Data
+@Table(name = "Wallet_Trans_Detaile")
 @EqualsAndHashCode(onlyExplicitlyIncluded = true)
-public class AddAccountDetails implements Serializable {
+public class WalletTransactionsDetails extends AbstractAuditingEntity implements Serializable {
 
     private static final long serialVersionUID = 1L;
 
-    private static final String SEQ_NAME = "DeviceDetails_SEQ";
+    private static final String SEQ_NAME = "WalletTransDetails_SEQ";
     @Id
     @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "pooled")
     @GenericGenerator(name = "pooled",
@@ -45,24 +49,18 @@ public class AddAccountDetails implements Serializable {
     @Column(name = "ID")
     Long id;
 
-    private String accountNumber;
-    private String countryCode;
+    private String currencyToSell;
+    private String currencyToBuy;
+    private BigDecimal balance;
+    private BigDecimal availableBalance;
     private String walletId;
-    private String countryName;
-    private String currencyName;
-    private String currencyCode;
-    private String emailAddress;
-    private String virtualAccountNumber;
-     private String virtualAccountName;
-    private String phoneNumber;
-
-    @CreatedDate
-    @Column(name = "CREATED_DATE", nullable = false, updatable = false, columnDefinition = "TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
-    @JsonIgnore
-    private Instant createdDate;
-    @LastModifiedDate
-    @Column(name = "LAST_MODIFIED_DATE", insertable = false, columnDefinition = "TIMESTAMP")
-    @JsonIgnore
-    private Instant lastModifiedDate;
+    private String sellerName;
+    private String accountNumber;
+    private String correlatoionId;
+    private String transactionId;
+    private String buyerId;
+    private String buyerAccount;
+    private String buyerName;
+    private BigDecimal amountPurchased;
 
 }

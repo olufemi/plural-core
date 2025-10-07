@@ -13,6 +13,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Lock;
 import jakarta.persistence.LockModeType;
+import java.util.List;
 import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -29,6 +30,9 @@ public interface OfferRepository extends JpaRepository<Offer, Long>, JpaSpecific
     Page<Offer> findBySellerUserIdAndStatus(Long sellerId, OfferStatus status, Pageable pageable);
 
     Optional<Offer> findByIdAndSellerUserId(Long id, Long sellerId);
+    
+    @Query("SELECT u FROM Offer u where u.correlationId = :correlationId")
+    List<Offer> findByCorrelationIdData(@Param("correlationId") String correlationId);
 
     long countBySellerUserIdAndStatus(Long sellerUserId, OfferStatus status);
 
@@ -41,6 +45,17 @@ public interface OfferRepository extends JpaRepository<Offer, Long>, JpaSpecific
            """)
     Page<Offer> findMarketExcludingSeller(
             @Param("sellerId") Long sellerId,
+            @Param("status") OfferStatus status,
+            Pageable pageable);
+    
+    
+      // Flexible JPQL (status optional)
+    @Query("""
+           select o
+           from Offer o
+           where (:status is null or o.status = :status)
+           """)
+    Page<Offer> findMarket(
             @Param("status") OfferStatus status,
             Pageable pageable);
 }

@@ -4,6 +4,7 @@
  */
 package com.financial.wealth.api.transactions.services.fx.p2.p2.wallet;
 
+import java.math.BigDecimal;
 import lombok.Data;
 
 /**
@@ -11,6 +12,13 @@ import lombok.Data;
  * @author olufemioshin
  */
 @Data
-public class WalletInfo {
+public class WalletInfoValAcct {
+
+    private String currencyToSell;
+    private String currencyToBuy;
     private String accountNumber;
+    private String walletId;
+    private BigDecimal transactionAmmount;
+    private String correlationId;
+
 }

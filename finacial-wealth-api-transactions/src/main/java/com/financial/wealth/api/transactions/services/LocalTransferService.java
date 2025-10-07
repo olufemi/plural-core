@@ -202,7 +202,7 @@ public class LocalTransferService {
 
     }
 
-    private BaseResponse getTotalBalByPhoneNumb(String phoneNumber) {
+    public BaseResponse getTotalBalByPhoneNumb(String phoneNumber) {
         BaseResponse baseResponse = new BaseResponse();
         int statusCode = 500;
         String statusMessage = "An error occured,please try again";

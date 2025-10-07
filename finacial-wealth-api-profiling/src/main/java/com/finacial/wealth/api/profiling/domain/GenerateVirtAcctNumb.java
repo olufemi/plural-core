@@ -26,7 +26,7 @@ import org.springframework.data.annotation.LastModifiedDate;
 @Entity
 @Data
 @EqualsAndHashCode(onlyExplicitlyIncluded = true)
-public class AddAccountDetails implements Serializable {
+public class GenerateVirtAcctNumb implements Serializable {
 
     private static final long serialVersionUID = 1L;
 
@@ -45,16 +45,17 @@ public class AddAccountDetails implements Serializable {
     @Column(name = "ID")
     Long id;
 
-    private String accountNumber;
-    private String countryCode;
+    private String responseCode;
+
+    private String responseMessage;
+
+    private String virtualAcctNo;
+
+    private String virtualAcctName;
+
+    private String expiryDatetime;
     private String walletId;
-    private String countryName;
-    private String currencyName;
-    private String currencyCode;
     private String emailAddress;
-    private String virtualAccountNumber;
-     private String virtualAccountName;
-    private String phoneNumber;
 
     @CreatedDate
     @Column(name = "CREATED_DATE", nullable = false, updatable = false, columnDefinition = "TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
@@ -64,5 +65,4 @@ public class AddAccountDetails implements Serializable {
     @Column(name = "LAST_MODIFIED_DATE", insertable = false, columnDefinition = "TIMESTAMP")
     @JsonIgnore
     private Instant lastModifiedDate;
-
 }

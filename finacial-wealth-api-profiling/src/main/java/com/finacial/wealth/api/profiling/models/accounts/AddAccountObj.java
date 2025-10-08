@@ -19,5 +19,7 @@ public class AddAccountObj {
     private String country;
     private String bvn;
     private String phoneNumber;
+    private String requestId;
+    private int otp;
 
 }

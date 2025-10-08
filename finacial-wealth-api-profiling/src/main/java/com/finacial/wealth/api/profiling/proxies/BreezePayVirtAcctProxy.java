@@ -6,7 +6,10 @@ import com.finacial.wealth.api.profiling.breezpay.virt.acct.details.GetCusmerDet
 import com.finacial.wealth.api.profiling.breezpay.virt.acct.details.GetCusmerDetailsResponse;
 import com.finacial.wealth.api.profiling.breezpay.virt.get.acct.list.CustomerResponse;
 import com.finacial.wealth.api.profiling.breezpay.virt.get.acct.list.GetAcctListReq;
+import com.finacial.wealth.api.profiling.breezpay.virt.get.bvn.GetSingleBvnResponse;
 import org.springframework.cloud.openfeign.FeignClient;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -34,5 +37,12 @@ public interface BreezePayVirtAcctProxy {
     @RequestMapping(value = "/GetCustomers", consumes = "application/json", method = RequestMethod.POST)
     public CustomerResponse getCustomers(@RequestBody GetAcctListReq rq,
             @RequestHeader("Authorization") String auth, @RequestHeader("Ocp-Apim-Subscription-Key") String subKey);
+
+    // NEW: BVN lookup (GET)
+    @GetMapping(value = "/bvn/v1/GetSingleBVNJSON/{bvn}", produces = "application/json")
+    GetSingleBvnResponse getSingleBvn(
+            @PathVariable("bvn") String bvn,
+            @RequestHeader("Authorization") String auth,
+            @RequestHeader("Ocp-Apim-Subscription-Key") String subKey);
 
 }

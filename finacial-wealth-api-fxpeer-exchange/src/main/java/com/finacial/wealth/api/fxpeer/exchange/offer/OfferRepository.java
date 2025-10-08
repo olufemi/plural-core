@@ -30,9 +30,12 @@ public interface OfferRepository extends JpaRepository<Offer, Long>, JpaSpecific
     Page<Offer> findBySellerUserIdAndStatus(Long sellerId, OfferStatus status, Pageable pageable);
 
     Optional<Offer> findByIdAndSellerUserId(Long id, Long sellerId);
-    
+
     @Query("SELECT u FROM Offer u where u.correlationId = :correlationId")
     List<Offer> findByCorrelationIdData(@Param("correlationId") String correlationId);
+
+    @Query("SELECT u FROM Offer u where u.correlationId = :correlationId")
+    Offer findByCorrelationIdDataUpdate(@Param("correlationId") String correlationId);
 
     long countBySellerUserIdAndStatus(Long sellerUserId, OfferStatus status);
 
@@ -47,9 +50,8 @@ public interface OfferRepository extends JpaRepository<Offer, Long>, JpaSpecific
             @Param("sellerId") Long sellerId,
             @Param("status") OfferStatus status,
             Pageable pageable);
-    
-    
-      // Flexible JPQL (status optional)
+
+    // Flexible JPQL (status optional)
     @Query("""
            select o
            from Offer o

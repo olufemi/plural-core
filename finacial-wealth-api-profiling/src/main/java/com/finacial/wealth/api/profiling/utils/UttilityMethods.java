@@ -5,6 +5,14 @@
  */
 package com.finacial.wealth.api.profiling.utils;
 
+import com.finacial.wealth.api.profiling.domain.PinActFailedTransLog;
+import com.finacial.wealth.api.profiling.domain.VerifyEmailAddLog;
+import com.finacial.wealth.api.profiling.domain.VerifyReqIdDetailsAuth;
+import com.finacial.wealth.api.profiling.proxies.UtilitiesProxy;
+import com.finacial.wealth.api.profiling.repo.PinActFailedTransLogRepo;
+import com.finacial.wealth.api.profiling.repo.VerifyReqIdDetailsAuthRepo;
+import com.finacial.wealth.api.profiling.response.BaseResponse;
+import com.finacial.wealth.api.profiling.utilities.models.OtpRequest;
 import com.google.common.collect.Range;
 import com.google.gson.JsonSyntaxException;
 
@@ -15,6 +23,7 @@ import java.security.SecureRandom;
 import java.text.DateFormat;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Collections;
@@ -70,10 +79,22 @@ public class UttilityMethods {
     String SETTING_KEY_GET_WALLET_USER_GROUP_ID;
     String Device_Change;
 
+    private static final String NO_DEVICE_REGISTERED = "You dont have any device registered";
+    private static final String OTP_SUCCESSFULLY_SENT = "Otp Sent SuccessFully.";
+    private static final int STANDARD_SUCESS_CODE = 200;
+    private final UtilitiesProxy utilitiesProxy;
+    private final PinActFailedTransLogRepo pinActFailedRepo;
+    private final VerifyReqIdDetailsAuthRepo verifyReqIdDetailsAuthRepo;
+
     MemoryCache cache;
 
-    public UttilityMethods(MemoryCache cache) {
+    public UttilityMethods(MemoryCache cache,
+            UtilitiesProxy utilitiesProxy, PinActFailedTransLogRepo pinActFailedRepo,
+            VerifyReqIdDetailsAuthRepo verifyReqIdDetailsAuthRepo) {
         this.cache = cache;
+        this.utilitiesProxy = utilitiesProxy;
+        this.pinActFailedRepo = pinActFailedRepo;
+        this.verifyReqIdDetailsAuthRepo = verifyReqIdDetailsAuthRepo;
     }
 
     @PostConstruct
@@ -154,6 +175,69 @@ public class UttilityMethods {
 
     public String getSETTING_REF_LINK() {
         return SETTING_REF_LINK;
+    }
+
+    public BaseResponse initiateSendOtp(String auth, String phoneNumber, String userName, String serviceName) {
+        BaseResponse responseModel = new BaseResponse();
+        int statusCode = 500;
+        String statusMessage = "An error occured,please try again";
+        try {
+            statusCode = 400;
+
+            DecodedJWTToken getDecoded = DecodedJWTToken.getDecoded(auth);
+            String emailAddress = getDecoded.emailAddress;
+
+            OtpRequest otp = new OtpRequest();
+            otp.setEmailAddress(emailAddress);
+            otp.setUserId(userName);
+            otp.setPhoneNumber(getDecoded.phoneNumber);
+            otp.setServiceName("Create-Wallet-Profiling-Service-Send-Otp_By-Email");
+
+            BaseResponse bRes = utilitiesProxy.sendOtpEmail(otp);
+            if (bRes.getStatusCode() != 200) {
+
+                PinActFailedTransLog pinActTransFailed = new PinActFailedTransLog("verify-email-address",
+                        bRes.getDescription(), "", "", emailAddress);
+                pinActFailedRepo.save(pinActTransFailed);
+                responseModel.setDescription(bRes.getDescription());
+                responseModel.setStatusCode(bRes.getStatusCode());
+                return responseModel;
+
+            }
+            String otpReqId = (String) bRes.getData()
+                    .get("requestId");
+
+            VerifyReqIdDetailsAuth vDe = new VerifyReqIdDetailsAuth();
+            vDe.setCreatedDate(Instant.now());
+            vDe.setLastModifiedDate(Instant.now());
+            vDe.setRequestId(otpReqId);
+            vDe.setServiceName(serviceName);
+            vDe.setUserId(phoneNumber);
+            vDe.setProcessId("0");
+            vDe.setExpiry(0);
+            vDe.setProcessIdUsed("0");
+            vDe.setProcessId(otpReqId);
+            vDe.setEmailAddress(emailAddress);
+
+            vDe.setUserIdType("phoneNumber");
+            responseModel.addData("processId", otpReqId);
+            //vDe.setJoinTransactionId(result.getJoinTransactionId());
+            verifyReqIdDetailsAuthRepo.save(vDe);
+
+            responseModel.addData("requestId", otpReqId);
+
+            responseModel.setDescription(OTP_SUCCESSFULLY_SENT);
+            responseModel.setStatusCode(STANDARD_SUCESS_CODE);
+
+        } catch (Exception ex) {
+            responseModel.setDescription(statusMessage);
+            responseModel.setStatusCode(statusCode);
+
+            ex.printStackTrace();
+        }
+
+        return responseModel;
+
     }
 
     public String encyrpt(String text, String key) throws NoSuchAlgorithmException, NoSuchPaddingException, InvalidKeyException, IllegalBlockSizeException, BadPaddingException {

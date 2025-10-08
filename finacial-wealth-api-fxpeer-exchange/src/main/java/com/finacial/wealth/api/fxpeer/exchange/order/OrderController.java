@@ -6,6 +6,7 @@ package com.finacial.wealth.api.fxpeer.exchange.order;
 
 import com.finacial.wealth.api.fxpeer.exchange.escrow.Escrow;
 import com.finacial.wealth.api.fxpeer.exchange.escrow.EscrowService;
+import com.finacial.wealth.api.fxpeer.exchange.model.ApiResponseModel;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import jakarta.validation.Valid;
@@ -15,13 +16,18 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
+import java.security.InvalidKeyException;
+import java.security.NoSuchAlgorithmException;
+import javax.crypto.BadPaddingException;
+import javax.crypto.IllegalBlockSizeException;
+import javax.crypto.NoSuchPaddingException;
 
 /**
  *
  * @author olufemioshin
  */
 @RestController
-@RequestMapping("/api")
+@RequestMapping("/orders")
 public class OrderController {
 
     private final OrderService orderService;
@@ -32,12 +38,23 @@ public class OrderController {
         this.escrowService = escrowService;
     }
 
+    @PostMapping("/buy-offer-now")
+    public ResponseEntity<ApiResponseModel> createOfferCaller(
+            @RequestHeader(value = "authorization", required = true) String auth,
+            @RequestBody @Valid BuyOfferNow rq) {
+
+        ResponseEntity<ApiResponseModel> baseResponse = orderService.createOrderCaller(rq, auth);
+        return baseResponse;
+    }
+
     @Operation(summary = "Buy Now: create Order and reserve offer qty")
     @PostMapping("/offers/{offerId}/buy-now")
     public ResponseEntity<Order> buyNow(@RequestHeader("X-User-Id") long buyerId,
             @PathVariable long offerId,
-            @RequestBody @Valid BuyNowRq rq) {
-        Order ord = orderService.buyNow(offerId, rq.amount(), buyerId, rq.lockTtlSeconds());
+            @RequestBody @Valid BuyNowRq rq) throws NoSuchAlgorithmException, NoSuchPaddingException, InvalidKeyException, IllegalBlockSizeException, BadPaddingException {
+        //Order ord = orderService.buyNow(offerId, rq.amount(), buyerId, rq.lockTtlSeconds());
+        Order ord = orderService.buyNow(offerId, rq.amount(), String.valueOf(buyerId), 600, "", "", "", "");
+
         return ResponseEntity.ok(ord);
     }
 

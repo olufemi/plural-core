@@ -93,6 +93,69 @@ public class ManageWalletService {
         return responseModel;
     }
 
+    public BaseResponse validateAccountBalnce(WalletInfoValiAcctBal rq) {
+        BaseResponse responseModel = new BaseResponse();
+        int statusCode = 500;
+        String descripton = "Something went wrong internally";
+        try {
+            statusCode = 400;
+
+            WalletInfo ree = new WalletInfo();
+            ree.setAccountNumber(rq.getAccountNumber());
+            BaseResponse getTotalBal = this.getAccountBal(ree);
+
+            Object amountObj = getTotalBal.getData().get("accountBalance");
+            BigDecimal accBalAmount = BigDecimal.ZERO;
+
+            if (amountObj instanceof BigDecimal) {
+                accBalAmount = (BigDecimal) amountObj;
+            } else if (amountObj instanceof Number) {
+                accBalAmount = BigDecimal.valueOf(((Number) amountObj).doubleValue());
+            } else if (amountObj instanceof String) {
+                accBalAmount = new BigDecimal((String) amountObj);
+            } else {
+                accBalAmount = BigDecimal.ZERO; // default or throw exception
+            }
+
+            if (new BigDecimal(utilMeth.minAcctBalance()).compareTo(accBalAmount) == 0) {
+
+                SettlementFailureLog conWall = new SettlementFailureLog("", "",
+                        "Sorry, your account balance is insufficient. Your minimum account balance is:  " + utilMeth.minAcctBalance());
+                settlementFailureLogRepo.save(conWall);
+
+                responseModel.setStatusCode(400);
+                responseModel.setDescription("Sorry, your account balance is insufficient. Your minimum account balance is:  " + utilMeth.minAcctBalance());
+                return responseModel;
+
+            }
+
+            if (rq.getRequestedAmount().compareTo(accBalAmount) == 1) {
+
+                SettlementFailureLog conWall = new SettlementFailureLog("", "",
+                        "Sorry, your account balance is insufficient. Your account balance is " + accBalAmount.toString());
+                settlementFailureLogRepo.save(conWall);
+
+                responseModel.setStatusCode(400);
+                responseModel.setDescription("Sorry, your account balance is insufficient. Your account balance is " + accBalAmount.toString());
+                return responseModel;
+
+            }
+
+            responseModel.setDescription("Success!");
+            responseModel.setStatusCode(200);
+            Map mp = new HashMap();
+            mp.put("accountBalance", accBalAmount);
+            responseModel.setData(mp);
+            return responseModel;
+        } catch (Exception ex) {
+            ex.printStackTrace();
+            responseModel.setDescription(descripton);
+            responseModel.setStatusCode(statusCode);
+
+        }
+        return responseModel;
+    }
+
     public BaseResponse createofferValidateAccount(WalletInfoValAcct rq) {
         BaseResponse responseModel = new BaseResponse();
         int statusCode = 500;
@@ -144,21 +207,21 @@ public class ManageWalletService {
 
             WalletTransactionsDetails logTrans = new WalletTransactionsDetails();
             logTrans.setAccountNumber(rq.getAccountNumber());
-            logTrans.setAmountPurchased(null);
-            BigDecimal avilBal = logTrans.getAvailableBalance() == null ? BigDecimal.ZERO : logTrans.getAvailableBalance();
-            logTrans.setAvailableBalance(logTrans.getBalance().subtract(avilBal));
-            logTrans.setBalance(accBalAmount);
+            //logTrans.setAmountPurchased(null);
+           // BigDecimal avilBal = logTrans.getAvailableQuantity() == null ? BigDecimal.ZERO : logTrans.getAvailableQuantity();
+            logTrans.setAvailableQuantity(rq.getTransactionAmmount());
+            logTrans.setTotalQuantityCreated(rq.getTransactionAmmount());
             logTrans.setBuyerAccount("");
             logTrans.setBuyerId("");
             logTrans.setBuyerName("");
-            logTrans.setCorrelatoionId(rq.getCorrelationId());
+            logTrans.setCorrelationId(rq.getCorrelationId());
             logTrans.setCreatedBy("System");
             logTrans.setCreatedDate(Instant.now());
             logTrans.setCurrencyToBuy(rq.getCurrencyToBuy());
             logTrans.setCurrencyToSell(rq.getCurrencyToSell());
             logTrans.setSellerName(getRec.get().getFullName());
             logTrans.setTransactionId("");
-            logTrans.setWalletId(rq.getWalletId());
+            logTrans.setSellerId(rq.getWalletId());
             walletTransactionsDetailsRepo.save(logTrans);
 
             return responseModel;

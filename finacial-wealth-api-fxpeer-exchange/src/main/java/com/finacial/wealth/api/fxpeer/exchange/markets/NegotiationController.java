@@ -18,7 +18,12 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
+import java.security.InvalidKeyException;
+import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
+import javax.crypto.BadPaddingException;
+import javax.crypto.IllegalBlockSizeException;
+import javax.crypto.NoSuchPaddingException;
 
 @RestController
 @RequestMapping("/api/negs")
@@ -53,7 +58,7 @@ public class NegotiationController {
 
     @Operation(summary = "Accept a negotiation → creates an Order (Buy Now with counter terms)")
     @PostMapping("/{id}/accept")
-    public ResponseEntity<Order> accept(@RequestHeader("X-User-Id") long buyerId, @PathVariable long id) {
+    public ResponseEntity<Order> accept(@RequestHeader("X-User-Id") long buyerId, @PathVariable long id) throws NoSuchAlgorithmException, NoSuchPaddingException, InvalidKeyException, IllegalBlockSizeException, BadPaddingException {
         Negotiation n = repo.findById(id).orElse(null);
         if (n == null || n.getStatus() != NegotiationStatus.OPEN || n.getBuyerUserId() != buyerId) {
             return ResponseEntity.notFound().build();
@@ -65,7 +70,11 @@ public class NegotiationController {
         }
         n.setStatus(NegotiationStatus.ACCEPTED);
         repo.save(n);
-        Order ord = orders.buyNow(n.getOfferId(), n.getProposedAmount(), buyerId, 600);
+        Order ord = orders.buyNow(n.getOfferId(), n.getProposedAmount(), String.valueOf(buyerId), 600, "", "", "", "");
+        /*
+                 buyNow(long offerId, BigDecimal amount, long buyerId, long lockTtlSeconds,
+            String correlId, String sellerId, String fees, String transactionId)
+         */
         return ResponseEntity.ok(ord);
     }
 

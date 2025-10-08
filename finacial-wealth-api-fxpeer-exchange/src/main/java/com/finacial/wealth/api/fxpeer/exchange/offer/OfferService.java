@@ -18,9 +18,10 @@ import com.finacial.wealth.api.fxpeer.exchange.ledger.LedgerClient;
 import com.finacial.wealth.api.fxpeer.exchange.model.AddAccountObj;
 import com.finacial.wealth.api.fxpeer.exchange.model.ApiResponseModel;
 import com.finacial.wealth.api.fxpeer.exchange.model.BaseResponse;
+import com.finacial.wealth.api.fxpeer.exchange.model.ManageFeesConfigReq;
 import com.finacial.wealth.api.fxpeer.exchange.model.WalletNo;
 import com.finacial.wealth.api.fxpeer.exchange.util.GlobalMethods;
-import com.finacial.wealth.api.fxpeer.exchange.util.UtilService;
+import com.finacial.wealth.api.fxpeer.exchange.util.UttilityMethods;
 
 import io.micrometer.common.lang.Nullable;
 import org.springframework.data.domain.Page;
@@ -48,7 +49,7 @@ public class OfferService {
 
     private final OfferRepository repo;
     private final LedgerClient ledger;
-    private final UtilService utilService;
+    private final UttilityMethods utilService;
     private final RegWalletInfoRepository regWalletInfoRepository;
     private final AddAccountDetailsRepo addAccountDetailsRepo;
     private final ProfilingProxies profilingProxies;
@@ -60,7 +61,7 @@ public class OfferService {
 
     public OfferService(OfferRepository repo,
             LedgerClient ledger,
-            UtilService utilService,
+            UttilityMethods utilService,
             RegWalletInfoRepository regWalletInfoRepository,
             AddAccountDetailsRepo addAccountDetailsRepo,
             ProfilingProxies profilingProxies,
@@ -243,14 +244,14 @@ public class OfferService {
             wSend.setWalletId(getRec.get().getWalletId());
             bResPin = transactionServiceProxies.validatePin(wSend);
             if (bResPin.getStatusCode() != 200) {
-                return bad(res, bResPin.getDescription());
+                return bad(res, bResPin.getDescription(), bResPin.getStatusCode());
             }
 
             long logSellerId = Long.valueOf(getRec.get().getWalletId());
 
             List<Offer> offerDe = repo.findByCorrelationIdData(rq.getCorrelationId());
             if (offerDe.size() <= 0) {
-                return bad(res, "Offer does not exist!");
+                return bad(res, "Offer does not exist!", 400);
             }
 
             Offer updateOffer = updateRate(offerDe.get(0).getId(), new BigDecimal(rq.getNewRate()), logSellerId);
@@ -260,10 +261,10 @@ public class OfferService {
             return ResponseEntity.ok(res);
 
         } catch (BusinessException be) {
-            return bad(res, be.getMessage());
+            return bad(res, be.getMessage(), 500);
         } catch (Exception ex) {
             ex.printStackTrace();
-            return bad(res, "An error occurred, please try again.");
+            return bad(res, "An error occurred, please try again.", 500);
         }
     }
 
@@ -279,47 +280,57 @@ public class OfferService {
             WalletNo wSend = new WalletNo();
             wSend.setPin(rq.getPin());
 
+            // 0) Basic request checks
+            if (rq == null) {
+                return bad(res, "Empty request.", 400);
+            }
+            if (isBlank(rq.getCurrencySell()) || isBlank(rq.getCurrencyReceive())
+                    || isBlank(rq.getRate()) || isBlank(rq.getQtyTotal()) || isBlank(rq.getExpiredAt())) {
+                return bad(res, "currencySell, currencyReceive, rate, qtyTotal, expiredAt are required.", 400);
+            }
+
             wSend.setWalletId(getRec.get().getWalletId());
             bResPin = transactionServiceProxies.validatePin(wSend);
             if (bResPin.getStatusCode() != 200) {
-                return bad(res, bResPin.getDescription());
+                return bad(res, bResPin.getDescription(), bResPin.getStatusCode());
+            }
+            if (rq.getCurrencyReceive().equals(rq.getCurrencySell())) {
+                return bad(res, "Country code mismatch!", 400);
             }
             //check if cus has currency currency
             List<AddAccountDetails> getAdDe = addAccountDetailsRepo.findByWalletIdrData(getRec.get().getWalletId());
             BaseResponse bRes = new BaseResponse();
             for (AddAccountDetails getWa : getAdDe) {
-                if (!getWa.getCurrencyCode().equals(rq.getCurrencyReceive())) {
-                    //create account
-                    AddAccountObj seObj = new AddAccountObj();
-                    seObj.setCountry(getWa.getCountryName());
-                    seObj.setCountryCode(getWa.getCountryCode());
-                    seObj.setWalletId(getRec.get().getWalletId());
-                    bRes = profilingProxies.addOtherAccount(seObj);
-                    if (bRes.getStatusCode() != 200) {
-                        return bad(res, bRes.getDescription());
+                String wallCurrencyCode = getWa.getCurrencyCode() == null ? "" : getWa.getCurrencyCode();
+
+                if (!wallCurrencyCode.equals(rq.getCurrencyReceive())) {
+                    if (!"CA".equals(rq.getCurrencyReceive())) {
+                        //create account
+                        AddAccountObj seObj = new AddAccountObj();
+                        seObj.setCountry(getWa.getCountryName());
+                        seObj.setCountryCode(getWa.getCountryCode());
+                        seObj.setWalletId(getRec.get().getWalletId());
+                        bRes = profilingProxies.addOtherAccount(seObj);
+                        if (bRes.getStatusCode() != 200) {
+                            return bad(res, bRes.getDescription(), bRes.getStatusCode());
+                        }
                     }
                 }
-                if (!getWa.getCurrencyCode().equals(rq.getCurrencySell())) {
-                    //create account
-                    AddAccountObj seObj = new AddAccountObj();
-                    seObj.setCountry(getWa.getCountryName());
-                    seObj.setCountryCode(getWa.getCountryCode());
-                    seObj.setWalletId(getRec.get().getWalletId());
-                    bRes = profilingProxies.addOtherAccount(seObj);
-                    if (bRes.getStatusCode() != 200) {
-                        return bad(res, bRes.getDescription());
+                if (!wallCurrencyCode.equals(rq.getCurrencySell())) {
+                    if (!"CA".equals(rq.getCurrencyReceive())) {
+                        //create account
+                        AddAccountObj seObj = new AddAccountObj();
+                        seObj.setCountry(getWa.getCountryName());
+                        seObj.setCountryCode(getWa.getCountryCode());
+                        seObj.setWalletId(getRec.get().getWalletId());
+                        bRes = profilingProxies.addOtherAccount(seObj);
+                        if (bRes.getStatusCode() != 200) {
+                            return bad(res, bRes.getDescription(), bRes.getStatusCode());
+                        }
                     }
                 }
             }
             String sellerId = getRec.get().getWalletId();
-            // 0) Basic request checks
-            if (rq == null) {
-                return bad(res, "Empty request.");
-            }
-            if (isBlank(rq.getCurrencySell()) || isBlank(rq.getCurrencyReceive())
-                    || isBlank(rq.getRate()) || isBlank(rq.getQtyTotal()) || isBlank(rq.getExpiredAt())) {
-                return bad(res, "currencySell, currencyReceive, rate, qtyTotal, expiredAt are required.");
-            }
 
             // 1) Normalize inputs
             final CurrencyCode currencySell;
@@ -328,10 +339,10 @@ public class OfferService {
                 currencySell = CurrencyCode.valueOf(rq.getCurrencySell().trim().toUpperCase(Locale.ENGLISH));
                 currencyReceive = CurrencyCode.valueOf(rq.getCurrencyReceive().trim().toUpperCase(Locale.ENGLISH));
             } catch (IllegalArgumentException iae) {
-                return bad(res, "Unsupported currency code(s). Use valid enum values, e.g., NGN, USD, EUR.");
+                return bad(res, "Unsupported currency code(s). Use valid currency code values, e.g., NGN, USD, EUR.", 400);
             }
             if (currencySell == currencyReceive) {
-                return bad(res, "currencySell and currencyReceive must differ.");
+                return bad(res, "currencySell and currencyReceive must differ.", 400);
             }
 
             final BigDecimal rate;
@@ -340,13 +351,13 @@ public class OfferService {
                 rate = new BigDecimal(rq.getRate().trim());
                 qtyTotal = new BigDecimal(rq.getQtyTotal().trim());
             } catch (NumberFormatException nfe) {
-                return bad(res, "rate and qtyTotal must be numeric.");
+                return bad(res, "rate and qtyTotal must be numeric.", 400);
             }
             if (rate.signum() <= 0) {
-                return bad(res, "rate must be > 0.");
+                return bad(res, "rate must be > 0.", 400);
             }
             if (qtyTotal.signum() <= 0) {
-                return bad(res, "qtyTotal must be > 0.");
+                return bad(res, "qtyTotal must be > 0.", 400);
             }
 
             // 2) Parse expiry "dd/MM/yyyy" → Instant (Africa/Lagos end-of-day)
@@ -356,17 +367,25 @@ public class OfferService {
                 ZonedDateTime zdt = d.atTime(23, 59, 59).atZone(LAGOS);
                 expiryAt = zdt.toInstant();
             } catch (DateTimeParseException dtpe) {
-                return bad(res, "Invalid expiry date format dd/MM/yyyy!");
+                return bad(res, "Invalid expiry date format dd/MM/yyyy!", 400);
             }
             if (expiryAt.isBefore(Instant.now())) {
-                return bad(res, "Expiry time is in the past.");
+                return bad(res, "Expiry time is in the past.", 400);
             }
 
             BigDecimal setMin = new BigDecimal(rq.getMinAmount());
             BigDecimal setMax = new BigDecimal(rq.getMaxAmount());
 
             if (this.isMinLeMax(setMin, setMax) == false) {
-                return bad(res, "MinAmount must be ≤ MaxAmount.");
+                return bad(res, "MinAmount must be ≤ MaxAmount.", 400);
+            }
+            ManageFeesConfigReq mFeee = new ManageFeesConfigReq();
+            mFeee.setAmount(setMin.toString());
+            mFeee.setTransType("createlisting");
+            BaseResponse mConfig = utilService.getFeesConfig(mFeee);
+
+            if (mConfig.getStatusCode() != 200) {
+                return bad(res, mConfig.getDescription(), mConfig.getStatusCode());
             }
 
             // 3) Build domain request and delegate
@@ -380,10 +399,10 @@ public class OfferService {
             return ResponseEntity.ok(res);
 
         } catch (BusinessException be) {
-            return bad(res, be.getMessage());
+            return bad(res, be.getMessage(), 500);
         } catch (Exception ex) {
             ex.printStackTrace();
-            return bad(res, "An error occurred, please try again.");
+            return bad(res, "An error occurred, please try again.", 500);
         }
     }
 
@@ -455,8 +474,8 @@ public class OfferService {
         return s == null || s.trim().isEmpty();
     }
 
-    private ResponseEntity<ApiResponseModel> bad(ApiResponseModel res, String msg) {
-        res.setStatusCode(400);
+    private ResponseEntity<ApiResponseModel> bad(ApiResponseModel res, String msg, int statusCode) {
+        res.setStatusCode(statusCode);
         res.setDescription(msg);
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(res);
     }

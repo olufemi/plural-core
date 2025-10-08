@@ -1,6 +1,7 @@
 /*
- * Click nbfs://nbhost/SystemFileSystem/Templates/Licenses/license-default.txt to change this license
- * Click nbfs://nbhost/SystemFileSystem/Templates/Classes/Class.java to edit this template
+ * To change this license header, choose License Headers in Project Properties.
+ * To change this template file, choose Tools | Templates
+ * and open the template in the editor.
  */
 package com.finacial.wealth.api.fxpeer.exchange.domain;
 
@@ -11,10 +12,10 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import java.io.Serializable;
+import java.math.BigDecimal;
 import java.time.Instant;
 
 import lombok.Data;
-import lombok.EqualsAndHashCode;
 import org.hibernate.annotations.GenericGenerator;
 import org.hibernate.annotations.Parameter;
 import org.springframework.data.annotation.CreatedDate;
@@ -26,33 +27,34 @@ import org.springframework.data.annotation.LastModifiedDate;
  */
 @Entity
 //@Data
-@EqualsAndHashCode(onlyExplicitlyIncluded = true)
-public class AddAccountDetails implements Serializable {
+public class FinWealthPayServiceConfig implements Serializable {
 
-    private static final long serialVersionUID = 1L;
+    private static final String SEQ_NAME = "FinWealthConfigLog_SEQ";
 
-    private static final String SEQ_NAME = "DeviceDetails_SEQ";
     @Id
     @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "pooled")
-    @GenericGenerator(name = "pooled",
+    @GenericGenerator(
+            name = "pooled",
             strategy = "org.hibernate.id.enhanced.SequenceStyleGenerator",
             parameters = {
                 @Parameter(name = "sequence_name", value = SEQ_NAME),
-                @Parameter(name = "initial_value", value = "300"),
+                @Parameter(name = "initial_value", value = "4"),
                 @Parameter(name = "increment_size", value = "1"),
                 @Parameter(name = "optimizer", value = "pooled")
             }
     )
+    @JsonIgnore
     @Column(name = "ID")
-    Long id;
+    private Long id;
 
-    private String accountNumber;
-    private String countryCode;
-    private String walletId;
-    private String countryName;
-    private String currencyName;
-    private String currencyCode;
-    private String emailAddress;
+    @JsonIgnore
+    @Column(name = "SERVICE_TYPE", unique = true)
+    private String serviceType;
+    private String fees;
+    private boolean enabled;
+    private String minimumAmmount;
+    
+    
 
     @CreatedDate
     @Column(name = "CREATED_DATE", nullable = false, updatable = false, columnDefinition = "TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
@@ -71,60 +73,36 @@ public class AddAccountDetails implements Serializable {
         this.id = id;
     }
 
-    public String getAccountNumber() {
-        return accountNumber;
+    public String getServiceType() {
+        return serviceType;
     }
 
-    public void setAccountNumber(String accountNumber) {
-        this.accountNumber = accountNumber;
+    public void setServiceType(String serviceType) {
+        this.serviceType = serviceType;
     }
 
-    public String getCountryCode() {
-        return countryCode;
+    public String getFees() {
+        return fees;
     }
 
-    public void setCountryCode(String countryCode) {
-        this.countryCode = countryCode;
+    public void setFees(String fees) {
+        this.fees = fees;
     }
 
-    public String getWalletId() {
-        return walletId;
+    public boolean isEnabled() {
+        return enabled;
     }
 
-    public void setWalletId(String walletId) {
-        this.walletId = walletId;
+    public void setEnabled(boolean enabled) {
+        this.enabled = enabled;
     }
 
-    public String getCountryName() {
-        return countryName;
+    public String getMinimumAmmount() {
+        return minimumAmmount;
     }
 
-    public void setCountryName(String countryName) {
-        this.countryName = countryName;
-    }
-
-    public String getCurrencyName() {
-        return currencyName;
-    }
-
-    public void setCurrencyName(String currencyName) {
-        this.currencyName = currencyName;
-    }
-
-    public String getCurrencyCode() {
-        return currencyCode;
-    }
-
-    public void setCurrencyCode(String currencyCode) {
-        this.currencyCode = currencyCode;
-    }
-
-    public String getEmailAddress() {
-        return emailAddress;
-    }
-
-    public void setEmailAddress(String emailAddress) {
-        this.emailAddress = emailAddress;
+    public void setMinimumAmmount(String minimumAmmount) {
+        this.minimumAmmount = minimumAmmount;
     }
 
     public Instant getCreatedDate() {
@@ -142,7 +120,6 @@ public class AddAccountDetails implements Serializable {
     public void setLastModifiedDate(Instant lastModifiedDate) {
         this.lastModifiedDate = lastModifiedDate;
     }
-    
     
     
 

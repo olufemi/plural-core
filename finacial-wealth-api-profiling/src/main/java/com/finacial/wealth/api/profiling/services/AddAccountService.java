@@ -14,15 +14,19 @@ import com.finacial.wealth.api.profiling.domain.Countries;
 import com.finacial.wealth.api.profiling.domain.GenerateVirtAcctNumb;
 import com.finacial.wealth.api.profiling.domain.PinActFailedTransLog;
 import com.finacial.wealth.api.profiling.domain.RegWalletInfo;
+import com.finacial.wealth.api.profiling.domain.VerifyReqIdDetailsAuth;
 import com.finacial.wealth.api.profiling.models.accounts.AddAccountObj;
 import com.finacial.wealth.api.profiling.models.accounts.ValidationResponse;
 import com.finacial.wealth.api.profiling.proxies.BreezePayVirtAcctProxy;
+import com.finacial.wealth.api.profiling.proxies.UtilitiesProxy;
 import com.finacial.wealth.api.profiling.repo.AddAccountDetailsRepo;
 import com.finacial.wealth.api.profiling.repo.AddFailedTransLoggRepo;
 import com.finacial.wealth.api.profiling.repo.CountriesRepository;
 import com.finacial.wealth.api.profiling.repo.GenerateVirtAcctNumbRepo;
 import com.finacial.wealth.api.profiling.repo.RegWalletInfoRepository;
+import com.finacial.wealth.api.profiling.repo.VerifyReqIdDetailsAuthRepo;
 import com.finacial.wealth.api.profiling.response.BaseResponse;
+import com.finacial.wealth.api.profiling.utilities.models.OtpValidateRequest;
 import com.finacial.wealth.api.profiling.utils.DecodedJWTToken;
 import com.finacial.wealth.api.profiling.utils.UttilityMethods;
 import java.time.Instant;
@@ -30,6 +34,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -41,6 +47,8 @@ import org.springframework.stereotype.Service;
 @Service
 public class AddAccountService {
 
+    private final Logger logger = LoggerFactory.getLogger(AddAccountService.class);
+
     private final AddFailedTransLoggRepo addFailedTransLoggRepo;
     private final CountryService countryService;
     private final CountriesRepository countriesRepository;
@@ -51,6 +59,11 @@ public class AddAccountService {
     private final RegWalletInfoRepository regWalletInfoRepository;
     private final GenerateVirtAcctNumbRepo generateVirtAcctNumbRepo;
     private final UttilityMethods uttilityMethods;
+    private final VerifyReqIdDetailsAuthRepo verifyReqIdDetailsAuthRepo;
+    private final UtilitiesProxy utilitiesProxy;
+
+    private static final int STATUS_CODE_NIGERIA_ONBOARDING_FLOW_CODE = 58;
+    private static final String STATUS_CODE_NIGERIA_ONBOARDING_FLOW_DESCRIPTION = "Please validate bvn";
 
     //${fin.wealth.breeze.pay.base.url}
     @Value("${fin.wealth.breeze.pay.mer.id}")
@@ -67,12 +80,6 @@ public class AddAccountService {
     @Value("${fin.wealth.breeze.pay.mer.req.authorizer}")
     private String reqAuthorizer;
 
-    /*
-    fin.wealth.breeze.pay.mer.id=${FIN_WEALTH_BREZ_VIRT_MERCHANT_ID:PLURAL}
-fin.wealth.breeze.pay.mer.code.id=${FIN_WEALTH_BREZ_VIRT_MERCHANT_CODE:PLURAL}
-fin.wealth.breeze.pay.mer.auth=${FIN_WEALTH_BREZ_VIRT_MERCHANT_AUTH:PLRo4fA4qFFCTFswX7OrA==}
-fin.wealth.breeze.pay.mer.sub.key=${FIN_WEALTH_BREZ_VIRT_MERCHANT_SUB_KEY:PLURAL}
-     */
     public AddAccountService(AddFailedTransLoggRepo addFailedTransLoggRepo,
             CountryService countryService,
             CountriesRepository countriesRepository,
@@ -81,7 +88,9 @@ fin.wealth.breeze.pay.mer.sub.key=${FIN_WEALTH_BREZ_VIRT_MERCHANT_SUB_KEY:PLURAL
             WalletServices walletServices,
             BreezePayVirtAcctProxy breezePayVirtAcctProxy,
             RegWalletInfoRepository regWalletInfoRepository,
-            GenerateVirtAcctNumbRepo generateVirtAcctNumbRepo, UttilityMethods uttilityMethods) {
+            GenerateVirtAcctNumbRepo generateVirtAcctNumbRepo, UttilityMethods uttilityMethods,
+            VerifyReqIdDetailsAuthRepo verifyReqIdDetailsAuthRepo,
+            UtilitiesProxy utilitiesProxy) {
         this.addFailedTransLoggRepo = addFailedTransLoggRepo;
         this.countryService = countryService;
         this.countriesRepository = countriesRepository;
@@ -92,6 +101,8 @@ fin.wealth.breeze.pay.mer.sub.key=${FIN_WEALTH_BREZ_VIRT_MERCHANT_SUB_KEY:PLURAL
         this.regWalletInfoRepository = regWalletInfoRepository;
         this.generateVirtAcctNumbRepo = generateVirtAcctNumbRepo;
         this.uttilityMethods = uttilityMethods;
+        this.verifyReqIdDetailsAuthRepo = verifyReqIdDetailsAuthRepo;
+        this.utilitiesProxy = utilitiesProxy;
     }
 
     public BaseResponse addNigeriaAccountCallThirdPartyApi(CreatNigeriaAccount rq) {
@@ -185,8 +196,6 @@ fin.wealth.breeze.pay.mer.sub.key=${FIN_WEALTH_BREZ_VIRT_MERCHANT_SUB_KEY:PLURAL
                 return responseModel;
             }
 
-            Optional<RegWalletInfo> getRec = regWalletInfoRepository.findByEmail(rq.getWalletId());
-
             //validate country/code
             ValidationResponse resp = countryService.validateCountryPair(rq.getCountryCode(), rq.getCountry());
             if (resp.getStatusCode() != 200) {
@@ -213,6 +222,55 @@ fin.wealth.breeze.pay.mer.sub.key=${FIN_WEALTH_BREZ_VIRT_MERCHANT_SUB_KEY:PLURAL
                 return responseModel;
 
             }
+
+            String processId = rq.getRequestId() == null ? "0" : rq.getRequestId();
+            logger.info("addAccount  {}  ::::::::::::::::::::: ", processId);
+
+            List<VerifyReqIdDetailsAuth> getInitAcPin = verifyReqIdDetailsAuthRepo.findByProcIdList(processId);
+
+            if (getInitAcPin.size() <= 0) {
+                AddFailedTransLog pinActTransFailed = new AddFailedTransLog("add-account",
+                        "Invalid process Id!", "", "", emailAddress);
+                addFailedTransLoggRepo.save(pinActTransFailed);
+
+                logger.info("  {}  ::::::::::::::::::::: ", "Invalid process Id");
+
+                responseModel.setDescription(STATUS_CODE_NIGERIA_ONBOARDING_FLOW_DESCRIPTION);
+                responseModel.setStatusCode(STATUS_CODE_NIGERIA_ONBOARDING_FLOW_CODE);
+                return responseModel;
+            }
+
+            if (getInitAcPin.get(0).getProcessIdUsed().equals("1")) {
+                AddFailedTransLog pinActTransFailed = new AddFailedTransLog("add-account",
+                        "Transaction is already completed!", "", "", emailAddress);
+                addFailedTransLoggRepo.save(pinActTransFailed);
+
+                responseModel.setDescription("Transaction is already completed!");
+                responseModel.setStatusCode(statusCode);
+                return responseModel;
+            }
+
+            OtpValidateRequest request1 = new OtpValidateRequest();
+            request1.setOtp(rq.getOtp());
+            request1.setRequestId(rq.getRequestId());
+
+            BaseResponse bRes = utilitiesProxy.validateOtp(request1);
+
+            if (bRes.getStatusCode() != 200) {
+
+                responseModel.setDescription(bRes.getDescription());
+                responseModel.setStatusCode(bRes.getStatusCode());
+                return responseModel;
+            }
+
+            VerifyReqIdDetailsAuth updateVeri = getInitAcPin.get(0);
+            updateVeri.setProcessIdUsed("0");
+            updateVeri.setLastModifiedDate(Instant.now());
+            updateVeri.setProcessId(processId);
+            //updateVeri.setRequestId(otpReqId);
+            verifyReqIdDetailsAuthRepo.save(updateVeri);
+
+            Optional<RegWalletInfo> getRec = regWalletInfoRepository.findByEmail(rq.getWalletId());
 
             CreatNigeriaAccount cAcc = new CreatNigeriaAccount();
             cAcc.setBvn(rq.getBvn());
@@ -253,8 +311,9 @@ fin.wealth.breeze.pay.mer.sub.key=${FIN_WEALTH_BREZ_VIRT_MERCHANT_SUB_KEY:PLURAL
             addDe.setCurrencyCode(getCounByCode.get().getCurrencySymbol());
             addDe.setEmailAddress(emailAddress);
             addDe.setWalletId(uniqueIds.nextUniqueWalletId());
-            addDe.setVirtualAccountNumber(reqAuthorizer);
+            addDe.setVirtualAccountNumber(virtAccNo);
             addDe.setPhoneNumber(rq.getPhoneNumber());
+            addDe.setVirtualAccountName(virtName);
 
             //call add and account to wallet
             WalletSystemResponse addUserToWalletSystem = walletServices.addUserToWalletSystem(addDe.getAccountNumber());
@@ -262,13 +321,16 @@ fin.wealth.breeze.pay.mer.sub.key=${FIN_WEALTH_BREZ_VIRT_MERCHANT_SUB_KEY:PLURAL
                 responseModel.setDescription(addUserToWalletSystem.getDescription());
                 responseModel.setStatusCode(addUserToWalletSystem.getStatusCode());
                 return responseModel;
+
             }
+
+            addAccountDetailsRepo.save(addDe);
 
             Map added = new HashMap();
             added.put("accountNumber", addDe.getAccountNumber());
             added.put("countryCode", addDe.getCountryCode());
             added.put("countryName", addDe.getCountryName());
-            addAccountDetailsRepo.save(addDe);
+
             responseModel.setDescription("Account added successfully.");
             responseModel.setData(added);
             responseModel.setStatusCode(200);

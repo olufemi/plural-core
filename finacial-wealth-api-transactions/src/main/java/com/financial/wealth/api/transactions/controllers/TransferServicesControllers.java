@@ -66,7 +66,7 @@ public class TransferServicesControllers {
     @PostMapping("/get-transactions-history")
     public ResponseEntity<ApiResponseModel> walletToWalletUserTransactions(@RequestHeader(value = "authorization", required = true) String auth,
             // @RequestHeader(value = "channel", required = true) String channel, 
-             @RequestBody @Valid WalletNoReq rq) {
+            @RequestBody @Valid WalletNoReq rq) {
 
         ApiResponseModel baseResponse = localTransferService.getUserTransactionsHistory(rq, "", auth);
         return new ResponseEntity<>(baseResponse, HttpStatus.OK);

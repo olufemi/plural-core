@@ -39,11 +39,11 @@ public class CountriesController {
         return service.listCountries(); // minimal two-field list from DB
     }
 
-    @GetMapping("/with-currency")
+    /*@GetMapping("/with-currency")
     public List<CountryCurrencyDto> listWithCurrency() {
         // triggers lazy-seeding if DB is missing any country rows
         return service.listCountriesWithCurrency();
-    }
+    }*/
 
     @PostMapping("/validate")
     public ResponseEntity<ValidationResponse> validate(@RequestParam("countryCode") String countryCode,

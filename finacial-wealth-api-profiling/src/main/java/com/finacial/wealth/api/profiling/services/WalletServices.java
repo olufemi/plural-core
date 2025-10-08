@@ -2172,14 +2172,10 @@ public class WalletServices {
         String statusMessage = "An error occured,please try again";
         try {
             statusCode = 400;
-            System.out.println(" jwt" + "  ::::::::::::::::::::: >>>>>>>>>>>>>>>>>>  " + auth);
-
+           
             DecodedJWTToken getDecoded = DecodedJWTToken.getDecoded(auth);
             String emailAddress = getDecoded.emailAddress;
-            System.out.println("email from jwt" + "  ::::::::::::::::::::: >>>>>>>>>>>>>>>>>>  " + emailAddress);
-
-            System.out.println("Otp Sent To User ----- " + result.getFirstName());
-            // }
+               // }
             OtpRequest otp = new OtpRequest();
             otp.setEmailAddress(emailAddress);
             otp.setUserId(result.getUserName());

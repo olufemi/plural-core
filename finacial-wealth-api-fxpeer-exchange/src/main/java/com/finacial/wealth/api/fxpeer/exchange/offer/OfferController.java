@@ -26,7 +26,7 @@ import org.springframework.data.web.PageableDefault;
 
 
 @RestController
-@RequestMapping("/api/offers")
+@RequestMapping("/offers")
 public class OfferController {
 
     private final OfferService service;

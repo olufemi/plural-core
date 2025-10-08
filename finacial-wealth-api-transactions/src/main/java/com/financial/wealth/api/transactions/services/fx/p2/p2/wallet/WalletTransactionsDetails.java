@@ -28,7 +28,7 @@ import org.springframework.data.annotation.LastModifiedDate;
  */
 @Entity
 @Data
-@Table(name = "Wallet_Trans_Detaile")
+@Table(name = "Wallet_Trans_Details")
 @EqualsAndHashCode(onlyExplicitlyIncluded = true)
 public class WalletTransactionsDetails extends AbstractAuditingEntity implements Serializable {
 
@@ -51,16 +51,16 @@ public class WalletTransactionsDetails extends AbstractAuditingEntity implements
 
     private String currencyToSell;
     private String currencyToBuy;
-    private BigDecimal balance;
-    private BigDecimal availableBalance;
-    private String walletId;
+    private BigDecimal totalQuantityCreated;
+    private BigDecimal availableQuantity;
+    private String sellerId;
     private String sellerName;
     private String accountNumber;
-    private String correlatoionId;
+    private String correlationId;
     private String transactionId;
     private String buyerId;
     private String buyerAccount;
     private String buyerName;
-    private BigDecimal amountPurchased;
+    //private BigDecimal amountPurchased;
 
 }

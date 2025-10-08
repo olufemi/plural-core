@@ -212,5 +212,7 @@ public class WalletMgtController {
         BaseResponse baseResponse = walletServices.changePinInApp(rq, "", auth);
         return new ResponseEntity<>(baseResponse, HttpStatus.OK);
     }
+    
+    
 
 }

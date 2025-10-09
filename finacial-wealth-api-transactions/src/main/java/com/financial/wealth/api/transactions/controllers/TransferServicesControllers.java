@@ -5,9 +5,13 @@
  */
 package com.financial.wealth.api.transactions.controllers;
 
+import com.financial.wealth.api.transactions.breezepay.payout.NameLookUpInterBank;
+import com.financial.wealth.api.transactions.breezepay.payout.NipBankService;
+import com.financial.wealth.api.transactions.config.ApiClientException;
 import com.financial.wealth.api.transactions.models.ApiResponseModel;
 import com.financial.wealth.api.transactions.models.BaseResponse;
 import com.financial.wealth.api.transactions.models.LocalTransferRequest;
+import com.financial.wealth.api.transactions.models.OtherBankTransferRequest;
 import com.financial.wealth.api.transactions.models.SaveBeneficiary;
 import com.financial.wealth.api.transactions.models.WalletNoReq;
 import com.financial.wealth.api.transactions.models.local.trans.NameLookUp;
@@ -31,12 +35,34 @@ import org.springframework.web.bind.annotation.RestController;
 public class TransferServicesControllers {
 
     private final LocalTransferService localTransferService;
+    private final NipBankService nipService;
+
+    @GetMapping("/get-banks")
+    public ApiResponseModel getAllBanks(@RequestHeader(value = "authorization", required = true) String auth) throws ApiClientException {
+        return nipService.getAllBanks();
+    }
 
     @PostMapping("/localtransfer/name-enquiry")
     public ResponseEntity<BaseResponse> nameLookUp(@RequestHeader(value = "authorization", required = true) String auth,
             @RequestBody @Valid NameLookUp rq) {
 
         BaseResponse baseResponse = localTransferService.nameLookUp(rq, "", auth);
+        return new ResponseEntity<>(baseResponse, HttpStatus.OK);
+    }
+
+    @PostMapping("/interbank/name-enquiry")
+    public ResponseEntity<BaseResponse> nameLookUpInterBank(@RequestHeader(value = "authorization", required = true) String auth,
+            @RequestBody @Valid NameLookUpInterBank rq) {
+
+        BaseResponse baseResponse = nipService.nameLookUp(rq, "", auth);
+        return new ResponseEntity<>(baseResponse, HttpStatus.OK);
+    }
+
+    @PostMapping("/interbank/make-payment")
+    public ResponseEntity<BaseResponse> makePayment(@RequestHeader(value = "authorization", required = true) String auth,
+            @RequestBody @Valid OtherBankTransferRequest rq) {
+
+        BaseResponse baseResponse = nipService.processTransfer(rq, "", auth);
         return new ResponseEntity<>(baseResponse, HttpStatus.OK);
     }
 

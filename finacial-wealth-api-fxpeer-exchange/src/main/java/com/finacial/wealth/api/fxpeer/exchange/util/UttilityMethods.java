@@ -162,9 +162,9 @@ public class UttilityMethods {
         }
     }
 
-    public List<FxPeersCommissionCfg> findAllByTransactionType(String transType) {
+    public List<FxPeersCommissionCfg> findAllByTransactionType(String transType, String currencyCode) {
 
-        List<FxPeersCommissionCfg> getAllPartActiveNoti = fxPeersCommissionCfgRepo.findAllByTransactionType(transType);
+        List<FxPeersCommissionCfg> getAllPartActiveNoti = fxPeersCommissionCfgRepo.findAllByTransactionTypeAndCurrencyCode(transType,currencyCode);
 
         return getAllPartActiveNoti;
     }
@@ -192,9 +192,9 @@ public class UttilityMethods {
         try {
             BigDecimal pFees = BigDecimal.ZERO;
             BigDecimal ammmount = new BigDecimal(rq.getAmount());
-            List<FinWealthPayServiceConfig> getKulList = finWealthServiceConfigRepo.findByServiceTypeEnable(rq.getTransType());
+            List<FinWealthPayServiceConfig> getKulList = finWealthServiceConfigRepo.findByServiceTypeAndCurrencyCode(rq.getTransType(), rq.getCurrencyCode());
 
-            List<FxPeersCommissionCfg> pullData = findAllByTransactionType(rq.getTransType());
+            List<FxPeersCommissionCfg> pullData = findAllByTransactionType(rq.getTransType(), rq.getCurrencyCode());
 
             for (FxPeersCommissionCfg partData : pullData) {
                 if (getKulList.get(0).getServiceType().trim().equals(partData.getTransType())) {

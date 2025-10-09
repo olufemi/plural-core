@@ -219,7 +219,8 @@ public class OrderService {
 
             ManageFeesConfigReq mFeee = new ManageFeesConfigReq();
             mFeee.setAmount(rq.getAmount());
-            mFeee.setTransType("createlisting");
+            mFeee.setTransType("buylisting");
+            mFeee.setCurrencyCode(off.get(0).getCurrencyReceive().toString());
 
             BaseResponse mConfig = utilService.getFeesConfig(mFeee);
 

@@ -47,7 +47,7 @@ public class FinWealthPayServiceConfig implements Serializable {
     private Long id;
 
     @JsonIgnore
-    @Column(name = "SERVICE_TYPE", unique = true)
+    @Column(name = "SERVICE_TYPE")
     private String serviceType;
     private String fees;
     private boolean enabled;

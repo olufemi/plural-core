@@ -111,6 +111,7 @@ public class LocalTransferService {
     private final FcmService fcmService;
     private final DeviceDetailsRepo deviceDetailsRepo;
     private final MessageCenterService messageCenterService;
+    private static final String CCY = "CAD";
 
     @Qualifier("withEureka")
     @Autowired
@@ -170,7 +171,7 @@ public class LocalTransferService {
         return (str == null) ? "0" : str;
     }
 
-    private BaseResponse getTotalBal(String auth) {
+    public BaseResponse getTotalBal(String auth) {
         BaseResponse baseResponse = new BaseResponse();
         int statusCode = 500;
         String statusMessage = "An error occured,please try again";
@@ -1835,7 +1836,7 @@ public class LocalTransferService {
             rqD.setPhoneNumber(reqq.getPhonenumber());
             rqD.setTransAmount(rq.getAmount());
             rqD.setTransactionId(rq.getProcessId());
-            BaseResponse debitAcct = utilMeth.debitCustomerWithType(rqD, "CUSTOMER");
+            BaseResponse debitAcct = utilMeth.debitCustomerWithType(rqD, "CUSTOMER",CCY);
 
             //   System.out.println("Debit Response from core ::::::::::::::::  %S  " + new Gson().toJson(debitAcct));
             // BaseResponse debitAcct = genLedgerProxy.debitOneTime(reqq);
@@ -1854,7 +1855,7 @@ public class LocalTransferService {
                 debGLCredit.setTransAmount(amount);
                 debGLCredit.setTransactionId(rq.getProcessId());
 
-                utilMeth.debitCustomerWithType(debGLCredit, "CAD_GL");
+                utilMeth.debitCustomerWithType(debGLCredit, "CAD_GL",CCY);
                 /* KuleanPaymentTransaction kTrans = new KuleanPaymentTransaction();
                 kTrans.setAmmount(amountToDebit);
                 kTrans.setCreatedDate(Instant.now());
@@ -2199,7 +2200,7 @@ public class LocalTransferService {
         return sMSMessage;
     }
 
-    private String decryptData(String data) throws NoSuchAlgorithmException, NoSuchPaddingException, InvalidKeyException, IllegalBlockSizeException, BadPaddingException {
+    public String decryptData(String data) throws NoSuchAlgorithmException, NoSuchPaddingException, InvalidKeyException, IllegalBlockSizeException, BadPaddingException {
 
         String decryptData = StrongAES.decrypt(data, encryptionKey);
 

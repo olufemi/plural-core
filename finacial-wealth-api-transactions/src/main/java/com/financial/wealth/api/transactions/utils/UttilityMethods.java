@@ -8,11 +8,13 @@ package com.financial.wealth.api.transactions.utils;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.financial.wealth.api.transactions.domain.FailedCreditLog;
 import com.financial.wealth.api.transactions.domain.FailedDebitLog;
+import com.financial.wealth.api.transactions.domain.SuccessDebitLog;
 import com.financial.wealth.api.transactions.models.BaseResponse;
 import com.financial.wealth.api.transactions.models.CreditWalletCaller;
 import com.financial.wealth.api.transactions.models.DebitWalletCaller;
 import com.financial.wealth.api.transactions.repo.FailedCreditLogRepo;
 import com.financial.wealth.api.transactions.repo.FailedDebitLogRepo;
+import com.financial.wealth.api.transactions.repo.SuccessDebitLogRepo;
 import com.google.common.collect.Range;
 import com.google.gson.Gson;
 import com.google.gson.JsonSyntaxException;
@@ -118,14 +120,17 @@ public class UttilityMethods {
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final FailedCreditLogRepo failedCreditLogRepo;
     private final FailedDebitLogRepo failedDebitLogRepo;
+    private final SuccessDebitLogRepo successDebitLogRepo;
 
     public UttilityMethods(MemoryCache cache, RestTemplate restTemplate,
             FailedCreditLogRepo failedCreditLogRepo,
-            FailedDebitLogRepo failedDebitLogRepo) {
+            FailedDebitLogRepo failedDebitLogRepo, SuccessDebitLogRepo successDebitLogRepo
+    ) {
         this.cache = cache;
         this.restTemplate = restTemplate;
         this.failedCreditLogRepo = failedCreditLogRepo;
         this.failedDebitLogRepo = failedDebitLogRepo;
+        this.successDebitLogRepo = successDebitLogRepo;
     }
 
     @PostConstruct
@@ -206,7 +211,7 @@ public class UttilityMethods {
 
     }
 
-    public BaseResponse debitCustomerWithType(DebitWalletCaller rq, String type) {
+    public BaseResponse debitCustomerWithType(DebitWalletCaller rq, String type, String countryCode) {
         BaseResponse baseResponse = new BaseResponse();
         int statusCode = 500;
         String statusMessage = "An error occured,please try again";
@@ -221,6 +226,17 @@ public class UttilityMethods {
                 baseResponse.setDescription(reqres.getDescription());
                 baseResponse.setStatusCode(HttpServletResponse.SC_OK);
                 baseResponse.setData(reqres.getData());
+                SuccessDebitLog log = new SuccessDebitLog();
+                log.setPayloadType(type);
+                log.setRequestJson(objectMapper.writeValueAsString(rq));
+                log.setTransactionId(rq.getTransactionId());
+                log.setNarration(rq.getNarration());
+                log.setRetryCount(0);
+                log.setResolved(true);
+                log.setCountryCode(countryCode);
+                log.setMarkForRollBack(0);
+                log.setCreatedDate(Instant.now());
+                successDebitLogRepo.save(log);
             } else {
                 FailedDebitLog log = new FailedDebitLog();
                 log.setPayloadType(type);
@@ -228,6 +244,7 @@ public class UttilityMethods {
                 log.setTransactionId(rq.getTransactionId());
                 log.setNarration(rq.getNarration());
                 log.setRetryCount(0);
+                log.setMarkForRollBack(0);
                 log.setResolved(false);
                 log.setCreatedDate(Instant.now());
                 failedDebitLogRepo.save(log);

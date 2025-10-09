@@ -75,6 +75,7 @@ public class WebhookKeyService {
     private final DeviceDetailsRepo deviceDetailsRepo;
     private final FcmService fcmService;
     private final MessageCenterService messageCenterService;
+    private static final String CCY = "CAD";
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -258,7 +259,7 @@ public class WebhookKeyService {
             rqC.setTransactionId(rqq.getQuoteId());
             System.out.println("Credit Request TO core rqC ::::::::::::::::  %S  " + new Gson().toJson(rqC));
 
-            BaseResponse debitAcct = utilMeth.debitCustomerWithType(rqC, "CUSTOMER");
+            BaseResponse debitAcct = utilMeth.debitCustomerWithType(rqC, "CUSTOMER",CCY);
 
             System.out.println("Debit Response from core debitAcct ::::::::::::::::  %S  " + new Gson().toJson(debitAcct));
 
@@ -329,7 +330,7 @@ public class WebhookKeyService {
             cadGLCredit.setTransAmount(rqq.getAmount());
             cadGLCredit.setTransactionId(rqq.getQuoteId());
 
-            utilMeth.debitCustomerWithType(cadGLCredit, "CAD_GL");
+            utilMeth.debitCustomerWithType(cadGLCredit, "CAD_GL",CCY);
             responseModel.setDescription("Successful");
             responseModel.setStatusCode(200);
             return responseModel;

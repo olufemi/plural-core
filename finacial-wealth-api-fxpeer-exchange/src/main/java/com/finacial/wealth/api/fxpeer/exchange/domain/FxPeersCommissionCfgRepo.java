@@ -17,4 +17,7 @@ public interface FxPeersCommissionCfgRepo extends CrudRepository<FxPeersCommissi
     @Query("SELECT c FROM FxPeersCommissionCfg c WHERE c.transType = :transType")
     List<FxPeersCommissionCfg> findAllByTransactionType(String transType);
     
+     @Query("SELECT c FROM FxPeersCommissionCfg c WHERE c.transType = :transType and  c.currencyCode = :currencyCode")
+    List<FxPeersCommissionCfg> findAllByTransactionTypeAndCurrencyCode(String transType, String currencyCode);
+    
 }

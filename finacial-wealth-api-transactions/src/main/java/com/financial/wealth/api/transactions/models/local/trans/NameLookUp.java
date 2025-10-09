@@ -13,11 +13,13 @@ import lombok.Data;
  */
 @Data
 public class NameLookUp {
-    
-    private String receiver;
+
     private String sender;
     private String amount;
     private String fees;
     private String theNarration;
+    private String receiver;
+    
+  
 
 }

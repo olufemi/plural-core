@@ -382,6 +382,7 @@ public class OfferService {
             ManageFeesConfigReq mFeee = new ManageFeesConfigReq();
             mFeee.setAmount(setMin.toString());
             mFeee.setTransType("createlisting");
+            mFeee.setCurrencyCode(rq.getCurrencySell());
             BaseResponse mConfig = utilService.getFeesConfig(mFeee);
 
             if (mConfig.getStatusCode() != 200) {

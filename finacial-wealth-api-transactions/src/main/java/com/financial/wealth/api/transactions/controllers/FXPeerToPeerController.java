@@ -54,7 +54,7 @@ public class FXPeerToPeerController {
     public ResponseEntity<BaseResponse> debitCustomerWithType(@RequestHeader(value = "user-type", required = true) String userType,
             @RequestBody @Valid DebitWalletCaller rq) {
 
-        BaseResponse baseResponse = utilMeth.debitCustomerWithType(rq, userType);
+        BaseResponse baseResponse = utilMeth.debitCustomerWithType(rq, userType, "");
         return new ResponseEntity<>(baseResponse, HttpStatus.OK);
     }
 

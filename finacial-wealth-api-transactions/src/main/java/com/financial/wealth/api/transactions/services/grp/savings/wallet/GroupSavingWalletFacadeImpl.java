@@ -56,6 +56,7 @@ public class GroupSavingWalletFacadeImpl implements WalletFacade {
     private final FinWealthPaymentTransactionRepo finWealthPaymentTransactionRepo;
     private final MessageCenterService messageCenterService;
     private final DeviceDetailsRepo deviceDetailsRepo;
+    private static final String CCY = "CAD";
 
     public GroupSavingWalletFacadeImpl(
             //WalletRepository walletRepo, 
@@ -142,7 +143,7 @@ public class GroupSavingWalletFacadeImpl implements WalletFacade {
         rqC.setTransactionId(reff);
         System.out.println("Credit Request TO core rqC ::::::::::::::::  %S  " + new Gson().toJson(rqC));
 
-        BaseResponse debitAcct = utilMeth.debitCustomerWithType(rqC, "CUSTOMER");
+        BaseResponse debitAcct = utilMeth.debitCustomerWithType(rqC, "CUSTOMER", CCY);
 
         System.out.println("Debit Response from core debitAcct ::::::::::::::::  %S  " + new Gson().toJson(debitAcct));
 
@@ -205,7 +206,7 @@ public class GroupSavingWalletFacadeImpl implements WalletFacade {
         cadGLCredit.setTransAmount(amount.toString());
         cadGLCredit.setTransactionId(reff);
 
-        utilMeth.debitCustomerWithType(cadGLCredit, "CAD_GL");
+        utilMeth.debitCustomerWithType(cadGLCredit, "CAD_GL", CCY);
         txn.setWalletPocRef(reff);
         txn.setStatus(GroupSavingWalletTxnStatus.SUCCESS);
         txnRepo.save(txn);

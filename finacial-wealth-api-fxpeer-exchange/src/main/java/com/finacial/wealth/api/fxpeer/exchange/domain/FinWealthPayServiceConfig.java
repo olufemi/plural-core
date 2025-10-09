@@ -48,12 +48,12 @@ public class FinWealthPayServiceConfig implements Serializable {
     private Long id;
 
     @JsonIgnore
-    @Column(name = "SERVICE_TYPE", unique = true)
+    @Column(name = "SERVICE_TYPE")
     private String serviceType;
     private String fees;
     private boolean enabled;
     private String minimumAmmount;
-    
+    private String currencyCode;
     
 
     @CreatedDate
@@ -72,6 +72,17 @@ public class FinWealthPayServiceConfig implements Serializable {
     public void setId(Long id) {
         this.id = id;
     }
+
+    public String getCurrencyCode() {
+        return currencyCode;
+    }
+
+    public void setCurrencyCode(String currencyCode) {
+        this.currencyCode = currencyCode;
+    }
+    
+    
+    
 
     public String getServiceType() {
         return serviceType;

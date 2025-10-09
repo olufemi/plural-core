@@ -13,9 +13,19 @@ import java.math.BigDecimal;
 public class ManageFeesConfigReq {
 
     private String transType;
-
+    private String currencyCode;
     private int percentage;
     private String amount;
+
+    public String getCurrencyCode() {
+        return currencyCode;
+    }
+
+    public void setCurrencyCode(String currencyCode) {
+        this.currencyCode = currencyCode;
+    }
+    
+    
 
     public String getTransType() {
         return transType;

@@ -67,6 +67,11 @@ public class RegWalletCheckLog implements Serializable {
     private String appVersion;
     @Column(name = "WALLET_TIER")
     private String walletTier;
+    
+     @Column(name = "BANK_NAME")
+    private String bankName;
+    @Column(name = "BANK_CODE")
+    private String bankCode;
 
     @Column(name = "WITHDRAWAL_CUMMULATIVE")
     private String withdrawalcUMM;
@@ -76,6 +81,9 @@ public class RegWalletCheckLog implements Serializable {
 
     @Column(name = "MILESTONE_TRANS_CUMM")
     private String milePaymentTransferCumm;
+
+    @Column(name = "L_T_SESSION_REC_ACCOUNT_NO")
+    private String lTransSessReceiverAccountNo;
 
     @Column(name = "WALLET_TRANS_CUMM")
     private String walletTransferCumm;
@@ -102,11 +110,12 @@ public class RegWalletCheckLog implements Serializable {
     private String processId;
     @Column(name = "PROCESS_ID_STATUS")
     private String processIdStatus;
+     private String senderVirtualAccount;
 
     @Column(name = "LAST_TRANSACTION_TIME")
     @Temporal(javax.persistence.TemporalType.DATE)
     private Date lastTransactionTime;
-    
+
     private String theNarration;
 
     @LastModifiedDate
@@ -129,7 +138,7 @@ public class RegWalletCheckLog implements Serializable {
     @Temporal(javax.persistence.TemporalType.DATE)
     private Date lastLoginDay;
 
-   // @java.lang.SuppressWarnings(value = "all")
+    // @java.lang.SuppressWarnings(value = "all")
     public RegWalletCheckLog() {
         this.lTransSessExpiry = 1;
     }

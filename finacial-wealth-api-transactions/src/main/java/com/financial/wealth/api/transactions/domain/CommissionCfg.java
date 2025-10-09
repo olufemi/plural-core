@@ -25,7 +25,7 @@ import org.hibernate.annotations.Parameter;
 public class CommissionCfg implements Serializable {
 
     private static final long serialVersionUID = 1L;
-    private static final String SEQ_NAME = "AGB_COMMISSION_CFG_SEQ";
+    private static final String SEQ_NAME = "COMMISSION_CFG_SEQ";
     @Id
     @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "pooled")
     @GenericGenerator(

@@ -29,4 +29,7 @@ public interface FinWealthServiceConfigRepo extends
     @Query("SELECT o FROM FinWealthPayServiceConfig o where o.serviceType = :serviceType")
     List<FinWealthPayServiceConfig> findByServiceTypeEnable(@Param("serviceType") String serviceType);
 
+    @Query("SELECT o FROM FinWealthPayServiceConfig o where o.serviceType = :serviceType and o.currencyCode = :currencyCode")
+    List<FinWealthPayServiceConfig> findByServiceTypeAndCurrencyCode(@Param("serviceType") String serviceType, @Param("currencyCode") String currencyCode);
+
 }

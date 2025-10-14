@@ -77,6 +77,7 @@ public class FinWealthPaymentTransaction implements Serializable {
     private String airtimeReceiver;
     private String dataReceiver;
     private String billsToken;
+    private String currencyCode;
 
     @CreatedDate
     @Column(name = "CREATED_DATE", nullable = false, updatable = false, columnDefinition = "TIMESTAMP DEFAULT CURRENT_TIMESTAMP")

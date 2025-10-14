@@ -341,7 +341,7 @@
   
     
     <build>
-        <finalName>${project.artifactId}-7004</finalName>
+        <finalName>${project.artifactId}-7002</finalName>
         <plugins>
           
             <plugin>

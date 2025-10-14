@@ -259,7 +259,7 @@ public class WebhookKeyService {
             rqC.setTransactionId(rqq.getQuoteId());
             System.out.println("Credit Request TO core rqC ::::::::::::::::  %S  " + new Gson().toJson(rqC));
 
-            BaseResponse debitAcct = utilMeth.debitCustomerWithType(rqC, "CUSTOMER",CCY);
+            BaseResponse debitAcct = utilMeth.debitCustomerWithType(rqC, "CUSTOMER", CCY);
 
             System.out.println("Debit Response from core debitAcct ::::::::::::::::  %S  " + new Gson().toJson(debitAcct));
 
@@ -330,7 +330,7 @@ public class WebhookKeyService {
             cadGLCredit.setTransAmount(rqq.getAmount());
             cadGLCredit.setTransactionId(rqq.getQuoteId());
 
-            utilMeth.debitCustomerWithType(cadGLCredit, "CAD_GL",CCY);
+            utilMeth.debitCustomerWithType(cadGLCredit, "CAD_GL", CCY);
             responseModel.setDescription("Successful");
             responseModel.setStatusCode(200);
             return responseModel;
@@ -599,8 +599,8 @@ public class WebhookKeyService {
                 + " Thanks for using Plural.";
         return sMSMessage;
     }
-    
-     public static String pushNotifyDebitWalletForWalletTransfer(BigDecimal amount, String recName, String senderName) {
+
+    public static String pushNotifyDebitWalletForWalletTransfer(BigDecimal amount, String recName, String senderName) {
         String sMSMessage = "Dear " + "Customer" + ", "
                 + " your Wallet has been debited with " + "N" + amount + ", "
                 + " Thanks for using Plural.";

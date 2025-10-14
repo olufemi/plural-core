@@ -8,7 +8,6 @@ package com.finacial.wealth.api.fxpeer.exchange.offer;
  *
  * @author olufemioshin
  */
-
 import com.finacial.wealth.api.fxpeer.exchange.common.OfferStatus;
 import com.finacial.wealth.api.fxpeer.exchange.model.ApiResponseModel;
 
@@ -24,7 +23,6 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 
-
 @RestController
 @RequestMapping("/offers")
 public class OfferController {
@@ -34,7 +32,7 @@ public class OfferController {
     public OfferController(OfferService service) {
         this.service = service;
     }
-    
+
     @GetMapping("/get-all-live-offers")
     public ResponseEntity<ApiResponseModel> getAllOffers(
             @RequestHeader(value = "authorization", required = true) String auth,
@@ -79,6 +77,14 @@ public class OfferController {
             @RequestBody @Valid UpdateOfferCallerReq rq) {
 
         ResponseEntity<ApiResponseModel> baseResponse = service.updateOfferCaller(rq, auth);
+        return baseResponse;
+    }
+
+    @PostMapping("/cancel-offer")
+    public ResponseEntity<ApiResponseModel> cancelOfferCaller(@RequestHeader(value = "authorization", required = true) String auth,
+            @RequestBody @Valid CancelOfferCallerReq rq) {
+
+        ResponseEntity<ApiResponseModel> baseResponse = service.cancelOfferCaller(rq, auth);
         return baseResponse;
     }
 

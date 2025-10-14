@@ -2,9 +2,8 @@
  * Click nbfs://nbhost/SystemFileSystem/Templates/Licenses/license-default.txt to change this license
  * Click nbfs://nbhost/SystemFileSystem/Templates/Classes/Class.java to edit this template
  */
-package com.finacial.wealth.api.profiling.breezpay.virt.get.bvn;
+package com.finacial.wealth.api.profiling.models;
 
-import javax.validation.constraints.Pattern;
 import lombok.Data;
 
 /**
@@ -12,8 +11,9 @@ import lombok.Data;
  * @author olufemioshin
  */
 @Data
-public class ValidateBvnReq {
-
-    @Pattern(regexp = "^\\d{11}$", message = "BVN must be exactly 11 digits")
-    private String bvn;
+public class CountriesDetails {
+    private String country;
+    private String currencyCode;
+    private String countrySymbol;
+    private String countryCode;
 }

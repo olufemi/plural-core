@@ -11,6 +11,7 @@ import com.finacial.wealth.api.profiling.client.model.AuthUserRequest;
 import com.finacial.wealth.api.profiling.client.model.WalletSystemResponse;
 import com.finacial.wealth.api.profiling.client.model.WalletSystemUserDetails;
 import com.finacial.wealth.api.profiling.client.model.WalletUserRequest;
+import com.finacial.wealth.api.profiling.domain.AddAccountDetails;
 import com.finacial.wealth.api.profiling.domain.ChangeDeviceLogFailed;
 import com.finacial.wealth.api.profiling.domain.ChangeDeviceLogSucc;
 import com.finacial.wealth.api.profiling.domain.CreateVirtualAcctSucc;
@@ -54,6 +55,7 @@ import com.finacial.wealth.api.profiling.models.WalletNo;
 import com.finacial.wealth.api.profiling.proxies.FootprintValidationProxy;
 import com.finacial.wealth.api.profiling.proxies.FrontPrintProxy;
 import com.finacial.wealth.api.profiling.proxies.UtilitiesProxy;
+import com.finacial.wealth.api.profiling.repo.AddAccountDetailsRepo;
 import com.finacial.wealth.api.profiling.repo.ChangeDeviceLogFailedRepo;
 import com.finacial.wealth.api.profiling.repo.ChangeDeviceLogSuccRepo;
 import com.finacial.wealth.api.profiling.repo.CreateVirtualAcctSuccRepo;
@@ -94,6 +96,7 @@ import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.HashMap;
@@ -174,6 +177,7 @@ public class WalletServices {
     private final CreateVirtualAcctSuccRepo createVirtualAcctSuccRepo;
     private final RegWalletCheckLogRepo regWalletCheckLogRepo;
     private final FrontPrintProxy footprintClient;
+    private final AddAccountDetailsRepo addAccountDetailsRepo;
 
     @Value("${fin.wealth.foot.print.key}")
     private String secretKeyConfoged;
@@ -209,7 +213,8 @@ public class WalletServices {
             RegWalletCheckLogRepo regWalletCheckLogRepo, FootprintValidationProxy footprintValidationProxy,
             FootprintValidationRepository footprintValidationRepository,
             FootprintValidationFailedRepo footprintValidationFailedRepo,
-            FootprintResponseLogRepo footprintResponseLogRepo, FootprintDecryptRepository footprintDecryptRepository) {
+            FootprintResponseLogRepo footprintResponseLogRepo, FootprintDecryptRepository footprintDecryptRepository,
+            AddAccountDetailsRepo addAccountDetailsRepo) {
         this.footprintResponseLogRepo = footprintResponseLogRepo;
         this.footprintValidationFailedRepo = footprintValidationFailedRepo;
         this.footprintValidationRepository = footprintValidationRepository;
@@ -237,6 +242,7 @@ public class WalletServices {
         this.createVirtualAcctSuccRepo = createVirtualAcctSuccRepo;
         this.regWalletCheckLogRepo = regWalletCheckLogRepo;
         this.footprintDecryptRepository = footprintDecryptRepository;
+        this.addAccountDetailsRepo = addAccountDetailsRepo;
 
     }
 
@@ -2172,10 +2178,10 @@ public class WalletServices {
         String statusMessage = "An error occured,please try again";
         try {
             statusCode = 400;
-           
+
             DecodedJWTToken getDecoded = DecodedJWTToken.getDecoded(auth);
             String emailAddress = getDecoded.emailAddress;
-               // }
+            // }
             OtpRequest otp = new OtpRequest();
             otp.setEmailAddress(emailAddress);
             otp.setUserId(result.getUserName());
@@ -3020,146 +3026,213 @@ public class WalletServices {
         return baseResponse;
     }
 
-    public ApiResponseModel getCustomerDetails(String channel, String auth) {
-
+    public ApiResponseModel getCustomerDetailsWorking(String channel, String auth) {
         ApiResponseModel responseModel = new ApiResponseModel();
         int statusCode = 500;
         String statusMessage = "An error occured,please try again";
+
         try {
             statusCode = 400;
             DecodedJWTToken getDecoded = DecodedJWTToken.getDecoded(auth);
 
-            /*
-
-    5. Get customer bookAccountBalance
-    6. Get customer maxAccountBalance
-    7. Get customer Category
-    7.Get customer DailtLimit
-    8.Get customer DailtLimitBalance
-             */
-            //1. Get Customer name
+            // 1) Fetch main customer
             List<RegWalletInfo> getCus = regWalletInfoRepo.findByPhoneNumberData(getDecoded.phoneNumber);
-            if (getCus.size() <= 0) {
+            if (getCus == null || getCus.isEmpty()) {
 
                 ProcessorUserFailedTransInfo procFailedTrans = new ProcessorUserFailedTransInfo(
                         "resend-otp",
                         "Wallet to Wallet transfer, Customer is invalid!",
                         String.valueOf(GlobalMethods.generateTransactionId()),
-                        "", channel,
-                        "Profiling-Service");
-
+                        "", channel, "Profiling-Service");
                 procFailedRepo.save(procFailedTrans);
 
                 responseModel.setDescription("Wallet to Wallet transfer, Customer is invalid!");
                 responseModel.setStatusCode(statusCode);
-
+                responseModel.setData(java.util.Collections.emptyList()); // ← ALWAYS an array
                 return responseModel;
-
             }
 
-            String cusName = null;
-            cusName = getCus.get(0).getFirstName() + " " + getCus.get(0).getLastName();
-            String emailValidation = getCus.get(0).isEmailVerification() == true ? "1" : "0";
-            String pinCreation = getCus.get(0).isActivation() == true ? "1" : "0";
-            //Get Customer phoneNumber
-            String walletNo = getCus.get(0).getPhoneNumber();
-            String walletId = getCus.get(0).getWalletId();
-            // Get Customer virtualAccount
-            String virtAcctNo = null;
-            String virtAcctName = null;
-            String virtAcctType = null;
+            RegWalletInfo main = getCus.get(0);
+            String emailValidation = main.isEmailVerification() ? "1" : "0";
+            String pinCreation = main.isActivation() ? "1" : "0";
+            String walletNo = main.getPhoneNumber();
+            String walletId = main.getWalletId();
+
+            // 2) Virtual account info
+            String virtAcctNo = null, virtAcctName = null, virtAcctType = null;
             List<CreateVirtualAcctSucc> getVirt = createVirtualAcctSuccRepo.findByWallettNo(walletNo);
-            if (getVirt.size() > 0) {
-                virtAcctNo = getVirt.get(0).getAccountNumber() == null ? "" : getVirt.get(0).getAccountNumber();
-                virtAcctName = getVirt.get(0).getAccountName() == null ? "" : getVirt.get(0).getAccountName();
-                virtAcctType = getVirt.get(0).getAccountType() == null ? "" : getVirt.get(0).getAccountType();
-                cusName = virtAcctName;
+            if (getVirt != null && !getVirt.isEmpty()) {
+                CreateVirtualAcctSucc v = getVirt.get(0);
+                virtAcctNo = v.getAccountNumber() == null ? "" : v.getAccountNumber();
+                virtAcctName = v.getAccountName() == null ? "" : v.getAccountName();
+                virtAcctType = v.getAccountType() == null ? "" : v.getAccountType();
             }
-            //Get customer accountBalance
-            BaseResponse getBRes = walletSystemProxyService.getAccountBalanceCaller(auth);
-            Object amountObj = getBRes.getData().get("accountBalance");
-            BigDecimal amount = BigDecimal.ZERO;
+            String cusName = (virtAcctName != null && !virtAcctName.isEmpty())
+                    ? virtAcctName
+                    : (String.valueOf(main.getFirstName()) + " " + String.valueOf(main.getLastName())).trim();
 
-            if (amountObj instanceof BigDecimal) {
-                amount = (BigDecimal) amountObj;
-            } else if (amountObj instanceof Number) {
-                amount = BigDecimal.valueOf(((Number) amountObj).doubleValue());
-            } else if (amountObj instanceof String) {
-                amount = new BigDecimal((String) amountObj);
-            } else {
-                amount = BigDecimal.ZERO; // default or throw exception
-            }
-
-            System.out.println("Gotten account balance: " + amount);
-
-            String balance = amount.toString();
+            // 3) Primary account balance (by phone number)
+            BaseResponse balRes = walletSystemProxyService.getAccountBalanceCallerPhoneNumber(getDecoded.phoneNumber);
+            BigDecimal acctBal = toBigDecimalSafe(balRes != null && balRes.getData() != null
+                    ? balRes.getData().get("accountBalance") : null);
+            String balance = acctBal.toString();
             String bookBalance = null;
             String merchantBookedBalance = null;
 
-            //System.out.println(":::::::::::::::: acct details balance" + new Gson().toJson(getBalCum));
-            List<UserLimitConfig> userLimit = userLimitConfigRepo.findByWalletNumber(getDecoded.phoneNumber);
+            // 4) Limits & tier for primary
             String customerTier = "0";
-            String customerMacBal = "0";
+            String customerMaxBal = "0";
             String dailyLimit = "0";
             String singleTransactionLimit = "0";
-            if (userLimit.size() > 0) {
 
-                List<GlobalLimitConfig> getG = globalLimitConfigRepo.findByLimitCategory(userLimit.get(0).getTierCategory());
-                customerTier = getG.get(0).getCategory() == null ? "" : getG.get(0).getCategory();
-                customerMacBal = getG.get(0).getMaximumBalance() == null ? "" : getG.get(0).getMaximumBalance();
-                dailyLimit = getG.get(0).getDailyLimit() == null ? "" : getG.get(0).getDailyLimit();
-                singleTransactionLimit = getG.get(0).getSingleTransactionLimit() == null ? "" : getG.get(0).getSingleTransactionLimit();
-
+            List<UserLimitConfig> userLimit = userLimitConfigRepo.findByWalletNumber(getDecoded.phoneNumber);
+            if (userLimit != null && !userLimit.isEmpty()) {
+                List<GlobalLimitConfig> g = globalLimitConfigRepo.findByLimitCategory(userLimit.get(0).getTierCategory());
+                if (g != null && !g.isEmpty()) {
+                    GlobalLimitConfig gl = g.get(0);
+                    customerTier = nv(gl.getCategory());
+                    customerMaxBal = nv(gl.getMaximumBalance());
+                    dailyLimit = nv(gl.getDailyLimit());
+                    singleTransactionLimit = nv(gl.getSingleTransactionLimit());
+                }
             }
 
-            List<RegWalletCheckLog> getNameLookUpDe = regWalletCheckLogRepo.findByPhoneNumberList(getDecoded.phoneNumber);
-            String toBigDailyCum = "0";
-            if (getNameLookUpDe.size() > 0) {
-                toBigDailyCum = getNameLookUpDe.get(0).getWalletTransferCumm() == null ? "0" : getNameLookUpDe.get(0).getWalletTransferCumm();
+            List<RegWalletCheckLog> nameLookup = regWalletCheckLogRepo.findByPhoneNumberList(getDecoded.phoneNumber);
+            String dailyCum = (nameLookup != null && !nameLookup.isEmpty() && nameLookup.get(0).getWalletTransferCumm() != null)
+                    ? nameLookup.get(0).getWalletTransferCumm() : "0";
 
+            String dailyLimitBalance = safeBigDecimal(dailyLimit).subtract(safeBigDecimal(dailyCum)).toString();
+            String usedDailyLimitBalance = dailyCum;
+
+            // 5) Build array result
+            List<GetCustomerDetails> allDetails = new java.util.ArrayList<>();
+
+            // Primary details
+            GetCustomerDetails primary = new GetCustomerDetails();
+            primary.setAccountBalance(balance);
+            primary.setBookAccountBalance(bookBalance);
+            primary.setCustomerName(cusName);
+            primary.setCustomerTier(customerTier);
+            primary.setDailyLimit(dailyLimit);
+            primary.setDailyLimitBalance(dailyLimitBalance);
+            primary.setEmailAddressValidation(emailValidation);
+            primary.setMaxAccountBalance(customerMaxBal);
+            primary.setPinCreatedValidation(pinCreation);
+            primary.setVirtualAccount(virtAcctNo);
+            primary.setVirtualAccountName(virtAcctName);
+            primary.setVirtualAccountType(virtAcctType);
+            primary.setWalletNo(walletNo);
+            primary.setUsedDailyLimitBalance(usedDailyLimitBalance);
+            primary.setSingleTransactionLimit(singleTransactionLimit);
+            primary.setMerchantBookedAccountBalance(merchantBookedBalance);
+            primary.setWalletId(walletId);
+            primary.setCurrencyCode(utilMeth.returnSETTING_ONBOARDING_DEFAULT_CURRENCY_CODE());
+            allDetails.add(primary);
+
+            // 6) Additional accounts by email
+            List<AddAccountDetails> extraAccounts = addAccountDetailsRepo.findByEmailAddress(getDecoded.emailAddress);
+            if (extraAccounts != null && !extraAccounts.isEmpty()) {
+                for (AddAccountDetails addAcc : extraAccounts) {
+
+                    String addWalletNo = addAcc.getAccountNumber() != null ? addAcc.getAccountNumber() : walletNo;
+                    String addWalletId = addAcc.getWalletId() != null ? addAcc.getWalletId() : walletId;
+                    String addName = addAcc.getVirtualAccountName() != null ? addAcc.getVirtualAccountName() : cusName;
+                    String virtAcctNumber = addAcc.getVirtualAccountNumber() == null ? "" : addAcc.getVirtualAccountNumber();
+                    String currencyCode = addAcc.getCurrencyCode(); // may be null
+
+                    BaseResponse addBalRes = walletSystemProxyService.getAccountBalanceCallerPhoneNumber(addWalletNo);
+                    BigDecimal addBal = toBigDecimalSafe(addBalRes != null && addBalRes.getData() != null
+                            ? addBalRes.getData().get("accountBalance") : null);
+
+                    GetCustomerDetails extra = new GetCustomerDetails();
+                    extra.setAccountBalance(addBal.toString());
+                    extra.setBookAccountBalance(null);
+                    extra.setCustomerName(addName);
+                    // If tiers/limits vary per account, replace these with per-wallet lookups:
+                    extra.setCustomerTier(customerTier);
+                    extra.setDailyLimit(dailyLimit);
+                    extra.setDailyLimitBalance(dailyLimitBalance);
+                    extra.setEmailAddressValidation(emailValidation);
+                    extra.setMaxAccountBalance(customerMaxBal);
+                    extra.setPinCreatedValidation(pinCreation);
+
+                    if (!virtAcctNumber.isEmpty()) {
+                        extra.setVirtualAccount(virtAcctNumber);
+                        // Set the *name* correctly (was previously set from number)
+                        extra.setVirtualAccountName(addAcc.getVirtualAccountName());
+                    } else {
+                        extra.setVirtualAccount(null);
+                        extra.setVirtualAccountName(null);
+                    }
+                    // You used currency code as virtualAccountType — keeping that behavior:
+                    extra.setVirtualAccountType(currencyCode);
+
+                    extra.setWalletNo(addWalletNo);
+                    extra.setUsedDailyLimitBalance(usedDailyLimitBalance);
+                    extra.setSingleTransactionLimit(singleTransactionLimit);
+                    extra.setMerchantBookedAccountBalance(null);
+                    extra.setWalletId(addWalletId);
+                    extra.setCurrencyCode(currencyCode != null ? currencyCode :utilMeth.returnSETTING_ONBOARDING_DEFAULT_CURRENCY_CODE());
+
+                    allDetails.add(extra);
+                }
             }
-            //variable = Expression1 ? Expression2: Expression3
-            System.out.println("locattrans toBigDailyCum: " + toBigDailyCum);
-            System.out.println("locattrans dailyLimit: " + dailyLimit);
 
-            String dailtLimitBalance = new BigDecimal(dailyLimit).subtract(new BigDecimal(toBigDailyCum)).toString();
-            System.out.println("locattrans dailtLimitBalance: " + dailtLimitBalance);
-
-            String usedDailyLimitBalance = toBigDailyCum;
-
-            GetCustomerDetails cusDe = new GetCustomerDetails();
-            cusDe.setAccountBalance(balance);
-            cusDe.setBookAccountBalance(bookBalance);
-            cusDe.setCustomerName(cusName);
-            cusDe.setCustomerTier(customerTier);
-            cusDe.setDailyLimit(dailyLimit);
-            cusDe.setDailyLimitBalance(dailtLimitBalance);
-            cusDe.setEmailAddressValidation(emailValidation);
-            cusDe.setMaxAccountBalance(customerMacBal);
-            cusDe.setPinCreatedValidation(pinCreation);
-            cusDe.setVirtualAccount(virtAcctNo);
-            cusDe.setVirtualAccountName(virtAcctName);
-            cusDe.setVirtualAccountType(virtAcctType);
-            cusDe.setWalletNo(walletNo);
-            cusDe.setUsedDailyLimitBalance(usedDailyLimitBalance);
-            cusDe.setSingleTransactionLimit(singleTransactionLimit);
-            cusDe.setMerchantBookedAccountBalance(merchantBookedBalance);
-            cusDe.setWalletId(walletId);
-
-            // System.out.println(":::::::::::::::: acct details  " + new Gson().toJson(cusDe));
-            responseModel.setDescription("Wallet to Wallet transfer, Customer details retrieved successfully.");
+            responseModel.setDescription("Customer details retrieved successfully.");
             responseModel.setStatusCode(200);
-            responseModel.setData(cusDe);
+            responseModel.setData(allDetails); // ← ALWAYS an array
 
         } catch (Exception ex) {
+            ex.printStackTrace();
             responseModel.setDescription(statusMessage);
             responseModel.setStatusCode(statusCode);
-
-            ex.printStackTrace();
+            responseModel.setData(java.util.Collections.emptyList()); // ← keep array shape on errors too
         }
-
         return responseModel;
-        //find frequentlyusedBeneficiaries
+    }
+
+    /**
+     * Null-to-empty helper for Strings.
+     */
+    private static String nv(String s) {
+        return (s == null) ? "" : s;
+    }
+
+    /**
+     * Parse possibly-null/blank numeric Strings safely to BigDecimal (default
+     * 0).
+     */
+    private static BigDecimal safeBigDecimal(String s) {
+        if (s == null || s.trim().isEmpty()) {
+            return BigDecimal.ZERO;
+        }
+        try {
+            return new BigDecimal(s.trim());
+        } catch (Exception ignore) {
+            return BigDecimal.ZERO;
+        }
+    }
+
+    /**
+     * Safely parse heterogeneous balance values to BigDecimal.
+     */
+    private static BigDecimal toBigDecimalSafe(Object amountObj) {
+        if (amountObj == null) {
+            return BigDecimal.ZERO;
+        }
+        if (amountObj instanceof BigDecimal) {
+            return (BigDecimal) amountObj;
+        }
+        if (amountObj instanceof Number) {
+            return BigDecimal.valueOf(((Number) amountObj).doubleValue());
+        }
+        if (amountObj instanceof String) {
+            try {
+                return new BigDecimal((String) amountObj);
+            } catch (Exception ignore) {
+            }
+        }
+        return BigDecimal.ZERO;
     }
 
 }

@@ -22,7 +22,7 @@ import org.springframework.stereotype.Component;
  * @author HRH
  */
 @Component
-@EnableScheduling
+//@EnableScheduling
 public class SchedulerComponent {
 
     private static final Logger LOG = LoggerFactory.getLogger(SchedulerComponent.class.getName());
@@ -38,7 +38,7 @@ public class SchedulerComponent {
 
     // run 1 am
     //@Scheduled(fixedRate=60*60*1000*3)
-    @Scheduled(cron = "${pool.process.webhook.withdrawal.cron}")
+    //@Scheduled(cron = "${pool.process.webhook.withdrawal.cron}")
     public void processWebHookWithdrawal() {
 
         if (disable.equalsIgnoreCase("false")) {
@@ -48,32 +48,32 @@ public class SchedulerComponent {
 
     }
 
-    @Scheduled(cron = "${pool.process.webhook.deposit.cron}")
+    //@Scheduled(cron = "${pool.process.webhook.deposit.cron}")
     public void processWebHookDeposit() {
 
         if (disable.equalsIgnoreCase("false")) {
             webhookKeyService.processWebHookDeposit();
-            LOG.info("****** running scheduled processWebHookDeposit  >>> " + Calendar.getInstance().getTime() + "******");
+            LOG.info("****** running scheduled processWebHookWithdrawal  >>> " + Calendar.getInstance().getTime() + "******");
         }
 
     }
 
-    @Scheduled(cron = "${pool.process.retry.failed.credit.wallet.cron}")
+    // @Scheduled(cron = "${pool.process.retry.failed.credit.wallet.cron}")
     public void retryFailedCredits() {
 
         if (disable.equalsIgnoreCase("false")) {
             walletCreditRetryScheduler.retryFailedCredits();
-            LOG.info("****** running scheduled processWebHookDeposit  >>> " + Calendar.getInstance().getTime() + "******");
+            LOG.info("****** running scheduled retryFailedCredits  >>> " + Calendar.getInstance().getTime() + "******");
         }
 
     }
 
-    @Scheduled(cron = "${pool.process.retry.failed.debit.wallet.cron}")
+    // @Scheduled(cron = "${pool.process.retry.failed.debit.wallet.cron}")
     public void retryFailedDebits() {
 
         if (disable.equalsIgnoreCase("false")) {
             walletCreditRetryScheduler.retryFailedDebits();
-            LOG.info("****** running scheduled processWebHookDeposit  >>> " + Calendar.getInstance().getTime() + "******");
+            LOG.info("****** running scheduled retryFailedDebits  >>> " + Calendar.getInstance().getTime() + "******");
         }
 
     }

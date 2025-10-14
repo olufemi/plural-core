@@ -31,6 +31,7 @@ public class GetSingleBvnResponse {
         private String lastName;
         private String dateOfBirth;       // e.g. "22-Oct-1970"
         private String phoneNumber1;
+        private String phoneNumber;
         private String registrationDate;  // e.g. "16-Nov-2014"
         private String enrollmentBank;
         private String enrollmentBranch;

@@ -8,11 +8,16 @@ package com.finacial.wealth.api.profiling.services;
  *
  * @author olufemioshin
  */
+import com.finacial.wealth.api.profiling.domain.AppConfig;
 import com.finacial.wealth.api.profiling.domain.Countries;
+import com.finacial.wealth.api.profiling.models.ApiResponseModel;
+import com.finacial.wealth.api.profiling.models.CountriesDetails;
 import com.finacial.wealth.api.profiling.models.accounts.CountryCurrencyDto;
 import com.finacial.wealth.api.profiling.models.accounts.CountryDto;
 import com.finacial.wealth.api.profiling.models.accounts.ValidationResponse;
+import com.finacial.wealth.api.profiling.repo.AppConfigRepo;
 import com.finacial.wealth.api.profiling.repo.CountriesRepository;
+import com.finacial.wealth.api.profiling.utils.DecodedJWTToken;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.Currency;
@@ -22,6 +27,7 @@ import java.util.Locale;
 import java.util.Set;
 
 import java.util.*;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
@@ -32,9 +38,85 @@ import org.springframework.transaction.annotation.Transactional;
 public class CountryService {
 
     private final CountriesRepository repo;
+    private final AppConfigRepo appConfigRepo;
 
-    public CountryService(CountriesRepository repo) {
+    public CountryService(CountriesRepository repo,
+            AppConfigRepo appConfigRepo) {
         this.repo = repo;
+        this.appConfigRepo = appConfigRepo;
+    }
+
+    public ApiResponseModel getCountriesDetails(String auth) {
+
+        ApiResponseModel responseModel = new ApiResponseModel();
+        int statusCode = 500;
+        String statusMessage = "An error occured,please try again";
+
+        try {
+            statusCode = 400;
+            DecodedJWTToken getDecoded = DecodedJWTToken.getDecoded(auth);
+
+            List<CountriesDetails> allDetails = new ArrayList<>();
+            List<Countries> allCountries = repo.findAll();          // Countries repo
+            List<AppConfig> appConfigs = appConfigRepo.findAll(); // AppConfig repo
+
+            if (allCountries != null && !allCountries.isEmpty()
+                    && appConfigs != null && !appConfigs.isEmpty()) {
+
+                // Build a map of currencyCode -> AppConfig (normalized)
+                Map<String, AppConfig> cfgByCode = appConfigs.stream()
+                        .filter(Objects::nonNull)
+                        .filter(ac -> ac.getConfigName() != null)
+                        .collect(Collectors.toMap(
+                                ac -> norm(ac.getConfigName()),
+                                Function.identity(),
+                                (a, b) -> a // keep first on duplicates
+                        ));
+
+                for (Countries c : allCountries) {
+                    if (c == null || c.getCurrencyCode() == null) {
+                        continue;
+                    }
+
+                    AppConfig matchedCfg = cfgByCode.get(norm(c.getCurrencyCode()));
+                    if (matchedCfg != null) {
+                        // Build a CountriesDetails from the matched country/config
+                        CountriesDetails cd = new CountriesDetails();
+                        // --- populate from Countries ---
+                        cd.setCountryCode(c.getCountryCode());
+                        cd.setCountry(c.getCountry());
+                        cd.setCurrencyCode(c.getCurrencyCode());
+                        cd.setCountrySymbol(c.getCurrencySymbol());
+                        // --- optionally include config fields if your DTO has them ---
+                        // e.g. cd.setMinAmount(matchedCfg.getMinAmount());
+                        //      cd.setMaxAmount(matchedCfg.getMaxAmount());
+                        //      cd.setEnabled(matchedCfg.isEnabled());
+                        //      cd.setConfigName(matchedCfg.getName());
+
+                        allDetails.add(cd);
+                    }
+                }
+            }
+
+            // success response
+            responseModel.setStatusCode(200);
+            responseModel.setDescription("Successful");
+            responseModel.setData(allDetails);
+            return responseModel;
+
+        } catch (Exception ex) {
+            ex.printStackTrace();
+            responseModel.setDescription(statusMessage);
+            responseModel.setStatusCode(statusCode);
+            return responseModel;
+        }
+    }
+
+    /**
+     * Normalize strings for case/space-insensitive compares.
+     */
+    private static String norm(String s) {
+        return s == null ? null : s.trim().toUpperCase(Locale.ENGLISH);
     }
 
     /**
@@ -132,7 +214,7 @@ public class CountryService {
             if (code == null || code.trim().isEmpty() || name == null || name.trim().isEmpty()) {
                 return ValidationResponse.bad(
                         "countryCode and country are required.",
-                        "Provide both fields; examples: code='NG', country='Nigeria'."
+                        "Provide both fields; examples: code=" + code + ", country=" + name + ","
                 );
             }
             final String c = code.trim();

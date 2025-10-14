@@ -15,10 +15,10 @@ import lombok.Data;
 public class AddAccountObj {
 
     private String countryCode;
-    private String walletId;
+   // private String walletId;
     private String country;
     private String bvn;
-    private String phoneNumber;
+   // private String phoneNumber;
     private String requestId;
     private int otp;
 

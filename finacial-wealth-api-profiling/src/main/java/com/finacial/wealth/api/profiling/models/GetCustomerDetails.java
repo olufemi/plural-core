@@ -32,5 +32,6 @@ public class GetCustomerDetails {
     private String usedDailyLimitBalance;
     private String merchantBookedAccountBalance;
     private String walletId;
+    private String currencyCode;
 
 }

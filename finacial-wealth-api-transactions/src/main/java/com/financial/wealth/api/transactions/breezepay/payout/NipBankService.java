@@ -57,8 +57,10 @@ import com.financial.wealth.api.transactions.utils.UttilityMethods;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.sql.Timestamp;
+import java.text.Normalizer;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import org.springframework.beans.factory.annotation.Value;
@@ -69,9 +71,11 @@ import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 
 import java.util.*;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import org.apache.commons.lang.StringUtils;
 import org.joda.time.DateTime;
+import org.springframework.beans.factory.annotation.Autowired;
 
 @Service
 public class NipBankService {
@@ -107,6 +111,14 @@ public class NipBankService {
     private static final SecureRandom RNG = new SecureRandom();
     private static final int LENGTH = 21;
     private static final String CCY = "NGN";
+    private static final int STATUS_CODE_NIGERIA_ONBOARDING_FLOW_CODE = 58;
+    private static final String STATUS_CODE_NIGERIA_ONBOARDING_FLOW_DESCRIPTION = "Please validate bvn";
+    private static final Pattern CONTROL = Pattern.compile("[\\p{Cntrl}&&[^\n\r\t]]");
+    private static final Pattern ZERO_WIDTH = Pattern.compile("[\\u200B-\\u200D\\uFEFF]");
+    private static final byte[] UTF8_BOM = new byte[]{(byte) 0xEF, (byte) 0xBB, (byte) 0xBF};
+
+    @Autowired
+    private org.springframework.core.env.Environment env;
 
     @Value("${fin.wealth.breeze.pay.mer.code.id}")
     private String channelCode;
@@ -115,6 +127,9 @@ public class NipBankService {
     private String merchantId;
 
     @Value("${fin.wealth.breeze.wallet.pay.base.url}")
+    private String banksWalletUrl;
+
+    @Value("${fin.wealth.breeze.pay.base.url}")
     private String banksUrl;
 
     @Value("${spring.profiles.active}")
@@ -128,6 +143,9 @@ public class NipBankService {
     private String subscriptionKey;  // Ocp-Apim-Subscription-Key
     @Value("${fin.wealth.breeze.pay.mer.auth:}")
     private String authorization;      // Bearer <token>
+
+    @Value("${app.nipbanks.seed.fs.path}")
+    private String nipBanksFilePath;
 
     long nowMillis = System.currentTimeMillis();
 
@@ -175,6 +193,23 @@ public class NipBankService {
         this.nipCredAcccTranLogRepo = nipCredAcccTranLogRepo;
     }
 
+    static String stripBom(byte[] raw) {
+        if (raw.length >= 3 && raw[0] == UTF8_BOM[0] && raw[1] == UTF8_BOM[1] && raw[2] == UTF8_BOM[2]) {
+            return new String(raw, 3, raw.length - 3, StandardCharsets.UTF_8);
+        }
+        return new String(raw, StandardCharsets.UTF_8);
+    }
+
+    static String cleanText(String in) {
+        if (in == null) {
+            return null;
+        }
+        String s = ZERO_WIDTH.matcher(in).replaceAll("");
+        s = CONTROL.matcher(s).replaceAll("");
+        s = Normalizer.normalize(s, Normalizer.Form.NFKC);
+        return s.trim();
+    }
+
     private static int parseDaysSafely(String raw, int fallback) {
         if (raw == null || raw.trim().isEmpty()) {
             return fallback;
@@ -209,9 +244,7 @@ public class NipBankService {
 
             boolean isWalletIdSender = true;
             boolean isPhonenUmberSender = false;
-            String receiverPhoneNumber = null;
             String senderPhoneNumber = null;
-            List<RegWalletInfo> getReceiver = null;
             List<RegWalletInfo> getSender = null;
 
             if (GlobalMethods.isTenDigits(rq.getSender().trim()) == false) {
@@ -222,6 +255,20 @@ public class NipBankService {
 
             List<AddAccountDetails> getVirtDe = addAccountDetailsRepo.findByEmailAddress(getDecoded.emailAddress);
             if (getVirtDe.size() > 0) {
+
+                String senderVirtAcct = getVirtDe.get(0).getAccountNumber() == null ? "0" : getVirtDe.get(0).getAccountNumber();
+
+                if (getVirtDe.get(0).getAccountNumber().equals("0")) {
+                    PaymentsFailedTransInfo procFailedTrans = new PaymentsFailedTransInfo(
+                            "Wallet-Bank-Transfer", "Wallet to Bank transfer," + STATUS_CODE_NIGERIA_ONBOARDING_FLOW_DESCRIPTION,
+                            String.valueOf(GlobalMethods.generateTransactionId()), "", channel,
+                            "Payment-Service"
+                    );
+                    responseModel.setDescription(STATUS_CODE_NIGERIA_ONBOARDING_FLOW_DESCRIPTION);
+                    responseModel.setStatusCode(STATUS_CODE_NIGERIA_ONBOARDING_FLOW_CODE);
+                    return responseModel;
+
+                }
 
                 if (getVirtDe.get(0).getAccountNumber().equals(rq.getBankAccount().trim())) {
 
@@ -271,12 +318,12 @@ public class NipBankService {
             if (!isCountryReady) {
 
                 PaymentsFailedTransInfo procFailedTrans = new PaymentsFailedTransInfo(
-                        "Wallet-Bank-Transfer", "Wallet to Bank transfer, Country not yte available!",
+                        "Wallet-Bank-Transfer", "Wallet to Bank transfer, Country not yet available!",
                         String.valueOf(GlobalMethods.generateTransactionId()), "", channel,
                         "Payment-Service"
                 );
 
-                responseModel.setDescription("Wallet to Bank transfer, Country not yte available!");
+                responseModel.setDescription("Wallet to Bank transfer, Country not yet available!");
                 responseModel.setStatusCode(statusCode);
 
                 localTransFailedTransInfoRepo.save(procFailedTrans);
@@ -369,7 +416,23 @@ public class NipBankService {
 
             }
 
-            if (receiverPhoneNumber.equals(getDecoded.phoneNumber)) {
+            if (!getDecoded.phoneNumber.equals(senderPhoneNumber)) {
+
+                PaymentsFailedTransInfo procFailedTrans = new PaymentsFailedTransInfo(
+                        "Wallet-Bank-Transfer", "Wallet to Bank transfer, invalid sender!",
+                        String.valueOf(GlobalMethods.generateTransactionId()), "", channel,
+                        "Payment-Service"
+                );
+
+                responseModel.setDescription("Wallet to Bank transfer, invalid sender!");
+                responseModel.setStatusCode(statusCode);
+
+                localTransFailedTransInfoRepo.save(procFailedTrans);
+                return responseModel;
+
+            }
+
+            if (rq.getReceiver().equals(getDecoded.phoneNumber)) {
 
                 PaymentsFailedTransInfo procFailedTrans = new PaymentsFailedTransInfo(
                         "Wallet-Wallet-Transfer", "Wallet to Wallet transfer, invalid transaction, Customer cannot transfer to self!",
@@ -393,7 +456,7 @@ public class NipBankService {
             boolean isBeforeYesterday = false;
 
             //  System.out.println("Sender Request walletId :::::::: " + "     " + getSender.get(0).getWalletId());
-            List<UserLimitConfig> userLimit1 = userLimitConfigRepo.findByWalletNumber(getSender.get(0).getWalletId());
+            /* List<UserLimitConfig> userLimit1 = userLimitConfigRepo.findByWalletNumber(getSender.get(0).getWalletId());
             List<DeviceChangeLimitConfig> deviceLimit1 = deviceChangeLimitConfigRepo.findByWalletNumberList(getDecoded.phoneNumber);
             String getActiveCat1 = userLimit1.get(0).getTierCategory();
             if (deviceLimit1 != null && !deviceLimit1.isEmpty()) {
@@ -420,9 +483,10 @@ public class NipBankService {
                 }
             }
 
-            List<GlobalLimitConfig> getG1 = globalLimitConfigRepo.findByLimitCategory(getActiveCat1);
+            List<GlobalLimitConfig> getG1 = globalLimitConfigRepo.findByLimitCategory(getActiveCat1);*/
+            List<AddAccountDetails> getNigDe = addAccountDetailsRepo.findByEmailAddress(getDecoded.emailAddress);
 
-            BaseResponse getTotalBal = localTransferService.getTotalBal(auth);
+            BaseResponse getTotalBal = localTransferService.getTotalBalByPhoneNumb(getNigDe.get(0).getAccountNumber());
 
             if (getTotalBal.getStatusCode() != 200) {
                 PaymentsFailedTransInfo procFailedTrans = new PaymentsFailedTransInfo(
@@ -441,6 +505,7 @@ public class NipBankService {
 
             Object amountObj = getTotalBal.getData().get("accountBalance");
             BigDecimal amount = BigDecimal.ZERO;
+            BigDecimal transAmount = new BigDecimal(rq.getAmount());
 
             if (amountObj instanceof BigDecimal) {
                 amount = (BigDecimal) amountObj;
@@ -455,10 +520,66 @@ public class NipBankService {
             System.out.println("Gotten account balance: " + amount);
 
             //get account balance
-            BigDecimal accountBal1 = amount;
+            BigDecimal accountBal = amount;
+
+            if (new BigDecimal(utilMeth.minAcctBalance()).compareTo(accountBal) == 1) {
+
+                PaymentsFailedTransInfo procFailedTrans = new PaymentsFailedTransInfo(
+                        "Wallet-Bank-Transfer", "Wallet to Bank transfer - Sorry, Your minimum account balance is: " + utilMeth.minAcctBalance(),
+                        String.valueOf(GlobalMethods.generateTransactionId()), "", channel,
+                        "Payment-Service"
+                );
+                localTransFailedTransInfoRepo.save(procFailedTrans);
+                responseModel.setStatusCode(400);
+                responseModel.setDescription("Wallet to Bank transfer - Sorry, Your minimum account balance is: " + utilMeth.minAcctBalance());
+                return responseModel;
+
+            }
+
+            if (new BigDecimal(utilMeth.minAcctBalance()).compareTo(accountBal) == 0) {
+
+                PaymentsFailedTransInfo procFailedTrans = new PaymentsFailedTransInfo(
+                        "Wallet-Bank-Transfer", "Wallet to Bank transfer - Sorry, Your minimum account balance is: " + utilMeth.minAcctBalance(),
+                        String.valueOf(GlobalMethods.generateTransactionId()), "", channel,
+                        "Payment-Service"
+                );
+                localTransFailedTransInfoRepo.save(procFailedTrans);
+                responseModel.setStatusCode(400);
+                responseModel.setDescription("Wallet to Bank transfer - Sorry, Your minimum account balance is: " + utilMeth.minAcctBalance());
+                return responseModel;
+
+            }
+
+            if (transAmount.compareTo(accountBal) == 1) {
+
+                PaymentsFailedTransInfo procFailedTrans = new PaymentsFailedTransInfo(
+                        "Wallet-Bank-Transfer", "Wallet to Bank transfer - Sorry, your account balance is insufficient. Your account balance is " + accountBal.toString(),
+                        String.valueOf(GlobalMethods.generateTransactionId()), "", channel,
+                        "Payment-Service"
+                );
+                localTransFailedTransInfoRepo.save(procFailedTrans);
+                responseModel.setStatusCode(400);
+                responseModel.setDescription("Wallet to Bank transfer - Sorry, your account balance is insufficient. Your account balance is " + accountBal.toString());
+                return responseModel;
+
+            }
+
+            if (transAmount.compareTo(accountBal) == 0) {
+
+                PaymentsFailedTransInfo procFailedTrans = new PaymentsFailedTransInfo(
+                        "Wallet-Bank-Transfer", "Wallet to Bank transfer - Sorry insufficient fund, Your minimum account balance is: " + utilMeth.minAcctBalance(),
+                        String.valueOf(GlobalMethods.generateTransactionId()), "", channel,
+                        "Payment-Service"
+                );
+                localTransFailedTransInfoRepo.save(procFailedTrans);
+                responseModel.setStatusCode(400);
+                responseModel.setDescription("Wallet to Bank transfer - Sorry insufficient fund, Your minimum account balance is: " + utilMeth.minAcctBalance());
+                return responseModel;
+
+            }
 
             //a.compareTo(b) 
-            if (isBeforeYesterday == true) {
+            /* if (isBeforeYesterday == true) {
                 if (accountBal1.compareTo(new BigDecimal(getG1.get(0).getMaximumBalance())) > 0) {
 
                     PaymentsFailedTransInfo procFailedTrans = new PaymentsFailedTransInfo(
@@ -474,32 +595,29 @@ public class NipBankService {
                     return responseModel;
 
                 }
-            }
-
-            rq.setSender(senderPhoneNumber);
-            System.out.println("getDecoded.phoneNumber :::::::: " + "     " + getDecoded.phoneNumber);
+            }*/
+            rq.setSender(getNigDe.get(0).getAccountNumber());
+            // System.out.println("getDecoded.phoneNumber :::::::: " + "     " + getDecoded.phoneNumber);
             System.out.println("rq.getSender() :::::::: " + "     " + rq.getSender());
 
-            if (!rq.getSender().trim().equals(getDecoded.phoneNumber.trim())) {
-
+            //  List<FinWealthPayServiceConfig> getKulList = kuleanPayServiceConfigRepo.findByServiceTypeEnable("payouttransfer");
+            List<FinWealthPayServiceConfig> getKulList = kuleanPayServiceConfigRepo.findByServiceTypeEnable("payouttransfer");
+            if (getKulList.size() <= 0) {
                 PaymentsFailedTransInfo procFailedTrans = new PaymentsFailedTransInfo(
-                        "Wallet-Wallet-Transfer", "Wallet to Wallet transfer, invalid sender!",
+                        "Wallet-Wallet-Transfer", "Wallet to Wallet transfer, Service Type does not exist!",
                         String.valueOf(GlobalMethods.generateTransactionId()), "", channel,
                         "Local-Transfer-Service"
                 );
-
-                responseModel.setDescription("Wallet to Wallet transfer, invalid sender!");
-                responseModel.setStatusCode(statusCode);
-
                 localTransFailedTransInfoRepo.save(procFailedTrans);
-                return responseModel;
 
+                responseModel.setStatusCode(400);
+                responseModel.setDescription("Service Type does not exist!");
+                return responseModel;
             }
 
-            //  List<FinWealthPayServiceConfig> getKulList = kuleanPayServiceConfigRepo.findByServiceTypeEnable("payouttransfer");
             Optional<FinWealthPayServiceConfig> getKul = kuleanPayServiceConfigRepo.findAllByServiceType("payouttransfer");
 
-            List<CommissionCfg> pullData = findAllByTransactionType("localtransfer");
+            List<CommissionCfg> pullData = findAllByTransactionType("payouttransfer");
             if (pullData.size() > 0) {
                 if (pullData.isEmpty()) {
 
@@ -602,26 +720,13 @@ public class NipBankService {
                             // String dataStr = new Gson().toJson(validateAcctDe.getData());
                             //JsonObject trRp = new Gson().fromJson(dataStr, JsonObject.class);
                             account_name = validateAcctDe.getResponseData().getAccountName();
+
+                        } else {
+                            account_name = "John Joe Kecshi.";
                         }
 
                         // if (!environment.equals("prod")) {
                         //    }
-                        if (!getDecoded.phoneNumber.equals(rq.getSender())) {
-
-                            PaymentsFailedTransInfo procFailedTrans = new PaymentsFailedTransInfo(
-                                    "Wallet-Bank-Transfer", "Wallet to Bank transfer, invalid sender!",
-                                    String.valueOf(GlobalMethods.generateTransactionId()), "", channel,
-                                    "Payment-Service"
-                            );
-
-                            responseModel.setDescription("Wallet to Bank transfer, invalid sender!");
-                            responseModel.setStatusCode(statusCode);
-
-                            localTransFailedTransInfoRepo.save(procFailedTrans);
-                            return responseModel;
-
-                        }
-
                         if (!getKul.get().isEnabled()) {
 
                             PaymentsFailedTransInfo procFailedTrans = new PaymentsFailedTransInfo(
@@ -656,20 +761,20 @@ public class NipBankService {
                             return responseModel;
                         }
 
-                        RegWalletCheckLog logTransUp = regWalletCheckLogRepo.findByPhoneNumberId(rq.getSender());
+                        RegWalletCheckLog logTransUp = regWalletCheckLogRepo.findByPhoneNumberId(getDecoded.phoneNumber);
                         logTransUp.setLTransServiceType(getKul.get().getServiceType());
                         logTransUp.setLTransSessAmount(new BigDecimal(rq.getAmount()));
                         logTransUp.setLTransSessFees(pFees);
                         logTransUp.setLTransSessReceiverName(account_name);
                         logTransUp.setLTransSessReceiverAccountNo(rq.getBankAccount());
-                        logTransUp.setLTransSessSenderWalletNo(getDecoded.phoneNumber);
+                        logTransUp.setLTransSessSenderWalletNo(getNigDe.get(0).getAccountNumber());
                         logTransUp.setProcessId(processId);
                         logTransUp.setProcessIdStatus("1");
                         logTransUp.setLastModifiedDate(Instant.now());
                         logTransUp.setBankCode(rq.getBankCode());
                         logTransUp.setBankName(rq.getBankName());
                         logTransUp.setTheNarration(rq.getTheNarration());
-                        logTransUp.setSenderVirtualAccount(senderVirtAccount);
+                        logTransUp.setSenderVirtualAccount(getNigDe.get(0).getVirtualAccountNumber());
                         regWalletCheckLogRepo.save(logTransUp);
 
                         //requestForPayOutLogRepo
@@ -679,7 +784,7 @@ public class NipBankService {
                         logTransUplOG.setLTransSessFees(pFees.toString());
                         logTransUplOG.setLTransSessReceiverName(account_name);
                         logTransUplOG.setLTransSessReceiverAccountNo(rq.getBankAccount());
-                        logTransUplOG.setLTransSessSenderWalletNo(getDecoded.phoneNumber);
+                        logTransUplOG.setLTransSessSenderWalletNo(getNigDe.get(0).getAccountNumber());
                         logTransUplOG.setProcessId(processId);
                         logTransUplOG.setProcessIdStatus("1");
                         logTransUplOG.setProcessIdStatusDesc("in-progress");
@@ -689,11 +794,11 @@ public class NipBankService {
                         logTransUplOG.setTheNarration(rq.getTheNarration());
                         logTransUplOG.setWalletNo(getDecoded.phoneNumber);
                         logTransUplOG.setRequestChannel(channel);
-                        logTransUplOG.setSenderVirtualAccount(senderVirtAccount);
+                        logTransUplOG.setSenderVirtualAccount(getNigDe.get(0).getVirtualAccountNumber());
                         requestForPayOutLogRepo.save(logTransUplOG);
 
                         responseModel.addData("processId", processId);
-                        responseModel.addData("sender", getDecoded.phoneNumber);
+                        responseModel.addData("sender", getNigDe.get(0).getAccountNumber());
                         responseModel.addData("accountName", account_name);
                         responseModel.addData("accountNumber", rq.getBankAccount());
                         responseModel.addData("transactionType", getKul.get().getServiceType());
@@ -751,7 +856,24 @@ public class NipBankService {
 
             List<RegWalletCheckLog> getNameLookUpDe = regWalletCheckLogRepo.findByProcessIdList(rq.getProcessId());
 
-            if (!getDecoded.phoneNumber.equals(getNameLookUpDe.get(0).getLTransSessSenderWalletNo())) {
+            if (getNameLookUpDe.size() > 0) {
+                if (getNameLookUpDe.get(0).getProcessIdStatus().equals("2")) {
+                    PaymentsFailedTransInfo procFailedTrans = new PaymentsFailedTransInfo(
+                            "Wallet-Bank-Transfer", "Wallet to Bank transfer, " + "Suspected fraud, this transaction no longer exists",
+                            String.valueOf(GlobalMethods.generateTransactionId()), "", channel,
+                            "Payment-Service"
+                    );
+
+                    responseModel.setDescription("Wallet to Bank transfer, " + "Suspected fraud,this transaction no longer exists");
+                    responseModel.setStatusCode(statusCode);
+
+                    localTransFailedTransInfoRepo.save(procFailedTrans);
+                    return responseModel;
+
+                }
+            }
+
+            /*if (!getDecoded.phoneNumber.equals(getNameLookUpDe.get(0).getLTransSessSenderWalletNo())) {
                 PaymentsFailedTransInfo procFailedTrans = new PaymentsFailedTransInfo(
                         "Wallet-Bank-Transfer", "Wallet to Bank transfer, " + "Suspected fraud!",
                         String.valueOf(GlobalMethods.generateTransactionId()), "", channel,
@@ -763,8 +885,7 @@ public class NipBankService {
 
                 localTransFailedTransInfoRepo.save(procFailedTrans);
                 return responseModel;
-            }
-
+            }*/
             if (!rq.getBankCode().equals(getNameLookUpDe.get(0).getBankCode())) {
                 PaymentsFailedTransInfo procFailedTrans = new PaymentsFailedTransInfo(
                         "Wallet-Bank-Transfer", "Wallet to Bank transfer, " + "Invalid Receiver's bank!",
@@ -817,7 +938,7 @@ public class NipBankService {
 
             }
 
-            System.out.println("iisWalletIdSenderBool :::::::: " + "     " + isWalletIdSender);
+            /* System.out.println("iisWalletIdSenderBool :::::::: " + "     " + isWalletIdSender);
 
             System.out.println("isPhonenUmberSenderBool :::::::: " + "     " + isPhonenUmberSender);
 
@@ -858,9 +979,9 @@ public class NipBankService {
 
                 }
                 senderPhoneNumber = getSenderEraly.get(0).getPhoneNumber();
-            }
+            }*/
 
-            if (isPhonenUmberSender) {
+ /* if (isPhonenUmberSender) {
 
                 System.out.println("isPhonenUmberSender :::::::: " + "     ");
 
@@ -886,8 +1007,7 @@ public class NipBankService {
 
             }
 
-            rq.setSender(senderPhoneNumber);
-
+            rq.setSender(senderPhoneNumber);*/
             //check if sender is the same
             if (!getNameLookUpDe.get(0).getLTransSessSenderWalletNo().equals(rq.getSender())) {
 
@@ -925,7 +1045,8 @@ public class NipBankService {
             System.out.println("getNameLookUpDeAmount " + "  ::::::::::::::::::::: " + getNameLookUpDeAmount);
             System.out.println("amount " + "  ::::::::::::::::::::: " + amount);
 
-            if (!getNameLookUpDe.get(0).getLTransSessAmount().toString().equals(rq.getAmount().trim())) {
+            // if (!getNameLookUpDe.get(0).getLTransSessAmount().toString().equals(rq.getAmount().trim())) {
+            if (getNameLookUpDe.get(0).getLTransSessAmount().compareTo(new BigDecimal(rq.getAmount().trim())) != 0) {
 
                 PaymentsFailedTransInfo procFailedTrans = new PaymentsFailedTransInfo(
                         "Wallet-Bank-Transfer", "Wallet to Bank transfer, invalid transaction, amount!",
@@ -940,7 +1061,7 @@ public class NipBankService {
                 return responseModel;
             }
             //check if fees is the same
-            if (!getNameLookUpDe.get(0).getLTransSessFees().equals(rq.getFees())) {
+            if (getNameLookUpDe.get(0).getLTransSessFees().compareTo(new BigDecimal(rq.getFees().trim())) != 0) {
 
                 PaymentsFailedTransInfo procFailedTrans = new PaymentsFailedTransInfo(
                         "Wallet-Bank-Transfer", "Wallet to Bank transfer, invalid transaction, fees!",
@@ -1008,7 +1129,7 @@ public class NipBankService {
             BigDecimal amountTSendToCus = new BigDecimal(rq.getAmount());
             rq.setAmount(finalChrges.toString());
 
-            BaseResponse secondCheck = validateTransferOthers(rq, channel, auth);
+            /* BaseResponse secondCheck = validateTransferOthers(rq, channel, auth);
 
             System.out.println("secondCheck " + "  ::::::::::::::::::::: " + secondCheck);
 
@@ -1018,10 +1139,9 @@ public class NipBankService {
                 responseModel.setStatusCode(secondCheck.getStatusCode());
                 return responseModel;
 
-            }
-
+            }*/
             rq.setAmount(amountTSendToCus.toString());
-            List<RegWalletInfo> getSender = regWalletInfoRepository.findByPhoneNumberData(rq.getSender());
+            List<RegWalletInfo> getSender = regWalletInfoRepository.findByPhoneNumberData(getDecoded.phoneNumber);
 
             String senderName;
             senderName = getSender.get(0).getFirstName() + " " + getSender.get(0).getLastName();
@@ -1061,83 +1181,115 @@ public class NipBankService {
                 localTransFailedTransInfoRepo.save(procFailedTrans);
                 return responseModel;
             }
+            //LOCAL, DEV or STAGING ENVIRONMENT 
+            System.out.println("Environment" + "   ::::::::::::::::::::: " + "Local, Dev or Staging");
+            //I call ledger api to debit sender 
 
-            if (environment.equals("prod") || environment.equals("pilot")) {
-            } else {
-                //LOCAL, DEV or STAGING ENVIRONMENT 
-                System.out.println("Environment" + "   ::::::::::::::::::::: " + "Local, Dev or Staging");
-                //I call ledger api to debit sender 
+            DebitWalletCaller rqD = new DebitWalletCaller();
+            rqD.setAuth(auth);
+            rqD.setFees(kulFees.toString());
+            rqD.setFinalCHarges(finalChrges.toString());
+            rqD.setNarration("Debit account");
+            rqD.setPhoneNumber(rq.getSender());
+            rqD.setTransAmount(rq.getAmount());
+            rqD.setTransactionId(rq.getProcessId());
+            BaseResponse debitAcct = utilMeth.debitCustomerWithType(rqD, "CUSTOMER", CCY);
 
-                DebitWalletCaller rqD = new DebitWalletCaller();
-                rqD.setAuth(auth);
-                rqD.setFees(kulFees.toString());
-                rqD.setFinalCHarges(finalChrges.add(kulFees).toString());
-                rqD.setNarration("Debit account");
-                rqD.setPhoneNumber(rq.getSender());
-                rqD.setTransAmount(rq.getAmount());
-                rqD.setTransactionId(rq.getProcessId());
-                BaseResponse debitAcct = utilMeth.debitCustomerWithType(rqD, "CUSTOMER", CCY);
+            System.out.println("debitAcct" + "   ::::::::::::::::::::: " + debitAcct);
 
-                System.out.println("debitAcct" + "   ::::::::::::::::::::: " + debitAcct);
+            if (debitAcct.getStatusCode() == 200) {
 
-                if (debitAcct.getStatusCode() == 200) {
+                DebitWalletCaller debGLCredit = new DebitWalletCaller();
+                debGLCredit.setAuth("Sender");
+                debGLCredit.setFees("0.00");
+                debGLCredit.setFinalCHarges(amount);
+                debGLCredit.setNarration("NGN_Withdrawal");
+                debGLCredit.setPhoneNumber(localTransferService.decryptData(utilMeth.getSETTING_KEY_WALLET_SYSTEM_SYSTEM_GG_NIG()));
+                debGLCredit.setTransAmount(amount);
+                debGLCredit.setTransactionId(rq.getProcessId());
 
-                    DebitWalletCaller debGLCredit = new DebitWalletCaller();
-                    debGLCredit.setAuth("Sender");
-                    debGLCredit.setFees("0.00");
-                    debGLCredit.setFinalCHarges(amount);
-                    debGLCredit.setNarration("NGN_Withdrawal");
-                    debGLCredit.setPhoneNumber(localTransferService.decryptData(utilMeth.getSETTING_KEY_WALLET_SYSTEM_SYSTEM_GG_NIG()));
-                    debGLCredit.setTransAmount(amount);
-                    debGLCredit.setTransactionId(rq.getProcessId());
+                utilMeth.debitCustomerWithType(debGLCredit, "NGN_GL", CCY);
 
-                    utilMeth.debitCustomerWithType(debGLCredit, "NGN_GL", CCY);
+                //System.out.println("processKuleanPaymentTransactionLedger" + "   ::::::::::::::::::::: " + bProcLed.getDescription());
+                FinWealthPaymentTransaction kTrans2 = new FinWealthPaymentTransaction();
+                kTrans2.setAmmount(finalChrges);
+                kTrans2.setSentAmount(amountTSendToCus.toString());
+                kTrans2.setCreatedDate(Instant.now());
+                kTrans2.setFees(kulFees);
+                kTrans2.setPaymentType("Transfer to Bank Account");
+                kTrans2.setReceiver(rq.getReceiverBankAccount());
+                kTrans2.setReceiverName(rq.getReceiverAccountName());
+                kTrans2.setSenderName(senderName);
+                kTrans2.setReceiverBankCode(rq.getBankCode());
+                kTrans2.setReceiverBankName(rq.getBankName());
+                kTrans2.setCurrencyCode(CCY);
 
-                    //System.out.println("processKuleanPaymentTransactionLedger" + "   ::::::::::::::::::::: " + bProcLed.getDescription());
-                    FinWealthPaymentTransaction kTrans2 = new FinWealthPaymentTransaction();
-                    kTrans2.setAmmount(finalChrges);
-                    kTrans2.setSentAmount(amountTSendToCus.toString());
-                    kTrans2.setCreatedDate(Instant.now());
-                    kTrans2.setFees(kulFees);
-                    kTrans2.setPaymentType("Transfer to Bank Account");
-                    kTrans2.setReceiver(rq.getReceiverBankAccount());
-                    kTrans2.setReceiverName(rq.getReceiverAccountName());
-                    kTrans2.setSenderName(senderName);
-                    kTrans2.setReceiverBankCode(rq.getBankCode());
-                    kTrans2.setReceiverBankName(rq.getBankName());
+                kTrans2.setSender(getDecoded.phoneNumber);
+                kTrans2.setTransactionId(rq.getProcessId());
+                kTrans2.setTransactionType("Withdrawal");
+                kTrans2.setWalletNo(getDecoded.phoneNumber);
+                finWealthPaymentTransactionRepo.save(kTrans2);
 
-                    kTrans2.setSender(getDecoded.phoneNumber);
-                    kTrans2.setTransactionId(rq.getProcessId());
-                    kTrans2.setTransactionType("Withdrawal");
-                    kTrans2.setWalletNo(getDecoded.phoneNumber);
-                    finWealthPaymentTransactionRepo.save(kTrans2);
+                NipCreditAccountTransferRequest nipReq = new NipCreditAccountTransferRequest();
+                nipReq.setChannelCode(channelCode);
+                nipReq.setCreditAccount(rq.getReceiverBankAccount());
+                nipReq.setCreditBankCode(rq.getBankCode());
+                nipReq.setDebitCustomerId(kTrans2.getSender());
+                nipReq.setDebitMerchantId(merchantId);
+                nipReq.setDebitVirtualAccount(getNameLookUpDe.get(0).getSenderVirtualAccount());
+                nipReq.setTransactionAmount(amountTSendToCus);
+                nipReq.setTransactionNarration(getnarration);
+                nipReq.setTransactionReference(rq.getProcessId());
 
-                    NipCreditAccountTransferRequest nipReq = new NipCreditAccountTransferRequest();
-                    nipReq.setChannelCode(channelCode);
-                    nipReq.setCreditAccount(rq.getReceiverBankAccount());
-                    nipReq.setCreditBankCode(rq.getBankCode());
-                    nipReq.setDebitCustomerId(kTrans2.getSender());
-                    nipReq.setDebitMerchantId(merchantId);
-                    nipReq.setDebitVirtualAccount(getNameLookUpDe.get(0).getSenderVirtualAccount());
-                    nipReq.setTransactionAmount(amountTSendToCus);
-                    nipReq.setTransactionNarration(getnarration);
-                    nipReq.setTransactionReference(rq.getProcessId());
+                NipCredAcccTranLog nipReqLog = new NipCredAcccTranLog();
+                nipReqLog.setChannelCode(channelCode);
+                nipReqLog.setCreditAccount(rq.getReceiverBankAccount());
+                nipReqLog.setCreditBankCode(rq.getBankCode());
+                nipReqLog.setDebitCustomerId(kTrans2.getSender());
+                nipReqLog.setDebitMerchantId(merchantId);
+                nipReqLog.setDebitVirtualAccount(getNameLookUpDe.get(0).getSenderVirtualAccount());
+                nipReqLog.setTransactionAmount(amountTSendToCus);
+                nipReqLog.setTransactionNarration(getnarration);
+                nipReqLog.setTransactionReference(rq.getProcessId());
 
-                    NipCredAcccTranLog nipReqLog = new NipCredAcccTranLog();
-                    nipReqLog.setChannelCode(channelCode);
-                    nipReqLog.setCreditAccount(rq.getReceiverBankAccount());
-                    nipReqLog.setCreditBankCode(rq.getBankCode());
-                    nipReqLog.setDebitCustomerId(kTrans2.getSender());
-                    nipReqLog.setDebitMerchantId(merchantId);
-                    nipReqLog.setDebitVirtualAccount(getNameLookUpDe.get(0).getSenderVirtualAccount());
-                    nipReqLog.setTransactionAmount(amountTSendToCus);
-                    nipReqLog.setTransactionNarration(getnarration);
-                    nipReqLog.setTransactionReference(rq.getProcessId());
+                if (environment.equals("prod") || environment.equals("pilot")) {
+                    NipCreditTransferResponse nipCre = new NipCreditTransferResponse();
+                    nipCre = breezePayVirtAcctProxy.makePayment(nipReq, auth, subscriptionKey);
+                    if (nipCre.getResponseCode() != "00") {
+                        nipReqLog.setResponseCode(nipCre.getResponseCode());
+                        nipReqLog.setResponseMessage(nipCre.getResponseMessage());
+                        nipReqLog.setResponseReference(nipCre.getTransactionReference());
+                        nipReqLog.setResponseCode(nipCre.getResponseCode());
+                        nipReqLog.setResponseMessage(nipCre.getResponseMessage());
+                        nipReqLog.setResponseReference(nipCre.getTransactionReference());
+                        nipReqLog.setCreatedDate(Instant.now());
+                        nipCredAcccTranLogRepo.save(nipReqLog);
+
+                        nipCredAcccTranLogRepo.save(nipReqLog);
+                        //mark for roll back
+                        List<SuccessDebitLog> getSucc = successDebitLogRepo.findByTransactionId(rq.getProcessId());
+                        if (getSucc.size() > 0) {
+
+                            SuccessDebitLog getSuccUpDate = successDebitLogRepo.findByTransactionIdUpdate(rq.getProcessId());
+                            getSuccUpDate.setMarkForRollBack(1);
+                            getSuccUpDate.setLastModifiedDate(Instant.now());
+                            successDebitLogRepo.save(getSuccUpDate);
+
+                        }
+                        responseModel.setDescription("Wallet to Bank transfer, your request is being processed, Thank you.");
+                        responseModel.setStatusCode(statusCode);
+
+                        return responseModel;
+                    }
+                } else {
+                    NipCreditTransferResponse nipCre = new NipCreditTransferResponse();
+
+                    nipCre.setResponseCode("00");
+                    nipCre.setResponseMessage("Transaction successful");
+                    nipCre.setTransactionReference("BRZ" + String.valueOf(GlobalMethods.generateTransactionId()));
 
                     //
-                    NipCreditTransferResponse nipCre = breezePayVirtAcctProxy.makePayment(nipReq, auth, subscriptionKey);
-
-                    if (nipCre.getResponseCode() != "00") {
+                    /* if (nipCre.getResponseCode() != "00") {
                         nipReqLog.setResponseCode(nipCre.getResponseCode());
                         nipReqLog.setResponseMessage(nipCre.getResponseMessage());
                         nipReqLog.setResponseReference(nipCre.getTransactionReference());
@@ -1156,105 +1308,105 @@ public class NipBankService {
                         responseModel.setStatusCode(statusCode);
 
                         return responseModel;
-                    }
-
+                    }*/
                     nipReqLog.setResponseCode(nipCre.getResponseCode());
                     nipReqLog.setResponseMessage(nipCre.getResponseMessage());
                     nipReqLog.setResponseReference(nipCre.getTransactionReference());
+                    nipReqLog.setCreatedDate(Instant.now());
                     nipCredAcccTranLogRepo.save(nipReqLog);
 
-                    //save to wallet to wallet log
-                    WToBankTransfer saveWalletT = new WToBankTransfer(
-                            rq.getProcessId(), true,
-                            rq.getSender(), new BigDecimal(rq.getAmount()),
-                            finalChrges.add(kulFees), rq.getReceiverBankAccount(),
-                            new BigDecimal(rq.getAmount()),
-                            kulFees,
-                            narration, getKul.get().getServiceType(), getNameLookUpDe.get(0).getLTransSessReceiverName());
-                    wToBankTransferRepo.save(saveWalletT);
-                    //update regWalletCheck
-                    RegWalletCheckLog logTransUp = regWalletCheckLogRepo.findByPhoneNumberId(rq.getSender());
-                    logTransUp.setProcessIdStatus("2");
-                    logTransUp.setLastModifiedDate(Instant.now());
-                    String procWalletTransferCumm = getNameLookUpDe.get(0).getWithdrawalcUMM() == null ? "0" : getNameLookUpDe.get(0).getWithdrawalcUMM();
-                    logTransUp.setWithdrawalcUMM(new BigDecimal(procWalletTransferCumm).add(finalChrges).toString());
-                    logTransUp.setLTransSessExpiry(expiry);
-                    regWalletCheckLogRepo.save(logTransUp);
+                }
 
-                    List<OtherBankBeneficiaries> getSavedBen = otherBankBeneficiariesRepo.findByWalletNoByBeneficiaryActive(rq.getSender(), rq.getReceiverBankAccount(), "1");
-                    if (getSavedBen.size() > 0) {
+                //save to wallet to wallet log
+                WToBankTransfer saveWalletT = new WToBankTransfer(
+                        rq.getProcessId(), true,
+                        rq.getSender(), new BigDecimal(rq.getAmount()),
+                        finalChrges.add(kulFees), rq.getReceiverBankAccount(),
+                        new BigDecimal(rq.getAmount()),
+                        kulFees,
+                        narration, getKul.get().getServiceType(), getNameLookUpDe.get(0).getLTransSessReceiverName());
+                wToBankTransferRepo.save(saveWalletT);
+                //update regWalletCheck
+                RegWalletCheckLog logTransUp = regWalletCheckLogRepo.findByPhoneNumberId(getDecoded.phoneNumber);
+                logTransUp.setProcessIdStatus("2");
+                logTransUp.setLastModifiedDate(Instant.now());
+                String procWalletTransferCumm = getNameLookUpDe.get(0).getWithdrawalcUMM() == null ? "0" : getNameLookUpDe.get(0).getWithdrawalcUMM();
+                logTransUp.setWithdrawalcUMM(new BigDecimal(procWalletTransferCumm).add(finalChrges).toString());
+                logTransUp.setLTransSessExpiry(expiry);
+                regWalletCheckLogRepo.save(logTransUp);
 
-                        OtherBankBeneficiaries getSavedBenUp = otherBankBeneficiariesRepo.findByWalletNoByBeneficiaryActiveUpdate(rq.getSender(), rq.getReceiverBankAccount(), "1");
-                        getSavedBenUp.setTransactionCount(getSavedBen.get(0).getTransactionCount() + 1);
-                        getSavedBenUp.setLastModifiedDate(Instant.now());
-                        otherBankBeneficiariesRepo.save(getSavedBenUp);
+                List<OtherBankBeneficiaries> getSavedBen = otherBankBeneficiariesRepo.findByWalletNoByBeneficiaryActive(rq.getSender(), rq.getReceiverBankAccount(), "1");
+                if (getSavedBen.size() > 0) {
 
-                    }
+                    OtherBankBeneficiaries getSavedBenUp = otherBankBeneficiariesRepo.findByWalletNoByBeneficiaryActiveUpdate(rq.getSender(), rq.getReceiverBankAccount(), "1");
+                    getSavedBenUp.setTransactionCount(getSavedBen.get(0).getTransactionCount() + 1);
+                    getSavedBenUp.setLastModifiedDate(Instant.now());
+                    otherBankBeneficiariesRepo.save(getSavedBenUp);
 
-                    OtherBankBeneficiariesInd sBen = new OtherBankBeneficiariesInd();
-                    sBen.setBeneficiaryName(rq.getReceiverAccountName());
-                    sBen.setBeneficiaryNo(rq.getReceiverBankAccount());
-                    sBen.setBankCode(rq.getBankCode());
-                    sBen.setBankName(rq.getBankName());
-                    sBen.setBeneficiaryStatus("1");
-                    sBen.setCreatedDate(Instant.now());
-                    sBen.setWalletNo(getDecoded.phoneNumber);
-                    otherBankBeneficiariesIndRepo.save(sBen);
+                }
 
-                    if (getSavedBen.size() > 0) {
-                        responseModel.addData("isBeneficiary", true);
-                    } else {
-                        responseModel.addData("isBeneficiary", false);
-                        responseModel.addData("receiverName", rq.getReceiverAccountName());
-                    }
+                OtherBankBeneficiariesInd sBen = new OtherBankBeneficiariesInd();
+                sBen.setBeneficiaryName(rq.getReceiverAccountName());
+                sBen.setBeneficiaryNo(rq.getReceiverBankAccount());
+                sBen.setBankCode(rq.getBankCode());
+                sBen.setBankName(rq.getBankName());
+                sBen.setBeneficiaryStatus("1");
+                sBen.setCreatedDate(Instant.now());
+                sBen.setWalletNo(getDecoded.phoneNumber);
+                otherBankBeneficiariesIndRepo.save(sBen);
 
-                    PushNotificationFireBase puFireSender = new PushNotificationFireBase();
-                    puFireSender.setBody(pushNotifyDebitWalletForWalletTransferSender(new BigDecimal(rq.getAmount()),
-                            rq.getReceiverAccountName(), rq.getBankName(), getSender.get(0).getFirstName() + " " + getSender.get(0).getLastName()
-                    ));
-                    List<DeviceDetails> getDepuFireSender = deviceDetailsRepo.findAllByWalletId(getSender.get(0).getWalletId());
+                if (getSavedBen.size() > 0) {
+                    responseModel.addData("isBeneficiary", true);
+                } else {
+                    responseModel.addData("isBeneficiary", false);
+                    responseModel.addData("receiverName", rq.getReceiverAccountName());
+                }
 
-                    puFireSender.setTitle("Wallet-To-Bank-Transfer");
-                    if (getDepuFireSender.size() > 0) {
+                PushNotificationFireBase puFireSender = new PushNotificationFireBase();
+                puFireSender.setBody(pushNotifyDebitWalletForWalletTransferSender(new BigDecimal(rq.getAmount()),
+                        rq.getReceiverAccountName(), rq.getBankName(), getSender.get(0).getFirstName() + " " + getSender.get(0).getLastName()
+                ));
+                List<DeviceDetails> getDepuFireSender = deviceDetailsRepo.findAllByWalletId(getSender.get(0).getWalletId());
 
-                        String getToken = getDepuFireSender.get(0).getToken() == null ? "" : getDepuFireSender.get(0).getToken();
+                puFireSender.setTitle("Wallet-To-Bank-Transfer");
+                if (getDepuFireSender.size() > 0) {
 
-                        if (getToken != "") {
+                    String getToken = getDepuFireSender.get(0).getToken() == null ? "" : getDepuFireSender.get(0).getToken();
 
-                            System.out.println("Sender has token::::::::::::::::  %S  ");
+                    if (getToken != "") {
 
-                            puFireSender.setDeviceToken(getDepuFireSender.get(0).getToken());
-                            Map<String, String> data = new HashMap<String, String>();
-                            data.put("type", "ALERT");            // sample custom data
-                            if (puFireSender.getData() != null) {
-                                data.putAll(puFireSender.getData());
-                            }
+                        System.out.println("Sender has token::::::::::::::::  %S  ");
 
-                            /*fcmService.sendToToken(
+                        puFireSender.setDeviceToken(getDepuFireSender.get(0).getToken());
+                        Map<String, String> data = new HashMap<String, String>();
+                        data.put("type", "ALERT");            // sample custom data
+                        if (puFireSender.getData() != null) {
+                            data.putAll(puFireSender.getData());
+                        }
+
+                        /*fcmService.sendToToken(
                                     puFireSender.getDeviceToken(),
                                     puFireSender.getTitle(),
                                     puFireSender.getBody(),
                                     data
                             );*/
-                            messageCenterService.createAndPushToUser(getSender.get(0).getWalletId(), puFireSender.getTitle(),
-                                    puFireSender.getBody(),
-                                    data, null, "");
+                        messageCenterService.createAndPushToUser(getSender.get(0).getWalletId(), puFireSender.getTitle(),
+                                puFireSender.getBody(),
+                                data, null, "");
 
-                        }
                     }
-
-                    responseModel.setDescription("Wallet to Bank transfer, transfer performed successfully, Thank you.");
-                    responseModel.setStatusCode(200);
-
-                    return responseModel;
-
-                } else {
-                    responseModel.setDescription("Wallet to Bank transfer, your request is being processed, Thank you.");
-                    responseModel.setStatusCode(statusCode);
-
-                    return responseModel;
-
                 }
+
+                responseModel.setDescription("Wallet to Bank transfer, transfer performed successfully, Thank you.");
+                responseModel.setStatusCode(200);
+
+                return responseModel;
+            } else {
+                responseModel.setDescription("Wallet to Bank transfer, your request is being processed, Thank you.");
+                responseModel.setStatusCode(statusCode);
+
+                return responseModel;
+
             }
 
         } catch (Exception ex) {
@@ -1332,8 +1484,8 @@ public class NipBankService {
                 return responseModel;
             }
             //process limits
-            List<UserLimitConfig> userLimit = userLimitConfigRepo.findByWalletNumber(getDecoded.phoneNumber);
-            List<DeviceChangeLimitConfig> deviceLimit = deviceChangeLimitConfigRepo.findByWalletNumberList(getDecoded.phoneNumber);
+            List<UserLimitConfig> userLimit = userLimitConfigRepo.findByWalletNumber(senderWalletdetails.get(0).getWalletId());
+            List<DeviceChangeLimitConfig> deviceLimit = deviceChangeLimitConfigRepo.findByWalletNumberList(senderWalletdetails.get(0).getWalletId());
             String getActiveCat = userLimit.get(0).getTierCategory();
             if (deviceLimit.size() > 0) {
                 //get lastModified date, check if it is above last configured day(s)
@@ -1639,24 +1791,43 @@ public class NipBankService {
     /**
      * Your requested signature and wrapper
      */
-    @Transactional
-    public ApiResponseModel getAllBanks() throws ApiClientException {
+    public ApiResponseModel getAllBanks() {
         ApiResponseModel response = new ApiResponseModel();
         int statusCode = 500;
         String description = "Something went wrong";
 
+        System.out.println("Got to before try :::::::: " + "    ::::::::::::::::::::: ");
+
         try {
-            // Serve from DB if already cached
-            statusCode = 400;
+            System.out.println("Got to try :::::::: " + "    ::::::::::::::::::::: ");
+
+            // 1) DB first
             if (repository.count() > 0) {
                 response.setData(toDtoList(repository.findAllByOrderByBankNameAsc()));
                 response.setStatusCode(200);
                 response.setDescription("Successful");
-
+                // System.out.printf("adM ::::::::::::::::  %s%n", new Gson().toJson(response)); // fix %S misuse
                 return response;
             }
 
-            // Else fetch once from Access, store, then return
+            // 2) Filesystem seed (server path)
+            if (seedFromFilesystemIfEnabledAndEmpty()) {
+                System.out.println("Entered seedFromFilesystemIfEnabledAndEmpty :::::::: " + "   ");
+                response.setData(toDtoList(repository.findAllByOrderByBankNameAsc()));
+                response.setStatusCode(200);
+                response.setDescription("Successful (seeded from filesystem)");
+                return response;
+            }
+
+            // 3) Classpath seed (resources/)
+            if (seedFromClasspathIfEnabledAndEmpty()) {
+                response.setData(toDtoList(repository.findAllByOrderByBankNameAsc()));
+                response.setStatusCode(200);
+                response.setDescription("Successful (seeded from classpath)");
+                return response;
+            }
+
+            // 4) Remote call once, then persist — handle BOM/encoding and hidden chars
             HttpHeaders headers = new HttpHeaders();
             if (subscriptionKey != null && !subscriptionKey.isEmpty()) {
                 headers.add("Ocp-Apim-Subscription-Key", subscriptionKey);
@@ -1664,62 +1835,243 @@ public class NipBankService {
             if (authorization != null && !authorization.isEmpty()) {
                 headers.add(HttpHeaders.AUTHORIZATION, authorization);
             }
+            headers.add(HttpHeaders.ACCEPT_CHARSET, "UTF-8");
 
-            ResponseEntity<NipBankListResponse> resp = restTemplate.exchange(
-                    banksUrl + "/fetchnipbanks/fetchnipbanks", HttpMethod.GET, new HttpEntity<Void>(headers), NipBankListResponse.class);
+            // Fetch as bytes (safer for BOM/charset issues)
+            ResponseEntity<byte[]> respBytes = restTemplate.exchange(
+                    banksUrl + "/fetchnipbanks/fetchnipbanks",
+                    HttpMethod.GET,
+                    new HttpEntity<Void>(headers),
+                    byte[].class
+            );
 
-            NipBankListResponse body = resp.getBody();
-            if (!resp.getStatusCode().is2xxSuccessful() || body == null) {
-
+            if (!respBytes.getStatusCode().is2xxSuccessful() || respBytes.getBody() == null) {
                 response.setStatusCode(statusCode);
-                response.setDescription("Access API error: HTTP " + resp.getStatusCodeValue());
+                response.setDescription("Error getting Banks!");
+                return response;
+            }
 
+            // --- Begin sanitize: strip UTF-8 BOM, zero-width, control chars ---
+            byte[] raw = respBytes.getBody();
+            boolean hasBom = raw.length >= 3 && (raw[0] == (byte) 0xEF && raw[1] == (byte) 0xBB && raw[2] == (byte) 0xBF);
+            String json = hasBom
+                    ? new String(raw, 3, raw.length - 3, java.nio.charset.StandardCharsets.UTF_8)
+                    : new String(raw, java.nio.charset.StandardCharsets.UTF_8);
+
+            // Remove ZWSP/ZWJ/ZWNJ/BOM code points inside, and other control chars (keep \n\r\t)
+            java.util.regex.Pattern ZERO_WIDTH = java.util.regex.Pattern.compile("[\\u200B-\\u200D\\uFEFF]");
+            java.util.regex.Pattern CONTROL = java.util.regex.Pattern.compile("[\\p{Cntrl}&&[^\n\r\t]]");
+            json = ZERO_WIDTH.matcher(json).replaceAll("");
+            json = CONTROL.matcher(json).replaceAll("");
+            json = java.text.Normalizer.normalize(json, java.text.Normalizer.Form.NFKC);
+            json = json.trim();
+            // --- End sanitize ---
+
+            // Map to POJO with a slightly tolerant parser (for dirty inputs)
+            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+            mapper.configure(com.fasterxml.jackson.core.JsonParser.Feature.ALLOW_UNQUOTED_CONTROL_CHARS, true);
+            mapper.configure(com.fasterxml.jackson.core.JsonParser.Feature.ALLOW_BACKSLASH_ESCAPING_ANY_CHARACTER, true);
+
+            NipBankListResponse body = mapper.readValue(json, NipBankListResponse.class);
+
+            if (body == null) {
+                response.setStatusCode(statusCode);
+                response.setDescription("Error getting Banks!");
+                return response;
             }
             if (!"00".equals(body.getResponseCode())) {
-                // throw new ApiClientException("Access API responded with code: " + body.getResponseCode());
                 response.setStatusCode(statusCode);
-                response.setDescription("Access API responded with code: " + body.getResponseCode());
-
+                response.setDescription("Request failed");
+                return response;
             }
-            List<NipBankItem> items = body.getGetNipBankListResponse();
+
+            java.util.List<NipBankItem> items = body.getGetNipBankListResponse();
             if (items == null || items.isEmpty()) {
-                // throw new ApiClientException("Access API returned empty bank list");
                 response.setStatusCode(statusCode);
-                response.setDescription("Access API returned empty bank list");
-
+                response.setDescription("Request failed");
+                return response;
             }
 
-            // De-duplicate by bankCode (payload contains duplicates like "000")
-            List<NipBankItem> deduped = dedupByCode(items);
+            // Clean fields per item to avoid saving hidden chars into DB
+            for (NipBankItem i : items) {
+                if (i.getBankName() != null) {
+                    String s = i.getBankName();
+                    s = ZERO_WIDTH.matcher(s).replaceAll("");
+                    s = CONTROL.matcher(s).replaceAll("");
+                    s = java.text.Normalizer.normalize(s, java.text.Normalizer.Form.NFKC).trim();
+                    i.setBankName(s);
+                }
+                if (i.getBankCode() != null) {
+                    String s = i.getBankCode();
+                    s = ZERO_WIDTH.matcher(s).replaceAll("");
+                    s = CONTROL.matcher(s).replaceAll("");
+                    s = java.text.Normalizer.normalize(s, java.text.Normalizer.Form.NFKC).trim();
+                    i.setBankCode(s);
+                }
+            }
 
-            // Persist
-            List<NipBank> toSave = deduped.stream().map(i -> {
-                NipBank b = new NipBank();
-                b.setBankCode(safe(i.getBankCode()));
-                b.setBankName(safe(i.getBankName()));
-                return b;
-            }).collect(Collectors.toList());
-            repository.saveAll(toSave);
+            persistDeduped(items);
 
-            // Return from DB (sorted)
             response.setStatusCode(200);
             response.setDescription("Successful");
             response.setData(toDtoList(repository.findAllByOrderByBankNameAsc()));
+            // System.out.println("Final response :::::::: " + "    ::::::::::::::::::::: ");
+            return response;
 
-        } catch (RestClientException e) {
-            // network/serialization issues
-            // throw new ApiClientException("Failed calling Access NIP banks API", e);
+        } catch (org.springframework.web.client.RestClientException e) {
+            e.printStackTrace();
             response.setStatusCode(statusCode);
             response.setDescription(description);
-            //response.setData(null);
+            return response;
         } catch (Exception e) {
-            // throw new ApiClientException("Unexpected error fetching banks", e);
+            e.printStackTrace();
             response.setStatusCode(statusCode);
             response.setDescription(description);
             response.setData(null);
+            return response;
+        }
+    }
+
+    /**
+     * De-duplicate by bankCode and save.
+     */
+    private void persistDeduped(List<NipBankItem> items) {
+        List<NipBankItem> deduped = dedupByCode(items);
+        List<NipBank> toSave = new java.util.ArrayList<NipBank>(deduped.size());
+        for (NipBankItem i : deduped) {
+            if (i == null) {
+                continue;
+            }
+            NipBank b = new NipBank();
+            b.setBankCode(safe(i.getBankCode()));
+            b.setBankName(safe(i.getBankName()));
+            toSave.add(b);
+        }
+        if (!toSave.isEmpty()) {
+            repository.saveAll(toSave);
+        }
+    }
+
+    /**
+     * Try seeding from a server file path when DB is empty.
+     */
+    private boolean seedFromFilesystemIfEnabledAndEmpty() {
+        if (repository.count() > 0) {
+            return false;
         }
 
-        return response;
+        boolean enabled = Boolean.parseBoolean(env.getProperty("app.nipbanks.seed.fs.enabled", "false"));
+        if (!enabled) {
+            return false;
+        }
+
+        String pathStr = env.getProperty("app.nipbanks.seed.fs.path", "");
+        if (pathStr == null || pathStr.trim().isEmpty()) {
+            return false;
+        }
+
+        java.nio.file.Path path = java.nio.file.Paths.get(pathStr);
+        if (!java.nio.file.Files.exists(path) || !java.nio.file.Files.isReadable(path)) {
+            return false;
+        }
+
+        java.io.InputStream is = null;
+        try {
+            is = java.nio.file.Files.newInputStream(path);
+            return loadSeedAndPersist(is);
+        } catch (Exception ignore) {
+            return false;
+        } finally {
+            if (is != null) try {
+                is.close();
+            } catch (Exception e) {
+            }
+        }
+    }
+
+    /**
+     * Existing classpath seeding, now behind its own enable flag.
+     */
+    private boolean seedFromClasspathIfEnabledAndEmpty() {
+        System.out.println("Entered seedFromClasspathIfEnabledAndEmpty :::::::: " + "   ");
+
+        if (repository.count() > 0) {
+            return false;
+        }
+
+        boolean enabled = Boolean.parseBoolean(env.getProperty("app.nipbanks.seed.classpath.enabled", "true"));
+        System.out.println("enabled  app.nipbanks.seed.classpath.enabled :::::::: " + "   " + enabled);
+
+        if (!enabled) {
+            return false;
+        }
+
+        String cp = env.getProperty(nipBanksFilePath, "fixtures/nipbanks-dev.json");
+        org.springframework.core.io.Resource resource = new org.springframework.core.io.ClassPathResource(cp);
+        if (!resource.exists()) {
+            return false;
+        }
+
+        java.io.InputStream is = null;
+        try {
+            is = resource.getInputStream();
+            return loadSeedAndPersist(is);
+        } catch (Exception ignore) {
+            return false;
+        } finally {
+            if (is != null) try {
+                is.close();
+            } catch (Exception e) {
+            }
+        }
+    }
+
+    /**
+     * Common loader + persist, used by both filesystem and classpath.
+     */
+    private boolean loadSeedAndPersist(java.io.InputStream is) {
+        try {
+            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+            // If your JSON uses "ResponseCode" (capital R/C), consider enabling case-insensitive props:
+            mapper.configure(com.fasterxml.jackson.databind.MapperFeature.ACCEPT_CASE_INSENSITIVE_PROPERTIES, true);
+
+            NipBankListResponse body = mapper.readValue(is, NipBankListResponse.class
+            );
+            if (body == null || !"00".equals(body.getResponseCode())) {
+                return false;
+            }
+
+            List<NipBankItem> items = body.getGetNipBankListResponse();
+            if (items == null || items.isEmpty()) {
+                return false;
+            }
+
+            persistDeduped(items);
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /**
+     * De-duplicate by bankCode while keeping first seen (order-stable).
+     */
+    private static List<NipBankItem> dedupByCode(List<NipBankItem> items) {
+        java.util.Map<String, NipBankItem> byCode = new java.util.LinkedHashMap<>();
+        for (NipBankItem i : items) {
+            String code = i != null ? i.getBankCode() : null;
+            if (code == null) {
+                continue;
+            }
+            if (!byCode.containsKey(code)) {
+                byCode.put(code, i);
+            }
+        }
+        return new java.util.ArrayList<>(byCode.values());
+    }
+
+    private static String safe(String v) {
+        return v == null ? "" : v.trim();
     }
 
     // ---- helpers
@@ -1735,21 +2087,4 @@ public class NipBankService {
         return out;
     }
 
-    private static List<NipBankItem> dedupByCode(List<NipBankItem> items) {
-        Map<String, NipBankItem> map = new LinkedHashMap<String, NipBankItem>();
-        for (NipBankItem i : items) {
-            if (i == null || i.getBankCode() == null) {
-                continue;
-            }
-            String code = i.getBankCode().trim();
-            if (!map.containsKey(code)) {
-                map.put(code, i); // keep first
-            }
-        }
-        return new ArrayList<NipBankItem>(map.values());
-    }
-
-    private static String safe(String v) {
-        return v == null ? "" : v.trim();
-    }
 }

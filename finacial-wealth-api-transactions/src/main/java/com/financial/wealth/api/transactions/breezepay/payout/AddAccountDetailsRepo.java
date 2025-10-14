@@ -22,6 +22,9 @@ public interface AddAccountDetailsRepo extends JpaRepository<AddAccountDetails, 
     @Query("select bs from AddAccountDetails bs where bs.accountNumber=:accountNumber")
     AddAccountDetails findByAccountNumber(String accountNumber);
 
+    @Query("select bs from AddAccountDetails bs where bs.virtualAccountNumber=:virtualAccountNumber")
+    List<AddAccountDetails> findByVirtualAccountNumberList(String virtualAccountNumber);
+
     @Query("select bs from AddAccountDetails bs where bs.accountNumber=:accountNumber")
     List<AddAccountDetails> findByAccountNumberList(String accountNumber);
 

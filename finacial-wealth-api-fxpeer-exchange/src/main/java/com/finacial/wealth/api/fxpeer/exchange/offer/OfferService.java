@@ -481,6 +481,45 @@ public class OfferService {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(res);
     }
 
+    public ResponseEntity<ApiResponseModel> cancelOfferCaller(CancelOfferCallerReq rq, String auth) {
+        final ApiResponseModel res = new ApiResponseModel();
+
+        try {
+
+            String phoneNumber = utilService.getClaimFromJwt(auth, "phoneNumber"); // preferred if your JWT has sellerId
+            Optional<RegWalletInfo> getRec = regWalletInfoRepository.findByPhoneNumber(phoneNumber);
+            //validate pin
+            BaseResponse bResPin = new BaseResponse();
+            WalletNo wSend = new WalletNo();
+            wSend.setPin(rq.getPin());
+
+            wSend.setWalletId(getRec.get().getWalletId());
+            bResPin = transactionServiceProxies.validatePin(wSend);
+            if (bResPin.getStatusCode() != 200) {
+                return bad(res, bResPin.getDescription(), bResPin.getStatusCode());
+            }
+
+            long logSellerId = Long.valueOf(getRec.get().getWalletId());
+
+            List<Offer> offerDe = repo.findByCorrelationIdData(rq.getCorrelationId());
+            if (offerDe.size() <= 0) {
+                return bad(res, "Offer does not exist!", 400);
+            }
+
+            cancel(offerDe.get(0).getId(), logSellerId);
+            res.setStatusCode(200);
+            res.setDescription("Offer canceled.");
+
+            return ResponseEntity.ok(res);
+
+        } catch (BusinessException be) {
+            return bad(res, be.getMessage(), 500);
+        } catch (Exception ex) {
+            ex.printStackTrace();
+            return bad(res, "An error occurred, please try again.", 500);
+        }
+    }
+
     @Transactional
     public void cancel(long offerId, long sellerId) {
         Offer o = repo.findById(offerId).orElseThrow(() -> new NotFoundException("Offer not found"));

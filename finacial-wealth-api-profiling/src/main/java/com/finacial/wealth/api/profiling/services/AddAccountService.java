@@ -7,6 +7,8 @@ package com.finacial.wealth.api.profiling.services;
 import com.finacial.wealth.api.profiling.breezpay.virt.acct.details.CreatNigeriaAccount;
 import com.finacial.wealth.api.profiling.breezpay.virt.create.acct.GenerateVirtualAccountNumResponse;
 import com.finacial.wealth.api.profiling.breezpay.virt.create.acct.GenerateVirtualAccountNumberReq;
+import com.finacial.wealth.api.profiling.breezpay.virt.get.bvn.BvnLookup;
+import com.finacial.wealth.api.profiling.breezpay.virt.get.bvn.BvnLookupRepository;
 import com.finacial.wealth.api.profiling.client.model.WalletSystemResponse;
 import com.finacial.wealth.api.profiling.domain.AddAccountDetails;
 import com.finacial.wealth.api.profiling.domain.AddFailedTransLog;
@@ -64,6 +66,7 @@ public class AddAccountService {
 
     private static final int STATUS_CODE_NIGERIA_ONBOARDING_FLOW_CODE = 58;
     private static final String STATUS_CODE_NIGERIA_ONBOARDING_FLOW_DESCRIPTION = "Please validate bvn";
+    private final BvnLookupRepository repo;
 
     //${fin.wealth.breeze.pay.base.url}
     @Value("${fin.wealth.breeze.pay.mer.id}")
@@ -80,6 +83,9 @@ public class AddAccountService {
     @Value("${fin.wealth.breeze.pay.mer.req.authorizer}")
     private String reqAuthorizer;
 
+    @Value("${spring.profiles.active}")
+    private String environment;
+
     public AddAccountService(AddFailedTransLoggRepo addFailedTransLoggRepo,
             CountryService countryService,
             CountriesRepository countriesRepository,
@@ -90,7 +96,7 @@ public class AddAccountService {
             RegWalletInfoRepository regWalletInfoRepository,
             GenerateVirtAcctNumbRepo generateVirtAcctNumbRepo, UttilityMethods uttilityMethods,
             VerifyReqIdDetailsAuthRepo verifyReqIdDetailsAuthRepo,
-            UtilitiesProxy utilitiesProxy) {
+            UtilitiesProxy utilitiesProxy, BvnLookupRepository repo) {
         this.addFailedTransLoggRepo = addFailedTransLoggRepo;
         this.countryService = countryService;
         this.countriesRepository = countriesRepository;
@@ -103,6 +109,7 @@ public class AddAccountService {
         this.uttilityMethods = uttilityMethods;
         this.verifyReqIdDetailsAuthRepo = verifyReqIdDetailsAuthRepo;
         this.utilitiesProxy = utilitiesProxy;
+        this.repo = repo;
     }
 
     public BaseResponse addNigeriaAccountCallThirdPartyApi(CreatNigeriaAccount rq) {
@@ -176,7 +183,19 @@ public class AddAccountService {
             DecodedJWTToken getDecoded = DecodedJWTToken.getDecoded(auth);
             String emailAddress = getDecoded.emailAddress;
 
-            if (!uttilityMethods.isNumeric(rq.getPhoneNumber())) {
+            BvnLookup getBvnDe = repo.findByBvn(rq.getBvn()).orElse(null);
+
+            if (getBvnDe == null) {
+                AddFailedTransLog pinActTransFailed = new AddFailedTransLog("add-account",
+                        "Please validate BVN!", "", "", emailAddress);
+                addFailedTransLoggRepo.save(pinActTransFailed);
+                responseModel.setDescription("Please validate BVN!");
+                responseModel.setStatusCode(statusCode);
+
+                return responseModel;
+            }
+
+            if (!uttilityMethods.isNumeric(getBvnDe.getPhoneNumber1())) {
                 AddFailedTransLog pinActTransFailed = new AddFailedTransLog("add-account",
                         "Phonenumber is not numeric", "", "", emailAddress);
                 addFailedTransLoggRepo.save(pinActTransFailed);
@@ -186,7 +205,7 @@ public class AddAccountService {
                 return responseModel;
             }
 
-            if (!uttilityMethods.isValid11Num(rq.getPhoneNumber())) {
+            if (!uttilityMethods.isValid11Num(getBvnDe.getPhoneNumber1())) {
                 AddFailedTransLog pinActTransFailed = new AddFailedTransLog("add-account",
                         "Phonenumber is not a valid phone number", "", "", emailAddress);
                 addFailedTransLoggRepo.save(pinActTransFailed);
@@ -195,6 +214,9 @@ public class AddAccountService {
 
                 return responseModel;
             }
+
+            Optional<RegWalletInfo> getRec = regWalletInfoRepository.findByEmail(emailAddress);
+           
 
             //validate country/code
             ValidationResponse resp = countryService.validateCountryPair(rq.getCountryCode(), rq.getCountry());
@@ -264,36 +286,40 @@ public class AddAccountService {
             }
 
             VerifyReqIdDetailsAuth updateVeri = getInitAcPin.get(0);
-            updateVeri.setProcessIdUsed("0");
+            updateVeri.setProcessIdUsed("1");
             updateVeri.setLastModifiedDate(Instant.now());
             updateVeri.setProcessId(processId);
             //updateVeri.setRequestId(otpReqId);
             verifyReqIdDetailsAuthRepo.save(updateVeri);
-
-            Optional<RegWalletInfo> getRec = regWalletInfoRepository.findByEmail(rq.getWalletId());
 
             CreatNigeriaAccount cAcc = new CreatNigeriaAccount();
             cAcc.setBvn(rq.getBvn());
             cAcc.setCountryCode("NGN");
             cAcc.setEmailAddress(emailAddress);
             cAcc.setFullName(getRec.get().getFirstName());
-            cAcc.setPhoneNumber(rq.getPhoneNumber());
-            cAcc.setWalletId(rq.getWalletId());
+            cAcc.setPhoneNumber(getBvnDe.getPhoneNumber1());
+            cAcc.setWalletId(getRec.get().getWalletId());
+            String virtAccNo = null;
+            String virtName = null;
+            if (!environment.equals("dev")) {
+                BaseResponse calThirdParty = this.addNigeriaAccountCallThirdPartyApi(cAcc);
 
-            BaseResponse calThirdParty = this.addNigeriaAccountCallThirdPartyApi(cAcc);
+                if (calThirdParty.getStatusCode() != 200) {
+                    AddFailedTransLog pinActTransFailed = new AddFailedTransLog("add-account",
+                            calThirdParty.getDescription(), "", "", emailAddress);
+                    addFailedTransLoggRepo.save(pinActTransFailed);
+                    responseModel.setDescription("Account creation failed, please try again!");
+                    responseModel.setStatusCode(statusCode);
 
-            if (calThirdParty.getStatusCode() != 200) {
-                AddFailedTransLog pinActTransFailed = new AddFailedTransLog("add-account",
-                        calThirdParty.getDescription(), "", "", emailAddress);
-                addFailedTransLoggRepo.save(pinActTransFailed);
-                responseModel.setDescription("Account creation failed, please try again!");
-                responseModel.setStatusCode(statusCode);
+                    return responseModel;
+                }
+                virtAccNo = (String) calThirdParty.getData().get("virtAccNo");
+                virtName = (String) calThirdParty.getData().get("virtAccName");
 
-                return responseModel;
+            } else {
+                virtAccNo = uniqueIds.nextUniqueWalletId();
+                virtName = getBvnDe.getFirstName() + " " + getBvnDe.getLastName();
             }
-
-            String virtAccNo = (String) calThirdParty.getData().get("virtAccNo");
-            String virtName = (String) calThirdParty.getData().get("virtAccNoame");
 
             Optional<Countries> getCounByCode = countriesRepository.findByCountryCodeIgnoreCase(rq.getCountryCode());
 
@@ -312,7 +338,7 @@ public class AddAccountService {
             addDe.setEmailAddress(emailAddress);
             addDe.setWalletId(uniqueIds.nextUniqueWalletId());
             addDe.setVirtualAccountNumber(virtAccNo);
-            addDe.setPhoneNumber(rq.getPhoneNumber());
+            addDe.setPhoneNumber(getBvnDe.getPhoneNumber1());
             addDe.setVirtualAccountName(virtName);
 
             //call add and account to wallet

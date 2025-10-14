@@ -5,6 +5,8 @@
  */
 package com.finacial.wealth.api.profiling.controllers;
 
+import com.finacial.wealth.api.profiling.breezpay.virt.get.bvn.BvnService;
+import com.finacial.wealth.api.profiling.breezpay.virt.get.bvn.ValidateBvnReq;
 import com.finacial.wealth.api.profiling.models.ApiResponseModel;
 import com.finacial.wealth.api.profiling.models.ChangeDevice;
 import com.finacial.wealth.api.profiling.models.ChangePasswordInApp;
@@ -20,6 +22,7 @@ import com.finacial.wealth.api.profiling.models.WalletNo;
 import com.finacial.wealth.api.profiling.models.accounts.AddAccountObj;
 import com.finacial.wealth.api.profiling.response.BaseResponse;
 import com.finacial.wealth.api.profiling.services.AddAccountService;
+import com.finacial.wealth.api.profiling.services.CountryService;
 import com.finacial.wealth.api.profiling.services.WalletServices;
 import com.finacial.wealth.api.profiling.services.WalletSystemProxyService;
 import com.finacial.wealth.api.profiling.utilities.models.OtpResendRequest;
@@ -52,6 +55,8 @@ public class WalletMgtController {
     private final WalletServices walletServices;
     private final WalletSystemProxyService walletSystemProxyService;
     private final AddAccountService addAccountService;
+    private final BvnService bvnService;
+    private final CountryService countryService;
 
     /*@PostMapping("/create-user-old")
     public ResponseEntity<BaseResponse> onboardUser(
@@ -60,6 +65,26 @@ public class WalletMgtController {
         BaseResponse baseResponse = walletServices.onboardUser(rq);
         return new ResponseEntity<>(baseResponse, HttpStatus.OK);
     }*/
+    @GetMapping("/get-countries")
+    public ResponseEntity<ApiResponseModel> getCountries(
+            @RequestHeader(value = "authorization", required = true) String auth
+    ) {
+
+        ApiResponseModel baseResponse = countryService.getCountriesDetails(auth);
+        return new ResponseEntity<>(baseResponse, HttpStatus.OK);
+    }
+
+    @PostMapping("/validate/bvn")
+    public ResponseEntity<BaseResponse> validateBvnCaller(
+            @RequestHeader(value = "authorization", required = true) String auth,
+            @RequestBody @Valid ValidateBvnReq rq) throws UnsupportedEncodingException {
+
+        String bvn = rq.getBvn();
+
+        BaseResponse baseResponse = bvnService.validateBvnCaller(bvn, auth);
+        return new ResponseEntity<>(baseResponse, HttpStatus.OK);
+    }
+
     @PostMapping("/add-other-currency-account")
     public ResponseEntity<BaseResponse> addOtheCurrencyAccount(@RequestHeader(value = "authorization", required = true) String auth,
             @RequestBody @Valid AddAccountObj rq) {
@@ -182,7 +207,7 @@ public class WalletMgtController {
             @RequestHeader(value = "authorization", required = true) String auth
     ) {
 
-        ApiResponseModel baseResponse = walletServices.getCustomerDetails("", auth);
+        ApiResponseModel baseResponse = walletServices.getCustomerDetailsWorking("", auth);
         return new ResponseEntity<>(baseResponse, HttpStatus.OK);
     }
 
@@ -212,7 +237,5 @@ public class WalletMgtController {
         BaseResponse baseResponse = walletServices.changePinInApp(rq, "", auth);
         return new ResponseEntity<>(baseResponse, HttpStatus.OK);
     }
-    
-    
 
 }

@@ -78,6 +78,7 @@ public class UttilityMethods {
     String SETTING_KEY_WALLET_SYSTEM_CLEARANCEID;
     String SETTING_KEY_GET_WALLET_USER_GROUP_ID;
     String Device_Change;
+    String SETTING_ONBOARDING_DEFAULT_CURRENCY_CODE;
 
     private static final String NO_DEVICE_REGISTERED = "You dont have any device registered";
     private static final String OTP_SUCCESSFULLY_SENT = "Otp Sent SuccessFully.";
@@ -99,6 +100,7 @@ public class UttilityMethods {
 
     @PostConstruct
     public void init() {
+        SETTING_ONBOARDING_DEFAULT_CURRENCY_CODE = cache.getApplicationSetting(AppConfigConUtil.SETTING_ONBOARDING_DEFAULT_CURRENCY_CODE);
         SETTING_KEY_GET_WALLET_USER_GROUP_ID = cache.getApplicationSetting(AppConfigConUtil.SETTING_KEY_GET_WALLET_USER_GROUP_ID);
 
         SETTING_KEY_WALLET_SYSTEM_BASE_URL = cache.getApplicationSetting(AppConfigConUtil.SETTING_KEY_WALLET_SYSTEM_BASE_URL);
@@ -114,6 +116,13 @@ public class UttilityMethods {
         SETTING_KEY_GET_TIER_3 = cache.getApplicationSetting(AppConfigConUtil.SETTING_KEY_GET_TIER_3);
         SETTING_KEY_GET_TIER_4 = cache.getApplicationSetting(AppConfigConUtil.SETTING_KEY_GET_TIER_4);
         Device_Change = cache.getApplicationSetting(AppConfigConUtil.SETTING_KEY_DEVICE_CHANGE);
+
+    }
+    
+    
+    public String returnSETTING_ONBOARDING_DEFAULT_CURRENCY_CODE() {
+
+        return SETTING_ONBOARDING_DEFAULT_CURRENCY_CODE;
 
     }
 

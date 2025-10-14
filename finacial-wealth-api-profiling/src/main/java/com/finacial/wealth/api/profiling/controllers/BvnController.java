@@ -32,7 +32,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 public class BvnController {
 
-    private final BvnService bvnService;
+    
     //  private final AddAccountService addAccountService;
 
     @GetMapping("/to/{bvn}")
@@ -49,15 +49,6 @@ public class BvnController {
         return ResponseEntity.ok(result);
     }
 
-    @PostMapping("/bvn")
-    public ResponseEntity<BaseResponse> changePasswordInApp(
-            @RequestHeader(value = "authorization", required = true) String auth,
-            @RequestBody @Valid ValidateBvnReq rq) throws UnsupportedEncodingException {
-
-        String bvn = rq.getBvn();
-
-        BaseResponse baseResponse = bvnService.validateBvnCaller(bvn, auth);
-        return new ResponseEntity<>(baseResponse, HttpStatus.OK);
-    }
+  
 
 }

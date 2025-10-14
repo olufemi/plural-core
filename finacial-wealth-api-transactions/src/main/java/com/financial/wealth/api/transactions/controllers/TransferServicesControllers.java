@@ -5,6 +5,8 @@
  */
 package com.financial.wealth.api.transactions.controllers;
 
+import com.financial.wealth.api.transactions.breezepay.payin.BreezePayWebhookKeyService;
+import com.financial.wealth.api.transactions.breezepay.payin.WebHookRequest;
 import com.financial.wealth.api.transactions.breezepay.payout.NameLookUpInterBank;
 import com.financial.wealth.api.transactions.breezepay.payout.NipBankService;
 import com.financial.wealth.api.transactions.config.ApiClientException;
@@ -36,17 +38,18 @@ public class TransferServicesControllers {
 
     private final LocalTransferService localTransferService;
     private final NipBankService nipService;
+    private final BreezePayWebhookKeyService breezePayWebhookKeyService;
 
-    @GetMapping("/get-banks")
+    @GetMapping("/interbank/get-banks")
     public ApiResponseModel getAllBanks(@RequestHeader(value = "authorization", required = true) String auth) throws ApiClientException {
         return nipService.getAllBanks();
     }
 
-    @PostMapping("/localtransfer/name-enquiry")
-    public ResponseEntity<BaseResponse> nameLookUp(@RequestHeader(value = "authorization", required = true) String auth,
-            @RequestBody @Valid NameLookUp rq) {
+    @PostMapping("/interbank/webhook")
+    public ResponseEntity<BaseResponse> interBankWebHook(@RequestHeader(value = "authorization", required = true) String auth,
+            @RequestBody @Valid WebHookRequest rq) {
 
-        BaseResponse baseResponse = localTransferService.nameLookUp(rq, "", auth);
+        BaseResponse baseResponse = breezePayWebhookKeyService.processPayment(rq, auth);
         return new ResponseEntity<>(baseResponse, HttpStatus.OK);
     }
 
@@ -63,6 +66,14 @@ public class TransferServicesControllers {
             @RequestBody @Valid OtherBankTransferRequest rq) {
 
         BaseResponse baseResponse = nipService.processTransfer(rq, "", auth);
+        return new ResponseEntity<>(baseResponse, HttpStatus.OK);
+    }
+
+    @PostMapping("/localtransfer/name-enquiry")
+    public ResponseEntity<BaseResponse> nameLookUp(@RequestHeader(value = "authorization", required = true) String auth,
+            @RequestBody @Valid NameLookUp rq) {
+
+        BaseResponse baseResponse = localTransferService.nameLookUp(rq, "", auth);
         return new ResponseEntity<>(baseResponse, HttpStatus.OK);
     }
 

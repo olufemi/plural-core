@@ -7,6 +7,7 @@ import com.finacial.wealth.api.profiling.breezpay.virt.acct.details.GetCusmerDet
 import com.finacial.wealth.api.profiling.breezpay.virt.get.acct.list.CustomerResponse;
 import com.finacial.wealth.api.profiling.breezpay.virt.get.acct.list.GetAcctListReq;
 import com.finacial.wealth.api.profiling.breezpay.virt.get.bvn.GetSingleBvnResponse;
+import com.finacial.wealth.api.profiling.breezpay.virt.get.bvn.ValidateSingleBvnReq;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -23,8 +24,8 @@ import org.springframework.web.bind.annotation.RequestMethod;
  *
  * @author olufemioshin
  */
-@FeignClient(name = "breezePayVirtAcctProxy", url = "${fin.wealth.breeze.wallet.pay.base.url}")
-public interface BreezePayVirtAcctProxy {
+@FeignClient(name = "breezePayVirtApiDevAcctProxy", url = "${fin.wealth.breeze.api.dev.url}")
+public interface BreezePayVirtApiDevAcctProxy {
 
     @RequestMapping(value = "/GenerateVirtualAccountNumber", consumes = "application/json", method = RequestMethod.POST)
     public GenerateVirtualAccountNumResponse generateVirtualAccount(@RequestBody GenerateVirtualAccountNumberReq rq,
@@ -38,11 +39,8 @@ public interface BreezePayVirtAcctProxy {
     public CustomerResponse getCustomers(@RequestBody GetAcctListReq rq,
             @RequestHeader("Authorization") String auth, @RequestHeader("Ocp-Apim-Subscription-Key") String subKey);
 
-    // NEW: BVN lookup (GET)
-    @GetMapping(value = "/bvn/v1/GetSingleBVNJSON/{bvn}", produces = "application/json")
-    GetSingleBvnResponse getSingleBvn(
-            @PathVariable("bvn") String bvn,
-            @RequestHeader("Authorization") String auth,
-            @RequestHeader("Ocp-Apim-Subscription-Key") String subKey);
+    @RequestMapping(value = "/bvn/v1/VerifySingleBVN", consumes = "application/json", method = RequestMethod.POST)
+    public GetSingleBvnResponse VerifySingleBVN(@RequestBody ValidateSingleBvnReq rq,
+            @RequestHeader("Authorization") String auth, @RequestHeader("Ocp-Apim-Subscription-Key") String subKey);
 
 }

@@ -4,7 +4,6 @@
  */
 package com.finacial.wealth.api.profiling.breezpay.virt.get.bvn;
 
-import javax.validation.constraints.Pattern;
 import lombok.Data;
 
 /**
@@ -12,8 +11,10 @@ import lombok.Data;
  * @author olufemioshin
  */
 @Data
-public class ValidateBvnReq {
+public class ValidateSingleBvnReq {
 
-    @Pattern(regexp = "^\\d{11}$", message = "BVN must be exactly 11 digits")
+    private String appId;
+    private String appReference;
     private String bvn;
+
 }

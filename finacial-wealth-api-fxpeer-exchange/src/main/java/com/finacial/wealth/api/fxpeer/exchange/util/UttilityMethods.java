@@ -190,6 +190,7 @@ public class UttilityMethods {
         String description = "Something went wrong";
 
         try {
+             statusCode = 400;
             BigDecimal pFees = BigDecimal.ZERO;
             BigDecimal ammmount = new BigDecimal(rq.getAmount());
             List<FinWealthPayServiceConfig> getKulList = finWealthServiceConfigRepo.findByServiceTypeAndCurrencyCode(rq.getTransType(), rq.getCurrencyCode());
@@ -227,7 +228,7 @@ public class UttilityMethods {
 
                         }
 
-                        Optional<FinWealthPayServiceConfig> getKul = finWealthServiceConfigRepo.findAllByServiceType(rq.getTransType());
+                        Optional<FinWealthPayServiceConfig> getKul = finWealthServiceConfigRepo.findAllByServiceType(rq.getTransType(),rq.getCurrencyCode());
 
                         String flagMinAmt = "Minimum amount cannot be less than N" + getKul.get().getMinimumAmmount() + ".00, please check!";
                         if (new BigDecimal(rq.getAmount()).compareTo(new BigDecimal(getKul.get().getMinimumAmmount())) == -1) {
@@ -246,6 +247,7 @@ public class UttilityMethods {
 
                     responseModel.setDescription("Peer to Peer service, success");
                     responseModel.setStatusCode(200);
+                    return responseModel;
                 }
 
             }

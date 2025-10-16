@@ -34,5 +34,6 @@ public class FinWalletPaymentTransModel {
     private String theNarration;
     private String senderTransactionType;
     private String receiverTransactionType;
+    private String currencyCode;
 
 }

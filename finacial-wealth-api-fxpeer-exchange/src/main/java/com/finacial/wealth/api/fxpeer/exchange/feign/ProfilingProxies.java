@@ -8,6 +8,7 @@ import com.finacial.wealth.api.fxpeer.exchange.model.AddAccountObj;
 import com.finacial.wealth.api.fxpeer.exchange.model.BaseResponse;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
 
@@ -19,6 +20,6 @@ import org.springframework.web.bind.annotation.RequestMethod;
 public interface ProfilingProxies {
 
     @RequestMapping(value = "/walletmgt/add-other-currency-account", consumes = "application/json", method = RequestMethod.POST)
-    public BaseResponse addOtherAccount(@RequestBody AddAccountObj rq);
+    public BaseResponse addOtherAccount(@RequestBody AddAccountObj rq, @RequestHeader("Authorization") String authorization);
 
 }

@@ -20,6 +20,9 @@ public interface AddAccountDetailsRepo extends JpaRepository<AddAccountDetails, 
     boolean existsByWalletId(String walletId);
 
     @Query("SELECT u FROM AddAccountDetails u where u.walletId = :walletId")
-    List<AddAccountDetails> findByWalletIdrData(@Param("walletId") String walletId);
+    List<AddAccountDetails> findByWalletIdrData1(@Param("walletId") String walletId);
+
+    @Query("SELECT u FROM AddAccountDetails u where u.emailAddress = :emailAddress")
+    List<AddAccountDetails> findByEmailAddressrData(@Param("emailAddress") String emailAddress);
 
 }

@@ -4047,7 +4047,7 @@ public class GroupSavingsService {
                         ObjectMapper mapper = new ObjectMapper();
                         List<AddMembersModels> mems = mapper.readValue(addedMemModel, new TypeReference<List<AddMembersModels>>() {
                         });
-                        System.out.println("mems ::::::::::::::::  %S  " + new Gson().toJson(mems));
+                        //System.out.println("mems ::::::::::::::::  %S  " + new Gson().toJson(mems));
                         for (AddMembersModels getMems : mems) {
                             String getMemEmailAdd = getMems.getMemberEmailAddress() == null ? "empty" : getMems.getMemberEmailAddress();
 

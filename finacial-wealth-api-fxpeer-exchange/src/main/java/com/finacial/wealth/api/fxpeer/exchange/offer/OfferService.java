@@ -22,6 +22,7 @@ import com.finacial.wealth.api.fxpeer.exchange.model.ManageFeesConfigReq;
 import com.finacial.wealth.api.fxpeer.exchange.model.WalletNo;
 import com.finacial.wealth.api.fxpeer.exchange.util.GlobalMethods;
 import com.finacial.wealth.api.fxpeer.exchange.util.UttilityMethods;
+import com.google.gson.Gson;
 
 import io.micrometer.common.lang.Nullable;
 import org.springframework.data.domain.Page;
@@ -99,7 +100,10 @@ public class OfferService {
             statusCode = 400;
             String phoneNumber = utilService.getClaimFromJwt(auth, "phoneNumber"); // preferred if your JWT has sellerId
             Optional<RegWalletInfo> getRec = regWalletInfoRepository.findByPhoneNumber(phoneNumber);
-            long sellerId = Long.valueOf(getRec.get().getWalletId());
+
+            List<AddAccountDetails> getAdDe = addAccountDetailsRepo.findByEmailAddressrData(getRec.get().getEmail());
+
+            long sellerId = Long.valueOf(getAdDe.get(0).getWalletId());
             OfferStatus status = null;
             Page<Offer> page = getMyOffers(sellerId, status, pageable);
 
@@ -242,19 +246,19 @@ public class OfferService {
             wSend.setPin(rq.getPin());
 
             wSend.setWalletId(getRec.get().getWalletId());
-            bResPin = transactionServiceProxies.validatePin(wSend);
+            bResPin = transactionServiceProxies.validatePin(wSend, auth);
             if (bResPin.getStatusCode() != 200) {
                 return bad(res, bResPin.getDescription(), bResPin.getStatusCode());
             }
-
-            long logSellerId = Long.valueOf(getRec.get().getWalletId());
 
             List<Offer> offerDe = repo.findByCorrelationIdData(rq.getCorrelationId());
             if (offerDe.size() <= 0) {
                 return bad(res, "Offer does not exist!", 400);
             }
 
-            Offer updateOffer = updateRate(offerDe.get(0).getId(), new BigDecimal(rq.getNewRate()), logSellerId);
+            long logSellerId = Long.valueOf(offerDe.get(0).getSellerUserId());
+
+            Offer updateOffer = updateRate(offerDe.get(0).getId(), new BigDecimal(rq.getNewRate()), logSellerId, rq.getCorrelationId());
             res.setStatusCode(200);
             res.setDescription("Offer created.");
             res.setData(updateOffer); // or map to a lightweight DTO
@@ -274,6 +278,8 @@ public class OfferService {
         try {
 
             String phoneNumber = utilService.getClaimFromJwt(auth, "phoneNumber"); // preferred if your JWT has sellerId
+            System.out.println("phoneNumber" + "  ::::::::::::::::::::: >>>>>>>>>>>>>>>>>>  " + phoneNumber);
+
             Optional<RegWalletInfo> getRec = regWalletInfoRepository.findByPhoneNumber(phoneNumber);
             //validate pin
             BaseResponse bResPin = new BaseResponse();
@@ -290,7 +296,7 @@ public class OfferService {
             }
 
             wSend.setWalletId(getRec.get().getWalletId());
-            bResPin = transactionServiceProxies.validatePin(wSend);
+            bResPin = transactionServiceProxies.validatePin(wSend, auth);
             if (bResPin.getStatusCode() != 200) {
                 return bad(res, bResPin.getDescription(), bResPin.getStatusCode());
             }
@@ -298,39 +304,40 @@ public class OfferService {
                 return bad(res, "Country code mismatch!", 400);
             }
             //check if cus has currency currency
-            List<AddAccountDetails> getAdDe = addAccountDetailsRepo.findByWalletIdrData(getRec.get().getWalletId());
+            List<AddAccountDetails> getAdDe = addAccountDetailsRepo.findByEmailAddressrData(getRec.get().getEmail());
             BaseResponse bRes = new BaseResponse();
             for (AddAccountDetails getWa : getAdDe) {
                 String wallCurrencyCode = getWa.getCurrencyCode() == null ? "" : getWa.getCurrencyCode();
 
                 if (!wallCurrencyCode.equals(rq.getCurrencyReceive())) {
-                    if (!"CA".equals(rq.getCurrencyReceive())) {
+                    if (!"CAD".equals(rq.getCurrencyReceive())) {
                         //create account
                         AddAccountObj seObj = new AddAccountObj();
                         seObj.setCountry(getWa.getCountryName());
                         seObj.setCountryCode(getWa.getCountryCode());
                         seObj.setWalletId(getRec.get().getWalletId());
-                        bRes = profilingProxies.addOtherAccount(seObj);
+                        bRes = profilingProxies.addOtherAccount(seObj, auth);
                         if (bRes.getStatusCode() != 200) {
                             return bad(res, bRes.getDescription(), bRes.getStatusCode());
                         }
                     }
                 }
                 if (!wallCurrencyCode.equals(rq.getCurrencySell())) {
-                    if (!"CA".equals(rq.getCurrencyReceive())) {
+                    if (!"CAD".equals(rq.getCurrencySell())) {
                         //create account
                         AddAccountObj seObj = new AddAccountObj();
                         seObj.setCountry(getWa.getCountryName());
                         seObj.setCountryCode(getWa.getCountryCode());
                         seObj.setWalletId(getRec.get().getWalletId());
-                        bRes = profilingProxies.addOtherAccount(seObj);
+                        bRes = profilingProxies.addOtherAccount(seObj, auth);
                         if (bRes.getStatusCode() != 200) {
                             return bad(res, bRes.getDescription(), bRes.getStatusCode());
                         }
                     }
                 }
             }
-            String sellerId = getRec.get().getWalletId();
+            String sellerId = getAdDe.get(0).getWalletId();
+            System.out.println("sellerId" + "  ::::::::::::::::::::: >>>>>>>>>>>>>>>>>>  " + sellerId);
 
             // 1) Normalize inputs
             final CurrencyCode currencySell;
@@ -348,7 +355,7 @@ public class OfferService {
             final BigDecimal rate;
             final BigDecimal qtyTotal;
             try {
-                rate = new BigDecimal(rq.getRate().trim());
+                rate = new BigDecimal(rq.getRate());
                 qtyTotal = new BigDecimal(rq.getQtyTotal().trim());
             } catch (NumberFormatException nfe) {
                 return bad(res, "rate and qtyTotal must be numeric.", 400);
@@ -391,7 +398,7 @@ public class OfferService {
 
             // 3) Build domain request and delegate
             CreateOfferRq coreRq = new CreateOfferRq(currencySell, currencyReceive, rate, qtyTotal, expiryAt);
-            Offer created = createOffer(coreRq, Long.valueOf(sellerId), setMin, setMax, rq.isShowInTopDeals(), getRec.get().getFirstName());
+            ApiResponseModel created = createOffer(coreRq, Long.valueOf(sellerId), setMin, setMax, rq.isShowInTopDeals(), getRec.get().getFirstName(), auth);
 
             // 4) Success
             res.setStatusCode(200);
@@ -408,50 +415,98 @@ public class OfferService {
     }
 
     @Transactional
-    public Offer createOffer(CreateOfferRq rq, long sellerId, BigDecimal minAmt,
-            BigDecimal maxAmt, boolean showInTopDeals, String creators) {
-        BaseResponse bRes = new BaseResponse();
-        //ledger.ensureWallet(sellerId, rq.getCurrencySell().name());
-        // ledger.ensureWallet(sellerId, rq.getCurrencyReceive().name());
-        String correlationId = String.valueOf(GlobalMethods.generateTransactionId());
-        /*WalletInfo w = ledger.getWallet(sellerId, rq.getCurrencySell().name());
+    public ApiResponseModel createOffer(CreateOfferRq rq, long sellerId, BigDecimal minAmt,
+            BigDecimal maxAmt, boolean showInTopDeals, String creators, String auth) {
+        final ApiResponseModel res = new ApiResponseModel();
+
+        try {
+            BaseResponse bRes = new BaseResponse();
+            //ledger.ensureWallet(sellerId, rq.getCurrencySell().name());
+            // ledger.ensureWallet(sellerId, rq.getCurrencyReceive().name());
+            String correlationId = String.valueOf(GlobalMethods.generateTransactionId());
+            /*WalletInfo w = ledger.getWallet(sellerId, rq.getCurrencySell().name());
         if (w.available().compareTo(rq.getQtyTotal()) < 0) {
             throw new BusinessException("Insufficient balance to list qtyTotal");
         }*/
-        List<AddAccountDetails> getAdDe = addAccountDetailsRepo.findByWalletIdrData(String.valueOf(sellerId));
+            System.out.println("sellerId" + "  ::::::::::::::::::::: >>>>>>>>>>>>>>>>>>  " + sellerId);
 
-        WalletInfoValAcct wSend = new WalletInfoValAcct();
-        wSend.setAccountNumber(getAdDe.get(0).getAccountNumber());
-        wSend.setCorrelationId(correlationId);
-        wSend.setCurrencyToBuy(rq.getCurrencySell().toString());
-        wSend.setCurrencyToSell(rq.getCurrencySell().toString());
-        wSend.setTransactionAmmount(rq.getQtyTotal());
-        wSend.setWalletId(String.valueOf(sellerId));
+            List<AddAccountDetails> getAdDe = addAccountDetailsRepo.findByWalletIdrData1(String.valueOf(sellerId));
 
-        bRes = transactionServiceProxies.createOffervalidateAccount(wSend);
-        if (bRes.getStatusCode() != 200) {
-            throw new BusinessException(bRes.getDescription());
+            WalletInfoValAcct wSend = new WalletInfoValAcct();
+            wSend.setAccountNumber(getAdDe.get(0).getAccountNumber());
+            wSend.setCorrelationId(correlationId);
+            wSend.setCurrencyToBuy(rq.getCurrencySell().toString());
+            wSend.setCurrencyToSell(rq.getCurrencySell().toString());
+            wSend.setTransactionAmmount(rq.getQtyTotal());
+            wSend.setWalletId(String.valueOf(sellerId));
+
+            bRes = transactionServiceProxies.createOffervalidateAccount(wSend, auth);
+            System.out.println(" transactionServiceProxies.createOffervalidateAccount ::::::::::::::::  %S  " + new Gson().toJson(bRes));
+            System.out.println("bRes.getStatusCode()" + "  ::::::::::::::::::::: >>>>>>>>>>>>>>>>>>  " + bRes.getStatusCode());
+
+            if (bRes.getStatusCode() != 200) {
+                res.setStatusCode(bRes.getStatusCode());
+                res.setDescription(bRes.getDescription());
+                return res;
+
+            }
+
+            Offer o = new Offer();
+
+            o.setSellerUserId(sellerId);
+            o.setCurrencySell(rq.getCurrencySell());
+            o.setCurrencyReceive(rq.getCurrencyReceive());
+            o.setRate(rq.getRate());
+            o.setQtyTotal(rq.getQtyTotal());
+            o.setQtyAvailable(rq.getQtyTotal());
+            o.setStatus(OfferStatus.LIVE);
+            o.setMaxAmount(maxAmt);
+            o.setMinAmount(minAmt);
+            o.setShowInTopDeals(showInTopDeals);
+            o.setPoweredBy(creators);
+            o.setCorrelationId(correlationId);
+            o.setExpiryAt(Instant.now());
+            repo.save(o);
+
+            res.setStatusCode(200);
+            res.setDescription("Offer created.");
+            res.setData(o);
+            return res;
+
+        } catch (Exception ex) {
+            ex.printStackTrace();
+            res.setStatusCode(500);
+            res.setDescription("Something went wrong");
+
         }
-
-        Offer o = new Offer();
-        o.setSellerUserId(sellerId);
-        o.setCurrencySell(rq.getCurrencySell());
-        o.setCurrencyReceive(rq.getCurrencyReceive());
-        o.setRate(rq.getRate());
-        o.setQtyTotal(rq.getQtyTotal());
-        o.setQtyAvailable(rq.getQtyTotal());
-        o.setStatus(OfferStatus.LIVE);
-        o.setMaxAmount(maxAmt);
-        o.setMinAmount(minAmt);
-        o.setShowInTopDeals(showInTopDeals);
-        o.setPoweredBy(creators);
-        o.setCorrelationId(correlationId);
-        return repo.save(o);
+        return res;
     }
 
-    @Transactional
-    public Offer updateRate(long offerId, BigDecimal newRate, long sellerId) {
-        Offer o = repo.findById(offerId).orElseThrow(() -> new NotFoundException("Offer not found"));
+    @Transactional(readOnly = false)
+    public Offer updateRate(long offerId, BigDecimal newRate, long sellerId, String correlationId) {
+
+        List<Offer> oC = repo.findByCorrelationIdData(correlationId);
+
+        if (oC.size() <= 0) {
+            throw new BusinessException("Offer not found");
+        }
+
+        if (oC.get(0).getSellerUserId() != sellerId) {
+
+            throw new BusinessException("Invalid sellerId");
+        }
+
+        if (oC.get(0).getStatus() != OfferStatus.LIVE) {
+            throw new BusinessException("Only LIVE offers can be updated");
+        }
+
+        Offer oCUp = repo.findByCorrelationIdDataUpdate(correlationId);
+        oCUp.setUpdatedNow();
+        oCUp.setRate(newRate);
+        return repo.save(oCUp);
+
+
+        /*Offer o = repo.findById(offerId).orElseThrow(() -> new NotFoundException("Offer not found"));
         if (!o.getSellerUserId().equals(sellerId)) {
             throw new BusinessException("Forbidden");
         }
@@ -459,7 +514,7 @@ public class OfferService {
             throw new BusinessException("Only LIVE offers can be updated");
         }
         o.setRate(newRate);
-        return repo.save(o);
+        return repo.save(o);*/
     }
 
     //@jakarta.validation.constraints.AssertTrue(message = "min must be ≤ max")
@@ -494,19 +549,19 @@ public class OfferService {
             wSend.setPin(rq.getPin());
 
             wSend.setWalletId(getRec.get().getWalletId());
-            bResPin = transactionServiceProxies.validatePin(wSend);
+            bResPin = transactionServiceProxies.validatePin(wSend, auth);
             if (bResPin.getStatusCode() != 200) {
                 return bad(res, bResPin.getDescription(), bResPin.getStatusCode());
             }
-
-            long logSellerId = Long.valueOf(getRec.get().getWalletId());
 
             List<Offer> offerDe = repo.findByCorrelationIdData(rq.getCorrelationId());
             if (offerDe.size() <= 0) {
                 return bad(res, "Offer does not exist!", 400);
             }
 
-            cancel(offerDe.get(0).getId(), logSellerId);
+            long logSellerId = Long.valueOf(offerDe.get(0).getSellerUserId());
+
+            cancel(offerDe.get(0).getId(), logSellerId, rq.getCorrelationId());
             res.setStatusCode(200);
             res.setDescription("Offer canceled.");
 
@@ -521,12 +576,23 @@ public class OfferService {
     }
 
     @Transactional
-    public void cancel(long offerId, long sellerId) {
-        Offer o = repo.findById(offerId).orElseThrow(() -> new NotFoundException("Offer not found"));
-        if (!o.getSellerUserId().equals(sellerId)) {
-            throw new BusinessException("Forbidden");
+    public void cancel(long offerId, long sellerId, String correlationId) {
+
+        List<Offer> oC = repo.findByCorrelationIdData(correlationId);
+
+        if (oC.size() <= 0) {
+            throw new BusinessException("Offer not found");
         }
-        o.setStatus(OfferStatus.CANCELLED);
-        repo.save(o);
+
+        if (oC.get(0).getSellerUserId() != sellerId) {
+
+            throw new BusinessException("Invalid sellerId");
+        }
+
+        Offer oCUp = repo.findByCorrelationIdDataUpdate(correlationId);
+        oCUp.setUpdatedNow();
+        oCUp.setStatus(OfferStatus.CANCELLED);
+
+        repo.save(oCUp);
     }
 }

@@ -2333,6 +2333,7 @@ public class LocalTransferService {
                 getK.setTransactionId(getKul.getTransactionId());
                 getK.setReceiverTransactionType(getKul.getReceiverTransactionType());
                 getK.setSenderTransactionType(getKul.getSenderTransactionType());
+                getK.setCurrencyCode(getKul.getCurrencyCode());
                 mapAll.add(getK);
 
             }

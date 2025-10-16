@@ -6,8 +6,7 @@ package com.financial.wealth.api.transactions.breezepay.payin;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.financial.wealth.api.transactions.breezepay.payout.AddAccountDetails;
-import com.financial.wealth.api.transactions.breezepay.payout.AddAccountDetailsRepo;
-import com.financial.wealth.api.transactions.domain.CreateQuoteResLog;
+
 import com.financial.wealth.api.transactions.domain.DeviceDetails;
 import com.financial.wealth.api.transactions.domain.FinWealthPaymentTransaction;
 import com.financial.wealth.api.transactions.domain.RegWalletInfo;
@@ -15,6 +14,7 @@ import com.financial.wealth.api.transactions.domain.SettlementFailureLog;
 import com.financial.wealth.api.transactions.models.BaseResponse;
 import com.financial.wealth.api.transactions.models.CreditWalletCaller;
 import com.financial.wealth.api.transactions.models.PushNotificationFireBase;
+import com.financial.wealth.api.transactions.repo.AddAccountDetailsRepo;
 import com.financial.wealth.api.transactions.repo.DeviceDetailsRepo;
 import com.financial.wealth.api.transactions.repo.FinWealthPaymentTransactionRepo;
 import com.financial.wealth.api.transactions.repo.RegWalletInfoRepository;

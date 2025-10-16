@@ -33,6 +33,7 @@ import com.financial.wealth.api.transactions.models.PushNotificationFireBase;
 import com.financial.wealth.api.transactions.models.WalletNoReq;
 import com.financial.wealth.api.transactions.models.local.trans.NameLookUp;
 import com.financial.wealth.api.transactions.proxies.BreezePayVirtAcctProxy;
+import com.financial.wealth.api.transactions.repo.AddAccountDetailsRepo;
 import com.financial.wealth.api.transactions.repo.CommissionCfgRepo;
 import com.financial.wealth.api.transactions.repo.DeviceChangeLimitConfigRepo;
 import com.financial.wealth.api.transactions.repo.DeviceDetailsRepo;
@@ -308,7 +309,7 @@ public class NipBankService {
             String senderVirtAccount = null;
             boolean isCountryReady = true;
             for (AddAccountDetails getAcctOb : getVirtDe) {
-                if (getAcctOb.getCountryCode().equals(CCY)) {
+                if (getAcctOb.getCurrencyCode().equals(CCY)) {
                     senderVirtAccount = getAcctOb.getAccountNumber();
                 } else {
                     isCountryReady = false;

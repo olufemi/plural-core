@@ -24,19 +24,19 @@ import org.springframework.web.bind.annotation.RequestMethod;
 public interface TransactionServiceProxies {
 
     @RequestMapping(value = "/interbank/validate-pin", consumes = "application/json", method = RequestMethod.POST)
-    public BaseResponse validatePin(@RequestBody WalletNo rq);
+    public BaseResponse validatePin(@RequestBody WalletNo rq, @RequestHeader("Authorization") String authorization);
 
     @RequestMapping(value = "/peer-to-peer/create-offer-validate-account", consumes = "application/json", method = RequestMethod.POST)
-    public BaseResponse createOffervalidateAccount(@RequestBody WalletInfoValAcct rq);
+    public BaseResponse createOffervalidateAccount(@RequestBody WalletInfoValAcct rq, @RequestHeader("Authorization") String authorization);
 
     @RequestMapping(value = "/peer-to-peer/validate-balance", consumes = "application/json", method = RequestMethod.POST)
-    public BaseResponse validateAccountBalnce(@RequestBody WalletInfoValiAcctBal rq);
+    public BaseResponse validateAccountBalnce(@RequestBody WalletInfoValiAcctBal rq, @RequestHeader("Authorization") String authorization);
 
     @RequestMapping(value = "/peer-to-peer/debit-customer-with-type", consumes = "application/json", method = RequestMethod.POST)
-    public BaseResponse debitCustomerWithType(@RequestBody DebitWalletCaller rq, @RequestHeader("user-type") String userType);
+    public BaseResponse debitCustomerWithType(@RequestBody DebitWalletCaller rq, @RequestHeader("user-type") String userType, @RequestHeader("Authorization") String authorization);
 
     @RequestMapping(value = "/peer-to-peer/credit-customer-with-type", consumes = "application/json", method = RequestMethod.POST)
-    public BaseResponse creditCustomerWithType(@RequestBody CreditWalletCaller rq, @RequestHeader("user-type") String userType);
+    public BaseResponse creditCustomerWithType(@RequestBody CreditWalletCaller rq, @RequestHeader("user-type") String userType, @RequestHeader("Authorization") String authorization);
 
     //, @RequestHeader("Authorization") String auth
 }

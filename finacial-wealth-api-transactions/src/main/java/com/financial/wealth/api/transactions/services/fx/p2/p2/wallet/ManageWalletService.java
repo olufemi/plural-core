@@ -4,10 +4,13 @@
  */
 package com.financial.wealth.api.transactions.services.fx.p2.p2.wallet;
 
+import com.financial.wealth.api.transactions.breezepay.payout.AddAccountDetails;
+
 import com.financial.wealth.api.transactions.domain.LocalTransFailedTransInfo;
 import com.financial.wealth.api.transactions.domain.RegWalletInfo;
 import com.financial.wealth.api.transactions.domain.SettlementFailureLog;
 import com.financial.wealth.api.transactions.models.BaseResponse;
+import com.financial.wealth.api.transactions.repo.AddAccountDetailsRepo;
 import com.financial.wealth.api.transactions.repo.RegWalletInfoRepository;
 import com.financial.wealth.api.transactions.repo.SettlementFailureLogRepo;
 import com.financial.wealth.api.transactions.services.LocalTransferService;
@@ -16,6 +19,7 @@ import com.financial.wealth.api.transactions.utils.UttilityMethods;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import org.springframework.stereotype.Service;
@@ -32,17 +36,20 @@ public class ManageWalletService {
     private final UttilityMethods utilMeth;
     private final WalletTransactionsDetailsRepo walletTransactionsDetailsRepo;
     private final RegWalletInfoRepository regWalletInfoRepository;
+    private final AddAccountDetailsRepo addAccountDetailsRepo;
 
     public ManageWalletService(SettlementFailureLogRepo settlementFailureLogRepo,
             LocalTransferService localTransferService,
             UttilityMethods utilMeth,
             WalletTransactionsDetailsRepo walletTransactionsDetailsRepo,
-            RegWalletInfoRepository regWalletInfoRepository) {
+            RegWalletInfoRepository regWalletInfoRepository,
+            AddAccountDetailsRepo addAccountDetailsRepo) {
         this.settlementFailureLogRepo = settlementFailureLogRepo;
         this.localTransferService = localTransferService;
         this.utilMeth = utilMeth;
         this.walletTransactionsDetailsRepo = walletTransactionsDetailsRepo;
         this.regWalletInfoRepository = regWalletInfoRepository;
+        this.addAccountDetailsRepo = addAccountDetailsRepo;
     }
 
     //get total balalnce
@@ -203,12 +210,14 @@ public class ManageWalletService {
                 return responseModel;
 
             }
-            Optional<RegWalletInfo> getRec = regWalletInfoRepository.findByWalletIdOptional(rq.getWalletId());
+            List<AddAccountDetails> getDe = addAccountDetailsRepo.findByWalletId(rq.getWalletId());
+
+            Optional<RegWalletInfo> getRec = regWalletInfoRepository.findByEmail(getDe.get(0).getEmailAddress());
 
             WalletTransactionsDetails logTrans = new WalletTransactionsDetails();
             logTrans.setAccountNumber(rq.getAccountNumber());
             //logTrans.setAmountPurchased(null);
-           // BigDecimal avilBal = logTrans.getAvailableQuantity() == null ? BigDecimal.ZERO : logTrans.getAvailableQuantity();
+            // BigDecimal avilBal = logTrans.getAvailableQuantity() == null ? BigDecimal.ZERO : logTrans.getAvailableQuantity();
             logTrans.setAvailableQuantity(rq.getTransactionAmmount());
             logTrans.setTotalQuantityCreated(rq.getTransactionAmmount());
             logTrans.setBuyerAccount("");
@@ -224,7 +233,13 @@ public class ManageWalletService {
             logTrans.setSellerId(rq.getWalletId());
             walletTransactionsDetailsRepo.save(logTrans);
 
+            responseModel.setDescription("Success!");
+            responseModel.setStatusCode(200);
+            Map mp = new HashMap();
+            mp.put("accountBalance", accBalAmount);
+            responseModel.setData(mp);
             return responseModel;
+
         } catch (Exception ex) {
             ex.printStackTrace();
             responseModel.setDescription(descripton);

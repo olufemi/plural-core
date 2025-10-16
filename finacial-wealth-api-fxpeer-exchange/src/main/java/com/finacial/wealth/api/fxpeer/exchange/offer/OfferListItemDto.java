@@ -24,6 +24,9 @@ public record OfferListItemDto(
         boolean expired,
         String status,
         boolean showInTopDeals,
-        String poweredBy) {
+        
+        String poweredBy,
+        String correlationId
+        ) {
 
 }

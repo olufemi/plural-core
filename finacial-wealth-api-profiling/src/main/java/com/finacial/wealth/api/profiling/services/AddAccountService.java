@@ -190,7 +190,7 @@ public class AddAccountService {
                         "Please validate BVN!", "", "", emailAddress);
                 addFailedTransLoggRepo.save(pinActTransFailed);
                 responseModel.setDescription("Please validate BVN!");
-                responseModel.setStatusCode(statusCode);
+                responseModel.setStatusCode(STATUS_CODE_NIGERIA_ONBOARDING_FLOW_CODE);
 
                 return responseModel;
             }

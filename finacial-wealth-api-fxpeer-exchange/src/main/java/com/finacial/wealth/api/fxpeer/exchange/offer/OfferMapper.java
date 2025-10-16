@@ -32,7 +32,8 @@ public final class OfferMapper {
                 expired,
                 o.getStatus().name(),
                 o.isShowInTopDeals(),
-                o.getPoweredBy()
+                o.getPoweredBy(),
+                o.getCorrelationId()
         );
     }
 }

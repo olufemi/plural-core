@@ -22,6 +22,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
+import org.springframework.http.HttpStatus;
 
 @RestController
 @RequestMapping("/offers")
@@ -63,9 +64,16 @@ public class OfferController {
 
     }
 
-    @PostMapping("/create-offer")
+    /*@PostMapping("/create-offer")
     public ResponseEntity<ApiResponseModel> createOfferCaller(
             @RequestHeader(value = "authorization", required = true) String auth,
+            @RequestBody @Valid CreateOfferCaller rq) {
+
+        ResponseEntity<ApiResponseModel> baseResponse = service.createOfferCaller(rq, auth);
+        return baseResponse;
+    }*/
+    @PostMapping("/create-offer")
+    public ResponseEntity<ApiResponseModel> createOfferCaller(@RequestHeader(value = "authorization", required = true) String auth,
             @RequestBody @Valid CreateOfferCaller rq) {
 
         ResponseEntity<ApiResponseModel> baseResponse = service.createOfferCaller(rq, auth);
@@ -105,23 +113,23 @@ public class OfferController {
         return ResponseEntity.ok(page);
     }
 
-    @PostMapping
+    /*@PostMapping
     public ResponseEntity<Offer> create(@RequestHeader("X-User-Id") long sellerId,
             @RequestBody @Valid CreateOfferRq rq) {
-        return ResponseEntity.ok(service.createOffer(rq, sellerId, BigDecimal.ZERO, BigDecimal.ZERO, false, ""));
-    }
+        return ResponseEntity.ok(service.createOffer(rq, sellerId, BigDecimal.ZERO, BigDecimal.ZERO, false, "",""));
+    }*/
 
     @PatchMapping("/{id}/rate")
     public ResponseEntity<Offer> updateRate(@RequestHeader("X-User-Id") long sellerId,
             @PathVariable long id,
             @RequestParam @DecimalMin("0.000001") BigDecimal rate) {
-        return ResponseEntity.ok(service.updateRate(id, rate, sellerId));
+        return ResponseEntity.ok(service.updateRate(id, rate, sellerId,""));
     }
 
     @PostMapping("/{id}/cancel")
     public ResponseEntity<Void> cancel(@RequestHeader("X-User-Id") long sellerId,
             @PathVariable long id) {
-        service.cancel(id, sellerId);
+        service.cancel(id, sellerId,"");
         return ResponseEntity.noContent().build();
     }
 

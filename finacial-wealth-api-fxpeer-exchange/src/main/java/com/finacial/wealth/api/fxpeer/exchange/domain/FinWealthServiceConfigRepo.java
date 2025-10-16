@@ -20,14 +20,14 @@ public interface FinWealthServiceConfigRepo extends
 
     boolean existsByServiceType(String serviceType);
 
-    @Query("SELECT o FROM FinWealthPayServiceConfig o where o.serviceType = :serviceType")
-    Optional<FinWealthPayServiceConfig> findAllByServiceType(@Param("serviceType") String serviceType);
+    @Query("SELECT o FROM FinWealthPayServiceConfig o where o.serviceType = :serviceType and o.currencyCode = :currencyCode")
+    Optional<FinWealthPayServiceConfig> findAllByServiceType(@Param("serviceType") String serviceType, @Param("currencyCode") String currencyCode);
 
-    @Query("SELECT o FROM FinWealthPayServiceConfig o where o.serviceType = :serviceType")
-    FinWealthPayServiceConfig findByServiceType(@Param("serviceType") String serviceType);
+    @Query("SELECT o FROM FinWealthPayServiceConfig o where o.serviceType = :serviceType and o.currencyCode = :currencyCode")
+    FinWealthPayServiceConfig findByServiceType(@Param("serviceType") String serviceType, @Param("currencyCode") String currencyCode);
 
-    @Query("SELECT o FROM FinWealthPayServiceConfig o where o.serviceType = :serviceType")
-    List<FinWealthPayServiceConfig> findByServiceTypeEnable(@Param("serviceType") String serviceType);
+    @Query("SELECT o FROM FinWealthPayServiceConfig o where o.serviceType = :serviceType and o.currencyCode = :currencyCode")
+    List<FinWealthPayServiceConfig> findByServiceTypeEnable(@Param("serviceType") String serviceType, @Param("currencyCode") String currencyCode);
 
     @Query("SELECT o FROM FinWealthPayServiceConfig o where o.serviceType = :serviceType and o.currencyCode = :currencyCode")
     List<FinWealthPayServiceConfig> findByServiceTypeAndCurrencyCode(@Param("serviceType") String serviceType, @Param("currencyCode") String currencyCode);

@@ -96,11 +96,57 @@ public class OrderService {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(res);
     }
 
+    public BaseResponse validateAmountInRange(String amountStr,
+            BigDecimal minAmount,
+            BigDecimal maxAmount) {
+        BaseResponse bRes = new BaseResponse();
+
+        if (amountStr == null || amountStr.trim().isEmpty()) {
+            bRes.setStatusCode(400);
+            bRes.setDescription("amount is required");
+            // throw new IllegalArgumentException("amount is required");
+        }
+
+        //final 
+        BigDecimal amount = BigDecimal.ZERO;
+        try {
+            amount = new BigDecimal(amountStr.trim())
+                    .setScale(2, RoundingMode.HALF_UP); // optional: enforce 2dp for currency
+        } catch (NumberFormatException nfe) {
+            bRes.setStatusCode(400);
+            bRes.setDescription("amount must be a valid number");
+            return bRes;
+
+            //throw new IllegalArgumentException("amount must be a valid number", nfe);
+        }
+
+        if (minAmount != null && amount.compareTo(minAmount) < 0) {
+            // throw new IllegalArgumentException("amount must be >= " + minAmount);
+            bRes.setStatusCode(400);
+            bRes.setDescription("amount must be equal or more than minimum to sell: " + minAmount);
+
+        }
+        if (maxAmount != null && amount.compareTo(maxAmount) > 0) {
+            bRes.setStatusCode(400);
+            bRes.setDescription("amount must be less or equal to maximum to sell: " + maxAmount);
+            return bRes;
+
+            // throw new IllegalArgumentException("amount must be <= " + maxAmount);
+        }
+
+        bRes.setStatusCode(200);
+
+        return bRes;
+    }
+
+    private static boolean isBlank(String s) {
+        return s == null || s.trim().isEmpty();
+    }
+
     public ResponseEntity<ApiResponseModel> createOrderCaller(BuyOfferNow rq, String auth) {
         final ApiResponseModel res = new ApiResponseModel();
 
         try {
-            BigDecimal setAmount = new BigDecimal(rq.getAmount());
 
             String phoneNumber = utilService.getClaimFromJwt(auth, "phoneNumber"); // preferred if your JWT has sellerId
             Optional<RegWalletInfo> getRec = regWalletInfoRepository.findByPhoneNumber(phoneNumber);
@@ -110,13 +156,17 @@ public class OrderService {
             wSend.setPin(rq.getPin());
 
             wSend.setWalletId(getRec.get().getWalletId());
-            bResPin = transactionServiceProxies.validatePin(wSend);
+            bResPin = transactionServiceProxies.validatePin(wSend, auth);
             if (bResPin.getStatusCode() != 200) {
                 return bad(res, bResPin.getDescription(), bResPin.getStatusCode());
             }
 
             //check if cus has currency currency
-            List<AddAccountDetails> getAdDe = addAccountDetailsRepo.findByWalletIdrData(getRec.get().getWalletId());
+            List<AddAccountDetails> getAdDe = addAccountDetailsRepo.findByEmailAddressrData(getRec.get().getEmail());
+
+            if (getAdDe.size() <= 0) {
+                return bad(res, "Invalid User!", 400);
+            }
 
             BaseResponse bRes = new BaseResponse();
             List<Offer> off = offers.findByCorrelationIdData(rq.getOfferCorrelationId());
@@ -134,47 +184,61 @@ public class OrderService {
                 return bad(res, "Invalid Offer CorrelationId!", 400);
             }
 
-            if (setAmount.compareTo(getTransDe.get(0).getAvailableQuantity()) > 0) {
-                System.out.println("Amount to buy is more than available quantity for sales!");
-                return bad(res, "Amount to buy is more than available quantity for sales!", 400);
-            }
+            System.out.println(" List<AddAccountDetails>  ::::::::::::::::  %S  " + getAdDe);
+            String accountNumber = null;
 
             for (AddAccountDetails getWa : getAdDe) {
 
-                logger.info(" off.get(0).getCurrencyReceive() {}  ::::::::::::::::::::: ", off.get(0).getCurrencyReceive());
-                logger.info(" off.get(0).getCurrencySell() {}  ::::::::::::::::::::: ", off.get(0).getCurrencySell());
+                // logger.info(" off.get(0).getCurrencyReceive() {}  ::::::::::::::::::::: ", off.get(0).getCurrencyReceive());
+                //  logger.info(" off.get(0).getCurrencySell() {}  ::::::::::::::::::::: ", off.get(0).getCurrencySell());
+                // System.out.println(" getWa.getCurrencyCode() ::::::::::::::::  %S  " + getWa.getCurrencyCode());
+                String wallCurrencyCode = getWa.getCurrencyCode();
+                System.out.println("wallCurrencyCode::::::::::::::::  %S  " + wallCurrencyCode);
 
-                String wallCurrencyCode = getWa.getCurrencyCode() == null ? "" : getWa.getCurrencyCode();
+                // logger.info(" wallCurrencyCode ::::::::::::::::::::: ", wallCurrencyCode);
+                if (!wallCurrencyCode.equals(off.get(0).getCurrencyReceive().toString())) {
+                    System.out.println("entered first if::::::::::::::::  %S  ");
 
-                if (!wallCurrencyCode.equals(off.get(0).getCurrencyReceive())) {
-                    if (!"CA".equals(off.get(0).getCurrencyReceive())) {
+                    if (!"CAD".equals(off.get(0).getCurrencyReceive().toString())) {
+                        System.out.println("entered second if::::::::::::::::  %S  ");
                         //create account
                         AddAccountObj seObj = new AddAccountObj();
                         seObj.setCountry(getWa.getCountryName());
                         seObj.setCountryCode(getWa.getCountryCode());
                         seObj.setWalletId(getRec.get().getWalletId());
-                        bRes = profilingProxies.addOtherAccount(seObj);
+                        bRes = profilingProxies.addOtherAccount(seObj, auth);
                         if (bRes.getStatusCode() != 200) {
-                            return bad(res, STATUS_CODE_NIGERIA_ONBOARDING_FLOW_DESCRIPTION, STATUS_CODE_NIGERIA_ONBOARDING_FLOW_CODE);
+                            return bad(res, bRes.getDescription(), bRes.getStatusCode());
                         }
                     }
+                } else {
+
+                    if ("CAD".equals(off.get(0).getCurrencyReceive().toString())) {
+                        accountNumber = phoneNumber;
+                    } else {
+                        accountNumber = getWa.getAccountNumber();
+                    }
                 }
-                if (!wallCurrencyCode.equals(off.get(0).getCurrencySell())) {
-                    if (!"CA".equals(off.get(0).getCurrencyReceive())) {
+
+                if (!wallCurrencyCode.equals(off.get(0).getCurrencySell().toString())) {
+                    System.out.println("entered third if::::::::::::::::  %S  ");
+                    if (!"CAD".equals(off.get(0).getCurrencySell().toString())) {
+                        System.out.println("entered first if::::::::::::::::  %S  ");
                         //create account
                         AddAccountObj seObj = new AddAccountObj();
                         seObj.setCountry(getWa.getCountryName());
                         seObj.setCountryCode(getWa.getCountryCode());
                         seObj.setWalletId(getRec.get().getWalletId());
-                        bRes = profilingProxies.addOtherAccount(seObj);
+                        bRes = profilingProxies.addOtherAccount(seObj, auth);
                         if (bRes.getStatusCode() != 200) {
-                            return bad(res, STATUS_CODE_NIGERIA_ONBOARDING_FLOW_DESCRIPTION, STATUS_CODE_NIGERIA_ONBOARDING_FLOW_CODE);
+                            return bad(res, bRes.getDescription(), bRes.getStatusCode());
                         }
                     }
                 }
 
             }
-            String walletId = getRec.get().getWalletId();
+
+            String walletId = getAdDe.get(0).getWalletId();
             // 0) Basic request checks
             if (rq == null) {
                 return bad(res, "Empty request.", 400);
@@ -182,38 +246,29 @@ public class OrderService {
             if (isBlank(rq.getAmount())) {
                 return bad(res, "amount is required!", 400);
             }
+            BigDecimal setAmount = new BigDecimal(rq.getAmount());
 
+            if (setAmount.compareTo(getTransDe.get(0).getAvailableQuantity()) > 0) {
+                System.out.println("Amount to buy is more than available quantity for sales!");
+                return bad(res, "Amount to buy is more than available quantity for sales!", 400);
+            }
             BaseResponse getRess = this.validateAmountInRange(rq.getAmount(), off.get(0).getMinAmount(), off.get(0).getMaxAmount());
             if (getRess.getStatusCode() != 200) {
                 return bad(res, getRess.getDescription(), getRess.getStatusCode());
             }
 
-            if (setAmount.compareTo(off.get(0).getQtyAvailable()) > 0) {
+            /*if (setAmount.compareTo(off.get(0).getQtyAvailable()) > 0) {
                 String reDec = "Requested amount: " + setAmount + " is more than available quantity: " + off.get(0).getQtyAvailable();
                 //bRes.setDescription("amount must be <= " + maxAmount);
                 return bad(res, reDec, 400);
 
-            }
+            }*/
+            // List<AddAccountDetails> getAdDeNew = addAccountDetailsRepo.findByWalletIdrData1(walletId);
+            //validate account balance
+            //accountNumber = getWa.getAccountNumber();
+            System.out.println("accountNumber b4 check account  ::::::::::::::::  %S  " + accountNumber);
 
-            List<AddAccountDetails> getAdDeNew = addAccountDetailsRepo.findByWalletIdrData(walletId);
-            String accountNumber = null;
-
-            for (AddAccountDetails getWa : getAdDeNew) {
-                if (getWa.getCurrencyCode().equals(off.get(0).getCurrencyReceive())) {
-                    //validate account balance
-                    accountNumber = getWa.getAccountNumber();
-                    WalletInfoValiAcctBal wVal = new WalletInfoValiAcctBal();
-                    wVal.setAccountNumber(accountNumber);
-                    wVal.setRequestedAmount(setAmount);
-                    wVal.setWalletId(getRec.get().getWalletId());
-                    BaseResponse bResss = transactionServiceProxies.validateAccountBalnce(wVal);
-
-                    if (bResss.getStatusCode() != 200) {
-                        return bad(res, bResss.getDescription(), bResss.getStatusCode());
-                    }
-                }
-
-            }
+            System.out.println("accountNumber to DEBIT ::::::::::::::::  %S  " + accountNumber);
 
             String transactionId = String.valueOf(GlobalMethods.generateTransactionId());
 
@@ -228,12 +283,31 @@ public class OrderService {
                 return bad(res, mConfig.getDescription(), mConfig.getStatusCode());
             }
 
-            String pFeesString = (String) mConfig.getData()
-                    .get("fees");
+            System.out.println("mConfig::::::::::::::::  %S  " + mConfig);
+
+            System.out.println(" mConfig::::::::::::::::  %S  " + new Gson().toJson(mConfig));
+
+            /*
+            Object val = data.get("fees");
+            BigDecimal fees = (val instanceof BigDecimal)
+        ? (BigDecimal) val
+        : new BigDecimal(String.valueOf(val));
+             */
+            // String pFeesString = (String) mConfig.getData().get("fees");
+            String pFeesString = String.valueOf(mConfig.getData().get("fees"));
 
             BigDecimal receiveAmount = setAmount.multiply(off.get(0).getRate()).setScale(2, RoundingMode.HALF_UP);
 
             BigDecimal finCharges = receiveAmount.add(new BigDecimal(pFeesString));
+            WalletInfoValiAcctBal wVal = new WalletInfoValiAcctBal();
+            wVal.setAccountNumber(accountNumber);
+            wVal.setRequestedAmount(finCharges);
+            wVal.setWalletId(getRec.get().getWalletId());
+            BaseResponse bResss = transactionServiceProxies.validateAccountBalnce(wVal, auth);
+
+            if (bResss.getStatusCode() != 200) {
+                return bad(res, bResss.getDescription(), bResss.getStatusCode());
+            }
 
             //debit the buyer
             DebitWalletCaller rqD = new DebitWalletCaller();
@@ -242,11 +316,14 @@ public class OrderService {
             rqD.setFinalCHarges(finCharges.toString());
             rqD.setNarration(off.get(0).getCurrencyReceive() + "_Withdrawal");
             rqD.setPhoneNumber(accountNumber);
-            rqD.setTransAmount(receiveAmount.toString());
+            rqD.setTransAmount(finCharges.toString());
             rqD.setTransactionId(transactionId);
-            BaseResponse debitBuyerAcct = transactionServiceProxies.debitCustomerWithType(rqD, "CUSTOMER");
 
-            logger.info(" debitBuyerAcct BUYER  response ::::::::::::::::::::: ", debitBuyerAcct);
+            System.out.println(" debitBuyerAcct REQ ::::::::::::::::  %S  " + new Gson().toJson(rqD));
+
+            BaseResponse debitBuyerAcct = transactionServiceProxies.debitCustomerWithType(rqD, "CUSTOMER", auth);
+
+            System.out.println(" debitBuyerAcct RESPONSE ::::::::::::::::  %S  " + new Gson().toJson(debitBuyerAcct));
 
             if (debitBuyerAcct.getStatusCode() == 200) {
                 DebitWalletCaller debGLCredit = new DebitWalletCaller();
@@ -269,15 +346,20 @@ public class OrderService {
                 debGLCredit.setTransAmount(receiveAmount.toString());
                 debGLCredit.setTransactionId(transactionId);
 
-                BaseResponse debitAcct_GL = transactionServiceProxies.debitCustomerWithType(debGLCredit, off.get(0).getCurrencyReceive().toString());
-                logger.info(" debitAcct GL for buyerleg response ::::::::::::::::::::: ", debitAcct_GL);
+                System.out.println(" debitAcct_GL REQUEST ::::::::::::::::  %S  " + new Gson().toJson(debGLCredit));
 
+                BaseResponse debitAcct_GLRes = transactionServiceProxies.debitCustomerWithType(debGLCredit, off.get(0).getCurrencyReceive().toString(), auth);
+                System.out.println(" debitAcct_GLRes RESPONSE ::::::::::::::::  %S  " + new Gson().toJson(debitAcct_GLRes));
+
+                //logger.info(" debitAcct GL for buyerleg response ::::::::::::::::::::: ", debitAcct_GL);
                 //CREDIT SELLER
-                List<AddAccountDetails> getSellerAcct = addAccountDetailsRepo.findByWalletIdrData(walletId);
+                List<WalletTransactionsDetails> getWalSeller = walletTransactionsDetailsRepo.findByCorrelationId(rq.getOfferCorrelationId());
+
+                List<AddAccountDetails> getSellerAcct = addAccountDetailsRepo.findByWalletIdrData1(getWalSeller.get(0).getSellerId());
                 String sellerAcctNumber = null;
 
                 for (AddAccountDetails getWa : getSellerAcct) {
-                    if (getWa.getCurrencyCode().equals(off.get(0).getCurrencyReceive())) {
+                    if (getWa.getCurrencyCode().equals(off.get(0).getCurrencyReceive().toString())) {
                         sellerAcctNumber = getWa.getAccountNumber();
                     }
                 }
@@ -291,7 +373,9 @@ public class OrderService {
                 rqC.setTransAmount(receiveAmount.toString());
                 rqC.setTransactionId(transactionId);
 
-                BaseResponse creditSellerAcct = transactionServiceProxies.creditCustomerWithType(rqC, "CUSTOMER");
+                System.out.println(" CREDIT SELLER Credit REQUEST  ::::::::::::::::  %S  " + new Gson().toJson(rqC));
+
+                BaseResponse creditSellerAcct = transactionServiceProxies.creditCustomerWithType(rqC, "CUSTOMER", auth);
 
                 System.out.println(" CREDIT SELLER Credit Response from core ::::::::::::::::  %S  " + new Gson().toJson(creditSellerAcct));
                 if (creditSellerAcct.getStatusCode() == 200) {
@@ -304,10 +388,12 @@ public class OrderService {
                     gLCredit.setNarration(off.get(0).getCurrencyReceive() + "_Deposit");
                     //gLCredit.setPhoneNumber(utilService.decryptData(utilService.getSETTING_KEY_WALLET_SYSTEM_SYSTEM_GG_NIG()));
                     gLCredit.setPhoneNumber(utilService.decryptData(GGL_ACCOUNT));
-                    gLCredit.setTransAmount(rqC.getTransAmount());
+                    gLCredit.setTransAmount(receiveAmount.toString());
                     gLCredit.setTransactionId(rqC.getTransactionId());
 
-                    BaseResponse creditAcctNGN_GL = transactionServiceProxies.creditCustomerWithType(gLCredit, GGL_CODE + "_GL");
+                    System.out.println(" CREDIT GL SLLER LEG REQUEST  ::::::::::::::::  %S  " + new Gson().toJson(gLCredit));
+
+                    BaseResponse creditAcctNGN_GL = transactionServiceProxies.creditCustomerWithType(gLCredit, GGL_CODE + "_GL", auth);
 
                     System.out.println(" CREDIT GL SLLER LEG Response from core ::::::::::::::::  %S  " + new Gson().toJson(creditAcctNGN_GL));
 
@@ -342,7 +428,8 @@ public class OrderService {
                 wallInd.setCorrelationId(rq.getOfferCorrelationId());
 
                 walletIndivTransactionsDetailsRepo.save(wallInd);
-                Order orddd = buyNow(off.get(0).getId(), setAmount, walletId, 0L, rq.getOfferCorrelationId(), String.valueOf(off.get(0).getSellerUserId()), "0.00", transactionId);
+                Order orddd = buyNow(off.get(0).getId(), setAmount, walletId, 0L, rq.getOfferCorrelationId(),
+                        String.valueOf(off.get(0).getSellerUserId()), "0.00", transactionId, auth);
                 /*
                  buyNow(long offerId, BigDecimal amount, long buyerId, long lockTtlSeconds,
             String correlId, String sellerId, String fees, String transactionId)
@@ -367,53 +454,9 @@ public class OrderService {
         }
     }
 
-    public BaseResponse validateAmountInRange(String amountStr,
-            BigDecimal minAmount,
-            BigDecimal maxAmount) {
-        BaseResponse bRes = new BaseResponse();
-
-        if (amountStr == null || amountStr.trim().isEmpty()) {
-            bRes.setStatusCode(400);
-            bRes.setDescription("amount is required");
-            // throw new IllegalArgumentException("amount is required");
-        }
-
-        //final 
-        BigDecimal amount = BigDecimal.ZERO;
-        try {
-            amount = new BigDecimal(amountStr.trim())
-                    .setScale(2, RoundingMode.HALF_UP); // optional: enforce 2dp for currency
-        } catch (NumberFormatException nfe) {
-            bRes.setStatusCode(400);
-            bRes.setDescription("amount must be a valid number");
-            return bRes;
-
-            //throw new IllegalArgumentException("amount must be a valid number", nfe);
-        }
-
-        if (minAmount != null && amount.compareTo(minAmount) < 0) {
-            // throw new IllegalArgumentException("amount must be >= " + minAmount);
-            bRes.setStatusCode(400);
-            bRes.setDescription("amount must be >= " + minAmount);
-
-        }
-        if (maxAmount != null && amount.compareTo(maxAmount) > 0) {
-            bRes.setStatusCode(400);
-            bRes.setDescription("amount must be <= " + maxAmount);
-
-            // throw new IllegalArgumentException("amount must be <= " + maxAmount);
-        }
-
-        return bRes;
-    }
-
-    private static boolean isBlank(String s) {
-        return s == null || s.trim().isEmpty();
-    }
-
     @Transactional
     public Order buyNow(long offerId, BigDecimal amount, String buyerId, long lockTtlSeconds,
-            String correlId, String sellerId, String fees, String transactionId)
+            String correlId, String sellerId, String fees, String transactionId, String auth)
             throws NoSuchAlgorithmException, NoSuchPaddingException,
             InvalidKeyException, IllegalBlockSizeException, BadPaddingException {
         //Offer off = offers.findById(offerId).orElseThrow(() -> new NotFoundException("Offer not found"));
@@ -423,15 +466,26 @@ public class OrderService {
             throw new BusinessException("Invalid Offer CorrelationId!");
         }
 
-        List<AddAccountDetails> getBuyyAcct = addAccountDetailsRepo.findByWalletIdrData(String.valueOf(buyerId));
+        List<AddAccountDetails> getBuyyAcct = addAccountDetailsRepo.findByWalletIdrData1(String.valueOf(buyerId));
 
-        List<AddAccountDetails> getSellerAcct = addAccountDetailsRepo.findByWalletIdrData(String.valueOf(sellerId));
+        List<AddAccountDetails> getSellerAcct = addAccountDetailsRepo.findByWalletIdrData1(String.valueOf(sellerId));
 
         String getSellerAccttAcct = null;
 
-        for (AddAccountDetails getWa : getSellerAcct) {
-            if (getWa.getCurrencyCode().equals(off.get(0).getCurrencySell())) {
-                getSellerAccttAcct = getWa.getAccountNumber();
+        if ("CAD".equals(off.get(0).getCurrencySell().toString())) {
+
+            Optional<RegWalletInfo> getRecord = regWalletInfoRepository.findByEmail(getSellerAcct.get(0).getEmailAddress());
+
+            getSellerAccttAcct = getRecord.get().getPhoneNumber();
+
+        } else {
+
+            for (AddAccountDetails getWa : getSellerAcct) {
+                if (getWa.getCurrencyCode().equals(off.get(0).getCurrencySell().toString())) {
+
+                    getSellerAccttAcct = getWa.getAccountNumber();
+
+                }
             }
         }
 
@@ -454,30 +508,46 @@ public class OrderService {
         rqD.setPhoneNumber(getSellerAccttAcct);
         rqD.setTransAmount(amount.toString());
         rqD.setTransactionId(transactionId);
-        BaseResponse debitSellerAcct = transactionServiceProxies.debitCustomerWithType(rqD, "CUSTOMER");
+        System.out.println(" debitSellerAcct REQ  ::::::::::::::::  %S  " + new Gson().toJson(rqD));
 
-        logger.info(" debitSellerAcct   response ::::::::::::::::::::: ", debitSellerAcct);
+        BaseResponse debitSellerAcct = transactionServiceProxies.debitCustomerWithType(rqD, "CUSTOMER", auth);
 
+        System.out.println(" debitSellerAcct RESPONSE from core ::::::::::::::::  %S  " + new Gson().toJson(debitSellerAcct));
+
+        //logger.info(" debitSellerAcct   response ::::::::::::::::::::: ", debitSellerAcct);
         if (debitSellerAcct.getStatusCode() == 200) {
             DebitWalletCaller debGLCredit = new DebitWalletCaller();
             debGLCredit.setAuth("Buyer");
             debGLCredit.setFees("0.00");
             debGLCredit.setFinalCHarges(rqD.getFinalCHarges());
             debGLCredit.setNarration(rqD.getNarration());
-           // debGLCredit.setPhoneNumber(utilService.decryptData(utilService.getSETTING_KEY_WALLET_SYSTEM_SYSTEM_GG_CAD()));
+            // debGLCredit.setPhoneNumber(utilService.decryptData(utilService.getSETTING_KEY_WALLET_SYSTEM_SYSTEM_GG_CAD()));
             debGLCredit.setPhoneNumber(utilService.decryptData(GGL_ACCOUNT));
-            debGLCredit.setTransAmount(rqD.getTransAmount());
+            debGLCredit.setTransAmount(rqD.getFinalCHarges());
             debGLCredit.setTransactionId(transactionId);
 
-            BaseResponse debit_GL = transactionServiceProxies.debitCustomerWithType(debGLCredit, off.get(0).getCurrencySell().toString());
-            logger.info(" debit GL for seller leg  response ::::::::::::::::::::: ", debit_GL);
+            System.out.println(" debGLCredit REQ  ::::::::::::::::  %S  " + new Gson().toJson(debGLCredit));
 
+            BaseResponse debit_GL = transactionServiceProxies.debitCustomerWithType(debGLCredit, off.get(0).getCurrencySell().toString(), auth);
+            System.out.println(" debit_GL RESPONSE  ::::::::::::::::  %S  " + new Gson().toJson(debit_GL));
+
+            //logger.info(" debit GL for seller leg  response ::::::::::::::::::::: ", debit_GL);
             //CREDIT BUYER
             String getBuyyAcctAcct = null;
 
-            for (AddAccountDetails getWa : getBuyyAcct) {
-                if (getWa.getCurrencyCode().equals(off.get(0).getCurrencySell())) {
-                    getBuyyAcctAcct = getWa.getAccountNumber();
+            if ("CAD".equals(off.get(0).getCurrencySell().toString())) {
+
+                Optional<RegWalletInfo> getRecord = regWalletInfoRepository.findByEmail(getBuyyAcct.get(0).getEmailAddress());
+
+                getBuyyAcctAcct = getRecord.get().getPhoneNumber();
+
+            } else {
+
+                for (AddAccountDetails getWa : getBuyyAcct) {
+                    if (getWa.getCurrencyCode().equals(off.get(0).getCurrencySell().toString())) {
+                        getBuyyAcctAcct = getWa.getAccountNumber();
+
+                    }
                 }
             }
 
@@ -490,7 +560,9 @@ public class OrderService {
             rqC.setTransAmount(amount.toString());
             rqC.setTransactionId(transactionId);
 
-            BaseResponse creditBuyerAcct = transactionServiceProxies.creditCustomerWithType(rqC, "CUSTOMER");
+            System.out.println(" creditBuyerAcct REQ  ::::::::::::::::  %S  " + new Gson().toJson(rqC));
+
+            BaseResponse creditBuyerAcct = transactionServiceProxies.creditCustomerWithType(rqC, "CUSTOMER", auth);
 
             System.out.println(" creditBuyerAcct Response from core ::::::::::::::::  %S  " + new Gson().toJson(creditBuyerAcct));
             if (creditBuyerAcct.getStatusCode() == 200) {
@@ -503,10 +575,12 @@ public class OrderService {
                 GLCredit.setNarration(rqC.getNarration());
                 //GLCredit.setPhoneNumber(utilService.decryptData(utilService.getSETTING_KEY_WALLET_SYSTEM_SYSTEM_GG_CAD()));
                 GLCredit.setPhoneNumber(utilService.decryptData(GGL_ACCOUNT));
-                GLCredit.setTransAmount(rqC.getTransAmount());
+                GLCredit.setTransAmount(rqC.getFinalCHarges());
                 GLCredit.setTransactionId(rqC.getTransactionId());
 
-                BaseResponse creditAcct_GL = transactionServiceProxies.creditCustomerWithType(GLCredit, off.get(0).getCurrencySell().toString());
+                System.out.println(" creditAcct_GL buyer legCredit REQ  ::::::::::::::::  %S  " + new Gson().toJson(GLCredit));
+
+                BaseResponse creditAcct_GL = transactionServiceProxies.creditCustomerWithType(GLCredit, off.get(0).getCurrencySell().toString(), auth);
 
                 System.out.println(" credit GL for buyer legCredit Response from core ::::::::::::::::  %S  " + new Gson().toJson(creditAcct_GL));
 

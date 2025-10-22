@@ -31,6 +31,7 @@ import com.finacial.wealth.api.profiling.response.BaseResponse;
 import com.finacial.wealth.api.profiling.utilities.models.OtpValidateRequest;
 import com.finacial.wealth.api.profiling.utils.DecodedJWTToken;
 import com.finacial.wealth.api.profiling.utils.UttilityMethods;
+import com.google.gson.Gson;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.List;
@@ -85,6 +86,8 @@ public class AddAccountService {
 
     @Value("${spring.profiles.active}")
     private String environment;
+    @Value("${fin.wealth.goto.breeze}")
+    private String gotoBreezeapay;
 
     public AddAccountService(AddFailedTransLoggRepo addFailedTransLoggRepo,
             CountryService countryService,
@@ -119,6 +122,8 @@ public class AddAccountService {
         String statusMessage = "An error occured,please try again";
         try {
             //create virtual account 
+            System.out.println(" authKey :::::::::::::::: %S " + authKey);
+            System.out.println(" subKey :::::::::::::::: %S " + subKey);
             GenerateVirtualAccountNumberReq rqq = new GenerateVirtualAccountNumberReq();
             rqq.setBvn(rq.getBvn());
             rqq.setChannelCode(channelCode);
@@ -130,7 +135,11 @@ public class AddAccountService {
             rqq.setForceDebit("Y");
             rqq.setMerchantId(merchantId);
             rqq.setRequestAuthorizer(reqAuthorizer);
+            System.out.println(" GenerateVirtualAccountNumberReq :::::::::::::::: %S " + new Gson().toJson(rqq));
+
             GenerateVirtualAccountNumResponse genRess = breezePayVirtAcctProxy.generateVirtualAccount(rqq, authKey, subKey);
+
+            System.out.println(" GenerateVirtualAccountNumResponse :::::::::::::::: %S " + new Gson().toJson(rqq));
 
             if (!genRess.equals(SUCCESSFUL)) {
                 AddFailedTransLog pinActTransFailed = new AddFailedTransLog("add-account",
@@ -216,7 +225,6 @@ public class AddAccountService {
             }
 
             Optional<RegWalletInfo> getRec = regWalletInfoRepository.findByEmail(emailAddress);
-           
 
             //validate country/code
             ValidationResponse resp = countryService.validateCountryPair(rq.getCountryCode(), rq.getCountry());
@@ -301,7 +309,8 @@ public class AddAccountService {
             cAcc.setWalletId(getRec.get().getWalletId());
             String virtAccNo = null;
             String virtName = null;
-            if (!environment.equals("dev")) {
+            // if (!environment.equals("dev")) {
+            if (gotoBreezeapay.equals("1")) {
                 BaseResponse calThirdParty = this.addNigeriaAccountCallThirdPartyApi(cAcc);
 
                 if (calThirdParty.getStatusCode() != 200) {

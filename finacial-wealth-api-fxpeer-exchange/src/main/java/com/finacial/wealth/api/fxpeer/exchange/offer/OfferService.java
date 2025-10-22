@@ -11,6 +11,8 @@ import com.finacial.wealth.api.fxpeer.exchange.common.NotFoundException;
 import com.finacial.wealth.api.fxpeer.exchange.common.OfferStatus;
 import com.finacial.wealth.api.fxpeer.exchange.domain.AddAccountDetails;
 import com.finacial.wealth.api.fxpeer.exchange.domain.AddAccountDetailsRepo;
+import com.finacial.wealth.api.fxpeer.exchange.domain.AppConfig;
+import com.finacial.wealth.api.fxpeer.exchange.domain.AppConfigRepo;
 import com.finacial.wealth.api.fxpeer.exchange.feign.ProfilingProxies;
 import com.finacial.wealth.api.fxpeer.exchange.feign.TransactionServiceProxies;
 import com.finacial.wealth.api.fxpeer.exchange.ledger.LedgerClient;
@@ -18,6 +20,7 @@ import com.finacial.wealth.api.fxpeer.exchange.ledger.LedgerClient;
 import com.finacial.wealth.api.fxpeer.exchange.model.AddAccountObj;
 import com.finacial.wealth.api.fxpeer.exchange.model.ApiResponseModel;
 import com.finacial.wealth.api.fxpeer.exchange.model.BaseResponse;
+import com.finacial.wealth.api.fxpeer.exchange.model.DebitWalletCaller;
 import com.finacial.wealth.api.fxpeer.exchange.model.ManageFeesConfigReq;
 import com.finacial.wealth.api.fxpeer.exchange.model.WalletNo;
 import com.finacial.wealth.api.fxpeer.exchange.util.GlobalMethods;
@@ -55,6 +58,7 @@ public class OfferService {
     private final AddAccountDetailsRepo addAccountDetailsRepo;
     private final ProfilingProxies profilingProxies;
     private final TransactionServiceProxies transactionServiceProxies;
+    private final AppConfigRepo appConfigRepo;
 
     private static final ZoneId LAGOS = ZoneId.of("Africa/Lagos");
     private static final DateTimeFormatter EXPIRY_DMY
@@ -66,7 +70,8 @@ public class OfferService {
             RegWalletInfoRepository regWalletInfoRepository,
             AddAccountDetailsRepo addAccountDetailsRepo,
             ProfilingProxies profilingProxies,
-            TransactionServiceProxies transactionServiceProxies) {
+            TransactionServiceProxies transactionServiceProxies,
+            AppConfigRepo appConfigRepo) {
         this.repo = repo;
         this.ledger = ledger;
         this.utilService = utilService;
@@ -74,6 +79,7 @@ public class OfferService {
         this.addAccountDetailsRepo = addAccountDetailsRepo;
         this.profilingProxies = profilingProxies;
         this.transactionServiceProxies = transactionServiceProxies;
+        this.appConfigRepo = appConfigRepo;
     }
 
     @Transactional(readOnly = true)
@@ -256,6 +262,10 @@ public class OfferService {
                 return bad(res, "Offer does not exist!", 400);
             }
 
+            if (!offerDe.get(0).getStatus().LIVE.equals(OfferStatus.LIVE)) {
+                return bad(res, "Offer no longer Live!", 400);
+            }
+
             long logSellerId = Long.valueOf(offerDe.get(0).getSellerUserId());
 
             Offer updateOffer = updateRate(offerDe.get(0).getId(), new BigDecimal(rq.getNewRate()), logSellerId, rq.getCorrelationId());
@@ -337,6 +347,9 @@ public class OfferService {
                 }
             }
             String sellerId = getAdDe.get(0).getWalletId();
+            if ("CAD".equals(rq.getCurrencySell())) {
+                sellerId = getRec.get().getWalletId();
+            }
             System.out.println("sellerId" + "  ::::::::::::::::::::: >>>>>>>>>>>>>>>>>>  " + sellerId);
 
             // 1) Normalize inputs
@@ -398,7 +411,7 @@ public class OfferService {
 
             // 3) Build domain request and delegate
             CreateOfferRq coreRq = new CreateOfferRq(currencySell, currencyReceive, rate, qtyTotal, expiryAt);
-            ApiResponseModel created = createOffer(coreRq, Long.valueOf(sellerId), setMin, setMax, rq.isShowInTopDeals(), getRec.get().getFirstName(), auth);
+            ApiResponseModel created = createOffer(coreRq, Long.valueOf(sellerId), setMin, setMax, rq.isShowInTopDeals(), getRec.get().getFirstName(), auth, phoneNumber);
 
             // 4) Success
             res.setStatusCode(200);
@@ -416,7 +429,7 @@ public class OfferService {
 
     @Transactional
     public ApiResponseModel createOffer(CreateOfferRq rq, long sellerId, BigDecimal minAmt,
-            BigDecimal maxAmt, boolean showInTopDeals, String creators, String auth) {
+            BigDecimal maxAmt, boolean showInTopDeals, String creators, String auth, String cusCadAccountNo) {
         final ApiResponseModel res = new ApiResponseModel();
 
         try {
@@ -429,13 +442,24 @@ public class OfferService {
             throw new BusinessException("Insufficient balance to list qtyTotal");
         }*/
             System.out.println("sellerId" + "  ::::::::::::::::::::: >>>>>>>>>>>>>>>>>>  " + sellerId);
+            System.out.println("cusCadAccountNo" + "  ::::::::::::::::::::: >>>>>>>>>>>>>>>>>>  " + cusCadAccountNo);
 
             List<AddAccountDetails> getAdDe = addAccountDetailsRepo.findByWalletIdrData1(String.valueOf(sellerId));
 
+            String accountToDebit;
+
             WalletInfoValAcct wSend = new WalletInfoValAcct();
-            wSend.setAccountNumber(getAdDe.get(0).getAccountNumber());
             wSend.setCorrelationId(correlationId);
-            wSend.setCurrencyToBuy(rq.getCurrencySell().toString());
+            wSend.setCurrencyToBuy(rq.getCurrencyReceive().toString());
+            if ("CAD".equals(rq.getCurrencySell())) {
+                wSend.setAccountNumber(getAdDe.get(0).getAccountNumber());
+                accountToDebit = wSend.getAccountNumber();
+
+            } else {
+                wSend.setAccountNumber(cusCadAccountNo);
+                accountToDebit = wSend.getAccountNumber();
+
+            }
             wSend.setCurrencyToSell(rq.getCurrencySell().toString());
             wSend.setTransactionAmmount(rq.getQtyTotal());
             wSend.setWalletId(String.valueOf(sellerId));
@@ -449,6 +473,57 @@ public class OfferService {
                 res.setDescription(bRes.getDescription());
                 return res;
 
+            }
+
+            //debit customer account
+            //debit the buyer
+            DebitWalletCaller rqD = new DebitWalletCaller();
+            rqD.setAuth("Seller");
+            rqD.setFees("0.00");
+            rqD.setFinalCHarges(rq.getQtyTotal().add(new BigDecimal(rqD.getFees())).toString());
+            rqD.setNarration(rq.getCurrencySell().toString() + "_Withdrawal");
+            rqD.setPhoneNumber(accountToDebit);
+            rqD.setTransAmount(rq.getQtyTotal().add(new BigDecimal(rqD.getFees())).toString());
+            rqD.setTransactionId(correlationId);
+
+            System.out.println(" debitBuyerAcct REQ ::::::::::::::::  %S  " + new Gson().toJson(rqD));
+
+            BaseResponse debitBuyerAcct = transactionServiceProxies.debitCustomerWithType(rqD, "CUSTOMER", auth);
+
+            System.out.println(" debitBuyerAcct RESPONSE ::::::::::::::::  %S  " + new Gson().toJson(debitBuyerAcct));
+
+            if (debitBuyerAcct.getStatusCode() == 200) {
+
+                System.out.println("sellerId" + "  ::::::::::::::::::::: >>>>>>>>>>>>>>>>>>  " + sellerId);
+
+                DebitWalletCaller debGLCredit = new DebitWalletCaller();
+                debGLCredit.setAuth(rqD.getAuth());
+                debGLCredit.setFees("0.00");
+                debGLCredit.setFinalCHarges(rqD.getFinalCHarges());
+                debGLCredit.setNarration(rqD.getNarration());
+                List<AppConfig> getAppConf = appConfigRepo.findByConfigName(rq.getCurrencySell().toString());
+                String GGL_ACCOUNT = null;
+                String GGL_CODE = null;
+                for (AppConfig getConfDe : getAppConf) {
+                    if (getConfDe.getConfigName().equals(rq.getCurrencySell().toString())) {
+                        GGL_ACCOUNT = getConfDe.getConfigValue();
+                        GGL_CODE = rq.getCurrencySell().toString();
+                    }
+                }
+
+                //debGLCredit.setPhoneNumber(utilService.decryptData(utilService.getSETTING_KEY_WALLET_SYSTEM_SYSTEM_GG_NIG()));
+                debGLCredit.setPhoneNumber(utilService.decryptData(GGL_ACCOUNT));
+                debGLCredit.setTransAmount(rqD.getTransAmount());
+                debGLCredit.setTransactionId(correlationId);
+
+                System.out.println(" debitAcct_GL REQUEST ::::::::::::::::  %S  " + new Gson().toJson(debGLCredit));
+
+                BaseResponse debitAcct_GLRes = transactionServiceProxies.debitCustomerWithType(debGLCredit, rq.getCurrencySell().toString(), auth);
+                System.out.println(" debitAcct_GLRes RESPONSE ::::::::::::::::  %S  " + new Gson().toJson(debitAcct_GLRes));
+            } else {
+                res.setStatusCode(bRes.getStatusCode());
+                res.setDescription(bRes.getDescription());
+                return res;
             }
 
             Offer o = new Offer();
@@ -533,7 +608,7 @@ public class OfferService {
     private ResponseEntity<ApiResponseModel> bad(ApiResponseModel res, String msg, int statusCode) {
         res.setStatusCode(statusCode);
         res.setDescription(msg);
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(res);
+        return ResponseEntity.status(HttpStatus.OK).body(res);
     }
 
     public ResponseEntity<ApiResponseModel> cancelOfferCaller(CancelOfferCallerReq rq, String auth) {

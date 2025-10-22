@@ -136,13 +136,16 @@ public class NipBankService {
     @Value("${spring.profiles.active}")
     private String environment;
 
+    @Value("${fin.wealth.goto.breeze}")
+    private String gotoBreezeapay;
+
     @Value("${fin.wealth.otp.encrypt.key}")
     private String encryptionKey;
 
     // Optional headers, if your sandbox enforces them:
-    @Value("${fin.wealth.breeze.pay.mer.sub.key:}")
+    @Value("${fin.wealth.breeze.pay.mer.sub.key}")
     private String subscriptionKey;  // Ocp-Apim-Subscription-Key
-    @Value("${fin.wealth.breeze.pay.mer.auth:}")
+    @Value("${fin.wealth.breeze.pay.mer.auth}")
     private String authorization;      // Bearer <token>
 
     @Value("${app.nipbanks.seed.fs.path}")
@@ -239,6 +242,8 @@ public class NipBankService {
         try {
             statusCode = 400;
             System.out.println("NameLookUp req :::::::: " + "    ::::::::::::::::::::: " + new Gson().toJson(rq));
+            System.out.println(" authKey :::::::::::::::: %S " + authorization);
+            System.out.println(" subKey :::::::::::::::: %S " + subscriptionKey);
 
             DecodedJWTToken getDecoded = DecodedJWTToken.getDecoded(auth);
             String processId = String.valueOf(GlobalMethods.generateTransactionId());
@@ -693,7 +698,8 @@ public class NipBankService {
                         pFees = partData.getFee();
                         System.out.println("pFees" + "  :::::::::::::::::::::   " + pFees);
 
-                        if (environment.equals("pilot") || environment.equals("prod")) {
+                        // if (environment.equals("pilot") || environment.equals("prod")) {
+                        if (gotoBreezeapay.equals("1")) {
 
                             NameEnquiryReq reqq = new NameEnquiryReq();
 
@@ -704,7 +710,12 @@ public class NipBankService {
                             reqq.setMsgId("BRZ" + generateMsgId());
                             reqq.setSenderAccount(senderPhoneNumber);
 
-                            NameEnquiryResponse validateAcctDe = breezePayVirtAcctProxy.nameEnquiry(reqq, auth, subscriptionKey);
+                            System.out.println("NameEnquiryReq reqq " + "  :::::::::::::::::::::   " + new Gson().toJson(reqq));
+
+                            NameEnquiryResponse validateAcctDe = breezePayVirtAcctProxy.nameEnquiry(reqq, authorization, subscriptionKey);
+
+                            System.out.println("NameEnquiryResponse  " + "  :::::::::::::::::::::   " + new Gson().toJson(validateAcctDe));
+
                             if (!"00".equals(validateAcctDe.getResponseCode())) {
                                 PaymentsFailedTransInfo procFailedTrans = new PaymentsFailedTransInfo(
                                         "Initiate-Add-Bank-Account", validateAcctDe.getResponseMessage(),
@@ -827,6 +838,9 @@ public class NipBankService {
     }
 
     public BaseResponse processTransfer(OtherBankTransferRequest rq, String channel, String auth) {
+
+        System.out.println(" authKey :::::::::::::::: %S " + authorization);
+        System.out.println(" subKey :::::::::::::::: %S " + subscriptionKey);
 
         BaseResponse responseModel = new BaseResponse();
         int statusCode = 500;
@@ -1253,9 +1267,14 @@ public class NipBankService {
                 nipReqLog.setTransactionNarration(getnarration);
                 nipReqLog.setTransactionReference(rq.getProcessId());
 
-                if (environment.equals("prod") || environment.equals("pilot")) {
+                // if (environment.equals("prod") || environment.equals("pilot")) {
+                if (gotoBreezeapay.equals("1")) {
                     NipCreditTransferResponse nipCre = new NipCreditTransferResponse();
-                    nipCre = breezePayVirtAcctProxy.makePayment(nipReq, auth, subscriptionKey);
+                    System.out.println(" NipCreditAccountTransferRequest :::::::::::::::: %S " + new Gson().toJson(nipReq));
+
+                    nipCre = breezePayVirtAcctProxy.makePayment(nipReq, authorization, subscriptionKey);
+                    System.out.println(" NipCreditTransferResponse :::::::::::::::: %S " + new Gson().toJson(nipCre));
+
                     if (nipCre.getResponseCode() != "00") {
                         nipReqLog.setResponseCode(nipCre.getResponseCode());
                         nipReqLog.setResponseMessage(nipCre.getResponseMessage());

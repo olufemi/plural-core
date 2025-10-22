@@ -15,6 +15,7 @@ import com.finacial.wealth.api.fxpeer.exchange.domain.AddAccountDetails;
 import com.finacial.wealth.api.fxpeer.exchange.domain.AddAccountDetailsRepo;
 import com.finacial.wealth.api.fxpeer.exchange.domain.AppConfig;
 import com.finacial.wealth.api.fxpeer.exchange.domain.AppConfigRepo;
+import com.finacial.wealth.api.fxpeer.exchange.domain.PeerToPeerFxReferral;
 import com.finacial.wealth.api.fxpeer.exchange.domain.RegWalletInfo;
 import com.finacial.wealth.api.fxpeer.exchange.domain.RegWalletInfoRepository;
 import com.finacial.wealth.api.fxpeer.exchange.feign.ProfilingProxies;
@@ -29,12 +30,14 @@ import com.finacial.wealth.api.fxpeer.exchange.model.WalletNo;
 import com.finacial.wealth.api.fxpeer.exchange.offer.CreateOfferCaller;
 import com.finacial.wealth.api.fxpeer.exchange.offer.Offer;
 import com.finacial.wealth.api.fxpeer.exchange.offer.OfferRepository;
+import com.finacial.wealth.api.fxpeer.exchange.repo.PeerToPeerFxReferralRepo;
 import com.finacial.wealth.api.fxpeer.exchange.util.GlobalMethods;
 import com.finacial.wealth.api.fxpeer.exchange.util.UttilityMethods;
-import com.finacial.wealth.api.fxpeer.exchange.fx.p2.p.wallet.WalletIndivTransactionsDetails;
-import com.finacial.wealth.api.fxpeer.exchange.fx.p2.p.wallet.WalletIndivTransactionsDetailsRepo;
-import com.finacial.wealth.api.fxpeer.exchange.fx.p2.p.wallet.WalletTransactionsDetails;
-import com.finacial.wealth.api.fxpeer.exchange.fx.p2.p.wallet.WalletTransactionsDetailsRepo;
+import com.finacial.wealth.api.fxpeer.exchange.fx.p.p.wallet.WalletIndivTransactionsDetails;
+import com.finacial.wealth.api.fxpeer.exchange.fx.p.p.wallet.WalletIndivTransactionsDetailsRepo;
+import com.finacial.wealth.api.fxpeer.exchange.fx.p.p.wallet.WalletTransactionsDetails;
+import com.finacial.wealth.api.fxpeer.exchange.fx.p.p.wallet.WalletTransactionsDetailsRepo;
+
 import com.google.gson.Gson;
 import jakarta.transaction.Transactional;
 import org.springframework.stereotype.Service;
@@ -70,6 +73,7 @@ public class OrderService {
     private final WalletTransactionsDetailsRepo walletTransactionsDetailsRepo;
     private final WalletIndivTransactionsDetailsRepo walletIndivTransactionsDetailsRepo;
     private final AppConfigRepo appConfigRepo;
+    private final PeerToPeerFxReferralRepo peerToPeerFxReferralRepo;
 
     public OrderService(OrderRepository orders, OfferRepository offers,
             TransactionServiceProxies transactionServiceProxies,
@@ -77,7 +81,7 @@ public class OrderService {
             AddAccountDetailsRepo addAccountDetailsRepo,
             ProfilingProxies profilingProxies, WalletTransactionsDetailsRepo walletTransactionsDetailsRepo,
             WalletIndivTransactionsDetailsRepo walletIndivTransactionsDetailsRepo,
-            AppConfigRepo appConfigRepo) {
+            AppConfigRepo appConfigRepo, PeerToPeerFxReferralRepo peerToPeerFxReferralRepo) {
         this.orders = orders;
         this.offers = offers;
         this.transactionServiceProxies = transactionServiceProxies;
@@ -88,12 +92,13 @@ public class OrderService {
         this.walletTransactionsDetailsRepo = walletTransactionsDetailsRepo;
         this.walletIndivTransactionsDetailsRepo = walletIndivTransactionsDetailsRepo;
         this.appConfigRepo = appConfigRepo;
+        this.peerToPeerFxReferralRepo = peerToPeerFxReferralRepo;
     }
 
     private ResponseEntity<ApiResponseModel> bad(ApiResponseModel res, String msg, int statusCode) {
         res.setStatusCode(statusCode);
         res.setDescription(msg);
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(res);
+        return ResponseEntity.status(HttpStatus.OK).body(res);
     }
 
     public BaseResponse validateAmountInRange(String amountStr,
@@ -124,6 +129,7 @@ public class OrderService {
             // throw new IllegalArgumentException("amount must be >= " + minAmount);
             bRes.setStatusCode(400);
             bRes.setDescription("amount must be equal or more than minimum to sell: " + minAmount);
+            return bRes;
 
         }
         if (maxAmount != null && amount.compareTo(maxAmount) > 0) {
@@ -150,6 +156,25 @@ public class OrderService {
 
             String phoneNumber = utilService.getClaimFromJwt(auth, "phoneNumber"); // preferred if your JWT has sellerId
             Optional<RegWalletInfo> getRec = regWalletInfoRepository.findByPhoneNumber(phoneNumber);
+
+            String refCode = rq.getReferralCode() == null ? "0" : rq.getReferralCode();
+
+            List<PeerToPeerFxReferral> getRefCode = peerToPeerFxReferralRepo.findByReferralCode(refCode);
+
+            boolean refCodeExists = false;
+            String refererName = null;
+
+            if (getRefCode.size() > 0) {
+
+                if (getRefCode.get(0).getEmailAddress().equals(getRec.get().getEmail())) {
+                    return bad(res, "Referral code mismatched!", 400);
+                }
+
+                refererName = getRefCode.get(0).getReferrer();
+
+                refCodeExists = true;
+            }
+
             //validate pin
             BaseResponse bResPin = new BaseResponse();
             WalletNo wSend = new WalletNo();
@@ -179,8 +204,11 @@ public class OrderService {
 
             List<WalletTransactionsDetails> getTransDe = walletTransactionsDetailsRepo.findByCorrelationId(rq.getOfferCorrelationId());
 
+            System.out.println("  rq.getOfferCorrelationId() ::::::::::::::::  %S  " + rq.getOfferCorrelationId());
+
             if (getTransDe.size() <= 0) {
-                logger.info(" correlationId does not exist in WalletTransactionsDetails {}  ::::::::::::::::::::: ", rq.getOfferCorrelationId());
+                // logger.info(" correlationId does not exist in WalletTransactionsDetails {}  ::::::::::::::::::::: ", rq.getOfferCorrelationId());
+
                 return bad(res, "Invalid Offer CorrelationId!", 400);
             }
 
@@ -211,13 +239,14 @@ public class OrderService {
                             return bad(res, bRes.getDescription(), bRes.getStatusCode());
                         }
                     }
+                    System.out.println("accountNumber IN  ::::::::::::::::  %S  " + accountNumber);
+
+                    accountNumber = phoneNumber;
+
                 } else {
 
-                    if ("CAD".equals(off.get(0).getCurrencyReceive().toString())) {
-                        accountNumber = phoneNumber;
-                    } else {
-                        accountNumber = getWa.getAccountNumber();
-                    }
+                    accountNumber = getWa.getAccountNumber();
+
                 }
 
                 if (!wallCurrencyCode.equals(off.get(0).getCurrencySell().toString())) {
@@ -236,6 +265,39 @@ public class OrderService {
                     }
                 }
 
+            }
+
+            Optional<RegWalletInfo> getRecCheSeller;
+
+            if (getTransDe.get(0).getCurrencyToSell().equals("CAD")) {
+                getRecCheSeller = regWalletInfoRepository.findByWalletIdOptional(getTransDe.get(0).getSellerId());
+
+            } else {
+
+                List<AddAccountDetails> sellDe = addAccountDetailsRepo.findByWalletIdrData1(getTransDe.get(0).getSellerId());
+                getRecCheSeller = regWalletInfoRepository.findByEmail(sellDe.get(0).getEmailAddress());
+            }
+
+            if (getRecCheSeller.get().getPhoneNumber().equals(phoneNumber)) {
+
+                return bad(res, "An offer creator cannot buy same offer!", 400);
+
+            }
+
+            List<WalletTransactionsDetails> getWalSeller = walletTransactionsDetailsRepo.findByCorrelationId(rq.getOfferCorrelationId());
+
+            List<AddAccountDetails> getSellerAcct = addAccountDetailsRepo.findByWalletIdrData1(getWalSeller.get(0).getSellerId());
+            String sellerAcctNumber = null;
+
+            for (AddAccountDetails getWa : getSellerAcct) {
+                if (getWa.getCurrencyCode().equals(off.get(0).getCurrencyReceive().toString())) {
+                    sellerAcctNumber = getWa.getAccountNumber();
+                } else {
+                    if (!"CAD".equals(off.get(0).getCurrencyReceive().toString())) {
+                        return bad(res, "Seller do not have the Currency account to receive payment!", 400);
+                    }
+                    sellerAcctNumber = getRecCheSeller.get().getPhoneNumber();
+                }
             }
 
             String walletId = getAdDe.get(0).getWalletId();
@@ -303,7 +365,11 @@ public class OrderService {
             wVal.setAccountNumber(accountNumber);
             wVal.setRequestedAmount(finCharges);
             wVal.setWalletId(getRec.get().getWalletId());
+            System.out.println(" validateAccountBalnce req ::::::::::::::::  %S  " + new Gson().toJson(wVal));
+
             BaseResponse bResss = transactionServiceProxies.validateAccountBalnce(wVal, auth);
+
+            System.out.println(" validateAccountBalnce res ::::::::::::::::  %S  " + new Gson().toJson(bResss));
 
             if (bResss.getStatusCode() != 200) {
                 return bad(res, bResss.getDescription(), bResss.getStatusCode());
@@ -353,17 +419,6 @@ public class OrderService {
 
                 //logger.info(" debitAcct GL for buyerleg response ::::::::::::::::::::: ", debitAcct_GL);
                 //CREDIT SELLER
-                List<WalletTransactionsDetails> getWalSeller = walletTransactionsDetailsRepo.findByCorrelationId(rq.getOfferCorrelationId());
-
-                List<AddAccountDetails> getSellerAcct = addAccountDetailsRepo.findByWalletIdrData1(getWalSeller.get(0).getSellerId());
-                String sellerAcctNumber = null;
-
-                for (AddAccountDetails getWa : getSellerAcct) {
-                    if (getWa.getCurrencyCode().equals(off.get(0).getCurrencyReceive().toString())) {
-                        sellerAcctNumber = getWa.getAccountNumber();
-                    }
-                }
-
                 CreditWalletCaller rqC = new CreditWalletCaller();
                 rqC.setAuth("Seller");
                 rqC.setFees("00");
@@ -410,8 +465,36 @@ public class OrderService {
                 getWalDeupdate.setAvailableQuantity(availableQuantity.subtract(setAmount));
                 walletTransactionsDetailsRepo.save(getWalDeupdate);
 
+                BigDecimal avail = getWalDeupdate.getAvailableQuantity();
+                System.out.println(" AvailableQuantity after sales ::::::::::::::::   " + avail);
+                List<Offer> offerDe = offers.findByCorrelationIdData(rq.getOfferCorrelationId());
+                Offer offerDeUp = offers.findByCorrelationIdDataUpdate(rq.getOfferCorrelationId());
+
+                if (avail == null || avail.compareTo(BigDecimal.ZERO) <= 0) {
+                    System.out.println(" AvailableQuantity is less or equal 0 ::::::::::::::::   ");
+
+                    if (offerDe.size() > 0) {
+
+                        System.out.println(" Upadate offer to SOLDOUT ::::::::::::::::   ");
+
+                        offerDeUp.setStatus(OfferStatus.SOLDOUT);
+                        offerDeUp.setUpdatedNow();
+                        offerDeUp.setQtyAvailable(avail);
+                        offers.save(offerDeUp);
+
+                    }
+
+                } else {
+
+                    System.out.println(" Upadate offer ::::::::::::::::   ");
+
+                    offerDeUp.setUpdatedNow();
+                    offerDeUp.setQtyAvailable(avail);
+                    offers.save(offerDeUp);
+                }
+
                 WalletIndivTransactionsDetails wallInd = new WalletIndivTransactionsDetails();
-                wallInd.setAvailableQuantity(getTransDe.get(0).getAvailableQuantity());
+                wallInd.setAvailableQuantity(getWalDeupdate.getAvailableQuantity());
                 wallInd.setTotalQuantityCreated(getTransDe.get(0).getTotalQuantityCreated());
                 wallInd.setBuyerAccount(accountNumber);
                 wallInd.setBuyerId(getWalDeupdate.getBuyerId());
@@ -425,16 +508,53 @@ public class OrderService {
                 wallInd.setTransactionId(transactionId);
                 wallInd.setSellerId(getWalDeupdate.getSellerId());
                 wallInd.setReceiverAmount(receiveAmount);
-                wallInd.setCorrelationId(rq.getOfferCorrelationId());
+                wallInd.setCorrelationId(getWalDeupdate.getCorrelationId());
 
                 walletIndivTransactionsDetailsRepo.save(wallInd);
                 Order orddd = buyNow(off.get(0).getId(), setAmount, walletId, 0L, rq.getOfferCorrelationId(),
                         String.valueOf(off.get(0).getSellerUserId()), "0.00", transactionId, auth);
+
+                String referralSharingPayment;
+
+                List<PeerToPeerFxReferral> getRef = peerToPeerFxReferralRepo.findByEmailAddress(getRec.get().getEmail());
+                if (getRef.size() <= 0) {
+
+                    if (refCodeExists == true) {
+
+                        //  referralSharingPayment = getRef.get(0).getReferralSharingPayment() == null ? "0" : getRef.get(0).getReferralSharingPayment();
+                        //save and generate the customer referral code 
+                        PeerToPeerFxReferral refGen = new PeerToPeerFxReferral();
+                        refGen.setCreatedDate(Instant.now());
+                        refGen.setEmailAddress(getRec.get().getEmail());
+                        refGen.setReferee(getRec.get().getFirstName() + " " + getRec.get().getLastName());
+                        refGen.setRefereeCode(GlobalMethods.generateReferal(getRec.get().getFirstName()));
+                        refGen.setReferrer(refererName);
+                        refGen.setReferralCode(rq.getReferralCode());
+                        refGen.setReferralSharingPayment("1");
+                        //peerToPeerFxReferralRepo.save(refGen);
+
+                        //give buyer payment in wallet -- this depends on currency to SELL if naira (fillNig08006763319) in appConfig table
+                        ManageFeesConfigReq getBonus = new ManageFeesConfigReq();
+                        getBonus.setAmount(receiveAmount.toString());
+                        getBonus.setCurrencyCode(refCode);
+                        getBonus.setTransType(transactionId);
+                        //give buyer payment in wallet -- this depends on currency to SELL if dollar () in appConfig table
+                        //give seller payment in wallet -- this depends on currency to RECEIVE if naira (fillNig08006763319) in appConfig table
+                        //give buyer payment in wallet -- this depends on currency to RECEIVE if dollar () in appConfig table
+                        //give the Referral payemnt in wallet
+                    }
+
+                } else {
+                    referralSharingPayment = getRef.get(0).getReferralSharingPayment();
+                    if (!referralSharingPayment.equals("1")) {
+
+                    }
+                }
+
                 /*
                  buyNow(long offerId, BigDecimal amount, long buyerId, long lockTtlSeconds,
             String correlId, String sellerId, String fees, String transactionId)
                  */
-
                 // 4) Success
                 res.setStatusCode(200);
                 res.setDescription("Offer created.");
@@ -447,6 +567,7 @@ public class OrderService {
             return ResponseEntity.ok(res);
 
         } catch (BusinessException be) {
+            be.printStackTrace();
             return bad(res, be.getMessage(), 500);
         } catch (Exception ex) {
             ex.printStackTrace();

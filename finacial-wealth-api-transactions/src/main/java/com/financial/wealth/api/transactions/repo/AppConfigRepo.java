@@ -20,4 +20,7 @@ public interface AppConfigRepo extends JpaRepository<AppConfig, Long> {
 
     @Query("SELECT config from AppConfig config where config.configValue=:configValue")
     List<AppConfig> findByConfigValue(String configValue);
+
+    @Query("SELECT config from AppConfig config where config.configName=:configName")
+    List<AppConfig> findByConfigName(String configName);
 }

@@ -9,5 +9,5 @@ package com.finacial.wealth.api.fxpeer.exchange.common;
  * @author olufemioshin
  */
 public enum OrderStatus {
-PENDING_ESCROW, ESCROWED, RELEASED, REFUNDED, CANCELLED, EXPIRED
+PENDING_ESCROW, ESCROWED, RELEASED, REFUNDED, CANCELLED, EXPIRED, SOLDOUT
 }

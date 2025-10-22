@@ -9,5 +9,5 @@ package com.finacial.wealth.api.fxpeer.exchange.common;
  * @author olufemioshin
  */
 public enum OfferStatus {
-    LIVE, PARTIALLY_FILLED, CANCELLED, EXPIRED
+    LIVE, PARTIALLY_FILLED, CANCELLED, EXPIRED, SOLDOUT
 }

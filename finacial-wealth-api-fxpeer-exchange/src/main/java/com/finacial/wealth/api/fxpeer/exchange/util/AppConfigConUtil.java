@@ -10,23 +10,24 @@ package com.finacial.wealth.api.fxpeer.exchange.util;
  * @author olufemioshin
  */
 public class AppConfigConUtil {
-    
+
+    public static final String SETTING_KEY_WALLET_SYSTEM_SYSTEM_BONUS_GG_CAD = "hqcJ3paJlRFhdoY+c+6lSw==";
+    public static final String SETTING_KEY_WALLET_SYSTEM_SYSTEM_BONUS_GG_NIG = "zRYLwLW4sBs8qLgPoH0d+g==";
+
     public static final String SETTING_KEY_WALLET_SYSTEM_SYSTEM_GG_CAD = "canadianGetWalletDettaills";
     public static final String SETTING_KEY_WALLET_SYSTEM_SYSTEM_GG_GLOBAL = "globalGetWalletDettaills";
     public static final String SETTING_KEY_WALLET_SYSTEM_SYSTEM_GG_NIG = "nigerianGetWalletDettaills";
-    
+
     public static final String L_TRANSFER_STILL_RUNNING_WINDOW = "ltExistingRunningWindow";
     public static final String NO_PERMITTED_TRASANCTION = "noPermiitedTransaction";
-    
-    
-    
+
     public static final String SETTING_DEVICE_LIM_CHECK_PERIOD = "deviceChangeCheckPeriod";
     public static final String SETTING_MIN_ACCOUNT_BAL = "minAcctBalance";
-    
-    public static final String SETTING_KEY_TRANS_G_SAVINGS_LIST_PAYMENT_WORK_DAYS ="gSavingsTransPayWorkDays";
+
+    public static final String SETTING_KEY_TRANS_G_SAVINGS_LIST_PAYMENT_WORK_DAYS = "gSavingsTransPayWorkDays";
     public static final String SETTING_KEY_TRANS_G_SAVINGS_LIST_PAGENATION = "gSavingsTransListPagination";
-    public static final String SETTING_CONFIGURE_NUMB_DAYS_BEFORE_ACTIVATION="gSavingMinNumbDaysForActivation";
-    public static final String SETTING_DATE_FORMATT ="dateFormat";
+    public static final String SETTING_CONFIGURE_NUMB_DAYS_BEFORE_ACTIVATION = "gSavingMinNumbDaysForActivation";
+    public static final String SETTING_DATE_FORMATT = "dateFormat";
 
     public static final String SETTING_KEY_G_INVITE_CODE_URL = "gInviteCodeUrl";
 
@@ -76,7 +77,7 @@ public class AppConfigConUtil {
     public static final String SETTING_KEY_PRIVD_X_AUTH_SIG = "providerAuthSig";
     public static final String SETTING_KEY_PRIVD_VIRT_BASE_URL = "providerPaymentBaseUrl";
     public static final String SETTING_KEY_PRIVD_CLIENT_SEC = "providerClientSacreed";
-   
+
     public static final String SETTING_REF_LINK = "onboardRefLink";
     public static final String SETTING_MER_LINK = "merchantLink";
     public static final String SETTING_KEY_LATEST_APP_VERSION = "currentAppVersion";

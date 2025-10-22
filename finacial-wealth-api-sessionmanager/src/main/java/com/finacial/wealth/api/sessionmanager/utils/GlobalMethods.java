@@ -3,7 +3,7 @@
  * To change this template file, choose Tools | Templates
  * and open the template in the editor.
  */
-package com.finacial.wealth.api.fxpeer.exchange.util;
+package com.finacial.wealth.api.sessionmanager.utils;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -12,12 +12,7 @@ import java.io.InputStream;
 import java.net.URL;
 import java.net.URLConnection;
 import java.security.SecureRandom;
-import java.time.LocalDate;
-import java.time.LocalTime;
-import java.time.format.DateTimeFormatter;
-import java.time.format.DateTimeParseException;
 import java.util.Base64;
-import java.util.Locale;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import org.apache.commons.io.FileUtils;
@@ -29,21 +24,6 @@ import org.apache.commons.io.FileUtils;
 public class GlobalMethods {
 
     private static final Logger logger = Logger.getLogger(GlobalMethods.class.getSimpleName());
-    
-    
-    static String left3(String s) {
-        if (s == null) {
-            return null;
-        }
-        return s.length() <= 3 ? s : s.substring(0, 3);
-    }
-
-    public static String generateReferal(String firstName) {
-        String getForst3Char = left3(firstName);
-        String refrerCode = getForst3Char.toUpperCase() + String.valueOf(GlobalMethods.generateOTP());
-        return refrerCode;
-
-    }
 
     public static String generateNUBAN() {
         long number = (long) Math.floor(Math.random() * 9_000_000_000L) + 1_000_000_000L;
@@ -82,32 +62,6 @@ public class GlobalMethods {
         String otp = String.valueOf(randomPin);
 
         return otp;
-    }
-
-    public static boolean isValidFormat(String format, String value, Locale locale) {
-        java.time.LocalDateTime ldt = null;
-        DateTimeFormatter fomatter = DateTimeFormatter.ofPattern(format, locale);
-
-        try {
-            ldt = java.time.LocalDateTime.parse(value, fomatter);
-            String result = ldt.format(fomatter);
-            return result.equals(value);
-        } catch (DateTimeParseException e) {
-            try {
-                LocalDate ld = LocalDate.parse(value, fomatter);
-                String result = ld.format(fomatter);
-                return result.equals(value);
-            } catch (DateTimeParseException exp) {
-                try {
-                    LocalTime lt = LocalTime.parse(value, fomatter);
-                    String result = lt.format(fomatter);
-                    return result.equals(value);
-                } catch (DateTimeParseException e2) {
-                }
-            }
-        }
-
-        return false;
     }
 
     public static String getByteArrayFromImageURL(String url) {
@@ -151,32 +105,6 @@ public class GlobalMethods {
                 .decode(livePhotoBase64Image);
         FileUtils.writeByteArrayToFile(outputFile, decodedBytes);
         return "";
-    }
-
-    public static boolean isTenDigits(String input) {
-        boolean isTenD = false;
-        if (input != null && input.matches("\\d{10}")) {
-            isTenD = true;
-
-        }
-
-        System.out.println("isTenDigits" + "  :::::::::::::::::::::   " + isTenD);
-
-        return isTenD;
-
-    }
-
-    public static boolean isElevenDigits(String input) {
-        boolean isElevenD = false;
-        if (input != null && input.matches("\\d{11}")) {
-            isElevenD = true;
-
-        }
-
-        System.out.println("isElevenDigits" + "  :::::::::::::::::::::   " + isElevenD);
-
-        return isElevenD;
-
     }
 
 }

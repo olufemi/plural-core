@@ -170,6 +170,18 @@ public class ManageWalletService {
         try {
             statusCode = 400;
 
+            if (rq.getCurrencyToBuy().trim().equals(rq.getCurrencyToSell())) {
+
+                SettlementFailureLog conWall = new SettlementFailureLog("", "",
+                        "Currency to sell can not be same as currency to buy!");
+                settlementFailureLogRepo.save(conWall);
+
+                responseModel.setStatusCode(400);
+                responseModel.setDescription("Currency to sell can be same as currency to buy!");
+                return responseModel;
+
+            }
+
             WalletInfo ree = new WalletInfo();
             ree.setAccountNumber(rq.getAccountNumber());
             BaseResponse getTotalBal = this.getAccountBal(ree);
@@ -212,7 +224,16 @@ public class ManageWalletService {
             }
             List<AddAccountDetails> getDe = addAccountDetailsRepo.findByWalletId(rq.getWalletId());
 
-            Optional<RegWalletInfo> getRec = regWalletInfoRepository.findByEmail(getDe.get(0).getEmailAddress());
+            Optional<RegWalletInfo> getRec;
+
+            if (rq.getCurrencyToSell().equals("CAD")) {
+                Optional<RegWalletInfo> getRecWa = regWalletInfoRepository.findByWalletIdOptional(rq.getWalletId());
+                getRec = regWalletInfoRepository.findByEmail(getRecWa.get().getEmail());
+
+            } else {
+                getRec = regWalletInfoRepository.findByEmail(getDe.get(0).getEmailAddress());
+
+            }
 
             WalletTransactionsDetails logTrans = new WalletTransactionsDetails();
             logTrans.setAccountNumber(rq.getAccountNumber());

@@ -6,6 +6,7 @@ package com.financial.wealth.api.transactions.breezepay.payin;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.financial.wealth.api.transactions.breezepay.payout.AddAccountDetails;
+import com.financial.wealth.api.transactions.domain.AppConfig;
 
 import com.financial.wealth.api.transactions.domain.DeviceDetails;
 import com.financial.wealth.api.transactions.domain.FinWealthPaymentTransaction;
@@ -15,11 +16,12 @@ import com.financial.wealth.api.transactions.models.BaseResponse;
 import com.financial.wealth.api.transactions.models.CreditWalletCaller;
 import com.financial.wealth.api.transactions.models.PushNotificationFireBase;
 import com.financial.wealth.api.transactions.repo.AddAccountDetailsRepo;
+import com.financial.wealth.api.transactions.repo.AppConfigRepo;
 import com.financial.wealth.api.transactions.repo.DeviceDetailsRepo;
 import com.financial.wealth.api.transactions.repo.FinWealthPaymentTransactionRepo;
 import com.financial.wealth.api.transactions.repo.RegWalletInfoRepository;
 import com.financial.wealth.api.transactions.services.notify.MessageCenterService;
-import com.financial.wealth.api.transactions.tranfaar.services.PaymentNotificationResponse;
+
 import static com.financial.wealth.api.transactions.tranfaar.services.WebhookKeyService.pushNotifyCreditWalletForWalletTransfer;
 import com.financial.wealth.api.transactions.utils.StrongAES;
 import com.financial.wealth.api.transactions.utils.UttilityMethods;
@@ -27,7 +29,7 @@ import com.google.gson.Gson;
 import java.math.BigDecimal;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
-import java.sql.Timestamp;
+
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.List;
@@ -37,8 +39,7 @@ import javax.crypto.IllegalBlockSizeException;
 import javax.crypto.NoSuchPaddingException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
+
 import org.springframework.stereotype.Service;
 
 /**
@@ -55,11 +56,12 @@ public class BreezePayWebhookKeyService {
     private final DeviceDetailsRepo deviceDetailsRepo;
     private final MessageCenterService messageCenterService;
     private final AddAccountDetailsRepo addAccountDetailsRepo;
+    private final AppConfigRepo appConfigRepo;
     private static final String CCY = "NGN";
     @Value("${fin.wealth.otp.encrypt.key}")
     private String encryptionKey;
 
-    public BaseResponse processPayment(WebHookRequest rq,String auth) {
+    public BaseResponse processPayment(WebHookRequest rq, String auth) {
 
         BaseResponse responseModel = new BaseResponse();
         int statusCode = 500;
@@ -70,6 +72,29 @@ public class BreezePayWebhookKeyService {
             // TODO: validate amounts, ids, etc., then persist or enqueue
             // 6) Build response
             List<AddAccountDetails> getAcct = addAccountDetailsRepo.findByVirtualAccountNumberList(rq.getVirtualAccount());
+            /*
+            List<AppConfig> getAppConf = appConfigRepo.findByConfigValue(getAcct.get(0).getAccountNumber());
+
+            if (getAppConf.size() > 0) {
+
+                // Credit BAAS NGN_GL
+                CreditWalletCaller ngnGLCredit = new CreditWalletCaller();
+                ngnGLCredit.setAuth("Receiver");
+                ngnGLCredit.setFees("0.00");
+                ngnGLCredit.setFinalCHarges(rq.getAmount());
+                ngnGLCredit.setNarration("NGN_Fund_Deposit");
+                ngnGLCredit.setPhoneNumber(getAcct.get(0).getAccountNumber());
+                ngnGLCredit.setTransAmount(rq.getAmount());
+                ngnGLCredit.setTransactionId(rq.getProcessId());
+
+                utilMeth.creditCustomerWithType(ngnGLCredit, "NGN_GL");
+
+                responseModel.setDescription("Success");
+                responseModel.setStatusCode(200);
+
+                return responseModel;
+
+            }*/
 
             List<RegWalletInfo> regWalletInfo = regWalletInfoRepository.findByEmailsList(getAcct.get(0).getEmailAddress());
 

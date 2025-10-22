@@ -1,10 +1,13 @@
 package com.finacial.wealth.api.sessionmanager.services;
 
+import com.finacial.wealth.api.sessionmanager.entities.AddAccountDetails;
 import com.finacial.wealth.api.sessionmanager.entities.DeviceDetails;
+import com.finacial.wealth.api.sessionmanager.entities.PeerToPeerFxReferral;
 import com.google.gson.Gson;
 import com.finacial.wealth.api.sessionmanager.entities.RegWalletCheckLog;
 import com.finacial.wealth.api.sessionmanager.entities.RegWalletInfo;
 import com.finacial.wealth.api.sessionmanager.entities.SessionServiceLog;
+import com.finacial.wealth.api.sessionmanager.entities.WalletIndivTransactionsDetails;
 import com.finacial.wealth.api.sessionmanager.exceptions.CustomApplicationException;
 import com.finacial.wealth.api.sessionmanager.repository.AuthenticationLogRepository;
 import com.finacial.wealth.api.sessionmanager.repository.RegWalletCheckLogRepo;
@@ -55,8 +58,12 @@ import io.jsonwebtoken.SignatureAlgorithm;
 import lombok.RequiredArgsConstructor;
 import org.joda.time.DateTimeComparator;
 import com.finacial.wealth.api.sessionmanager.proxy.UtilityProxy;
+import com.finacial.wealth.api.sessionmanager.repository.AddAccountDetailsRepo;
 import com.finacial.wealth.api.sessionmanager.repository.DeviceDetailsRepo;
+import com.finacial.wealth.api.sessionmanager.repository.PeerToPeerFxReferralRepo;
 import com.finacial.wealth.api.sessionmanager.repository.RegWalletInfoRepository;
+import com.finacial.wealth.api.sessionmanager.repository.WalletIndivTransactionsDetailsRepo;
+import com.finacial.wealth.api.sessionmanager.utils.GlobalMethods;
 
 @Service
 @RequiredArgsConstructor
@@ -107,9 +114,26 @@ public class SessionManagerClientUserService {
     private final RegWalletCheckLogRepo regWalletCheckLogRepo;
     private final DeviceDetailsRepo deviceDetailsRepo;
     private final RegWalletInfoRepository regWalletInfoRepository;
+    private final PeerToPeerFxReferralRepo peerToPeerFxReferralRepo;
+    private final WalletIndivTransactionsDetailsRepo walletIndivTransactionsDetailsRepo;
+    private final AddAccountDetailsRepo addAccountDetailsRepo;
 
     @Autowired
     private final UtilityProxy utilityServiceFeignService;
+
+    static String left3(String s) {
+        if (s == null) {
+            return null;
+        }
+        return s.length() <= 3 ? s : s.substring(0, 3);
+    }
+
+    private String generateReferal(String firstName) {
+        String getForst3Char = left3(firstName);
+        String refrerCode = getForst3Char.toUpperCase() + String.valueOf(GlobalMethods.generateOTP());
+        return refrerCode;
+
+    }
 
     public ResponseEntity<BaseResponse> authenticateWalletUserUuid(AuthUserRequestCustomerUuid rq, HttpServletRequest request, String channel) {
         BaseResponse baseResponse = new BaseResponse();
@@ -374,6 +398,39 @@ public class SessionManagerClientUserService {
         baseResponse.addData("merchantLink", response.getMerchantLink());
         baseResponse.addData("virtualWalletNo", response.getVirtualWalletNo());
         baseResponse.addData("walletId", response.getWalletId());
+
+        List<AddAccountDetails> getacct = addAccountDetailsRepo.findByEmailAddress(response.getEmailAddress());
+
+        if (getacct.size() > 0) {
+
+            String getRereeCode = generateReferal(response.getFirstName());
+            String getRefralCode = generateReferal("System");
+            String returnedRefreeCode;
+
+            List<WalletIndivTransactionsDetails> getListWaa = walletIndivTransactionsDetailsRepo.findByAccountNumber(getacct.get(0).getEmailAddress());
+            if (getListWaa.size() > 0) {
+                List<PeerToPeerFxReferral> getRef = peerToPeerFxReferralRepo.findByEmailAddress(getacct.get(0).getEmailAddress());
+                if (getRef.size() <= 0) {
+                    //generate and save
+                    PeerToPeerFxReferral refGen = new PeerToPeerFxReferral();
+                    refGen.setCreatedDate(Instant.now());
+                    refGen.setEmailAddress(response.getEmailAddress());
+                    refGen.setReferee(response.getFirstName() + " " + response.getLastName());
+                    refGen.setRefereeCode(getRereeCode);
+                    refGen.setReferrer("System");
+                    refGen.setReferralCode(getRefralCode);
+                    peerToPeerFxReferralRepo.save(refGen);
+                    returnedRefreeCode = getRereeCode;
+
+                } else {
+                    returnedRefreeCode = getRef.get(0).getRefereeCode();
+
+                }
+
+                baseResponse.addData("pToPFxReferralCode", returnedRefreeCode);
+            }
+
+        }
 
         baseResponse.setStatusCode(HttpServletResponse.SC_OK);
         baseResponse.setDescription(LOGIN_SUCCESSFUL);

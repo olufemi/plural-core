@@ -73,6 +73,8 @@ public class UttilityMethods {
     String SETTING_KEY_WALLET_SYSTEM_SYSTEM_GG_CAD;
     String SETTING_KEY_WALLET_SYSTEM_SYSTEM_GG_GLOBAL;
     String SETTING_KEY_WALLET_SYSTEM_SYSTEM_GG_NIG;
+    String SETTING_KEY_WALLET_SYSTEM_SYSTEM_BONUS_GG_NIG;
+    String SETTING_KEY_WALLET_SYSTEM_SYSTEM_BONUS_GG_CAD;
     MemoryCache cache;
 
     @Value("${fin.wealth.otp.encrypt.key}")
@@ -92,6 +94,8 @@ public class UttilityMethods {
 
     @PostConstruct
     public void init() {
+        SETTING_KEY_WALLET_SYSTEM_SYSTEM_BONUS_GG_CAD = cache.getApplicationSetting(AppConfigConUtil.SETTING_KEY_WALLET_SYSTEM_SYSTEM_BONUS_GG_CAD);
+        SETTING_KEY_WALLET_SYSTEM_SYSTEM_BONUS_GG_NIG = cache.getApplicationSetting(AppConfigConUtil.SETTING_KEY_WALLET_SYSTEM_SYSTEM_BONUS_GG_NIG);
         SETTING_KEY_WALLET_SYSTEM_SYSTEM_GG_CAD = cache.getApplicationSetting(AppConfigConUtil.SETTING_KEY_WALLET_SYSTEM_SYSTEM_GG_CAD);
         SETTING_KEY_WALLET_SYSTEM_SYSTEM_GG_GLOBAL = cache.getApplicationSetting(AppConfigConUtil.SETTING_KEY_WALLET_SYSTEM_SYSTEM_GG_GLOBAL);
         SETTING_KEY_WALLET_SYSTEM_SYSTEM_GG_NIG = cache.getApplicationSetting(AppConfigConUtil.SETTING_KEY_WALLET_SYSTEM_SYSTEM_GG_NIG);
@@ -123,6 +127,14 @@ public class UttilityMethods {
         SETTING_KEY_G_SAVINGS_PAY_SLOT_LIST = cache.getApplicationSetting(AppConfigConUtil.SETTING_KEY_G_SAVINGS_PAY_SLOT_LIST);
         SETTING_KEY_G_INVITE_CODE_URL = cache.getApplicationSetting(AppConfigConUtil.SETTING_KEY_G_SAVINGS_PAY_SLOT_LIST);
 
+    }
+
+    public String getSETTING_KEY_WALLET_SYSTEM_SYSTEM_BONUS_GG_CAD() {
+        return SETTING_KEY_WALLET_SYSTEM_SYSTEM_BONUS_GG_CAD;
+    }
+
+    public String getSETTING_KEY_WALLET_SYSTEM_SYSTEM_BONUS_GG_NIG() {
+        return SETTING_KEY_WALLET_SYSTEM_SYSTEM_BONUS_GG_NIG;
     }
 
     public String getSETTING_KEY_WALLET_SYSTEM_SYSTEM_GG_CAD() {
@@ -164,7 +176,7 @@ public class UttilityMethods {
 
     public List<FxPeersCommissionCfg> findAllByTransactionType(String transType, String currencyCode) {
 
-        List<FxPeersCommissionCfg> getAllPartActiveNoti = fxPeersCommissionCfgRepo.findAllByTransactionTypeAndCurrencyCode(transType,currencyCode);
+        List<FxPeersCommissionCfg> getAllPartActiveNoti = fxPeersCommissionCfgRepo.findAllByTransactionTypeAndCurrencyCode(transType, currencyCode);
 
         return getAllPartActiveNoti;
     }
@@ -190,7 +202,7 @@ public class UttilityMethods {
         String description = "Something went wrong";
 
         try {
-             statusCode = 400;
+            statusCode = 400;
             BigDecimal pFees = BigDecimal.ZERO;
             BigDecimal ammmount = new BigDecimal(rq.getAmount());
             List<FinWealthPayServiceConfig> getKulList = finWealthServiceConfigRepo.findByServiceTypeAndCurrencyCode(rq.getTransType(), rq.getCurrencyCode());
@@ -228,7 +240,7 @@ public class UttilityMethods {
 
                         }
 
-                        Optional<FinWealthPayServiceConfig> getKul = finWealthServiceConfigRepo.findAllByServiceType(rq.getTransType(),rq.getCurrencyCode());
+                        Optional<FinWealthPayServiceConfig> getKul = finWealthServiceConfigRepo.findAllByServiceType(rq.getTransType(), rq.getCurrencyCode());
 
                         String flagMinAmt = "Minimum amount cannot be less than N" + getKul.get().getMinimumAmmount() + ".00, please check!";
                         if (new BigDecimal(rq.getAmount()).compareTo(new BigDecimal(getKul.get().getMinimumAmmount())) == -1) {

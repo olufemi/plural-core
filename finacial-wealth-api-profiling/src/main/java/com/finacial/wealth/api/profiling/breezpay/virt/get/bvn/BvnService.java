@@ -21,6 +21,7 @@ import com.finacial.wealth.api.profiling.services.UniqueIdService;
 import com.finacial.wealth.api.profiling.utils.DecodedJWTToken;
 import com.finacial.wealth.api.profiling.utils.GlobalMethods;
 import com.finacial.wealth.api.profiling.utils.UttilityMethods;
+import com.google.gson.Gson;
 import java.io.UnsupportedEncodingException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -57,6 +58,9 @@ public class BvnService {
     private final RegWalletInfoRepository regWalletInfoRepo;
     private final UniqueIdService uniqueIds;
 
+    @Value("${fin.wealth.goto.breeze}")
+    private String gotoBreezeapay;
+
     // Optional: configurable freshness window (e.g., 30 days)
     private final Period freshness = Period.ofDays(30);
     private static final DateTimeFormatter DMY_MON = DateTimeFormatter.ofPattern("dd-MMM-yyyy", Locale.ENGLISH);
@@ -65,7 +69,7 @@ public class BvnService {
     public BvnLookup getFromCache(String bvn) {
         return repo.findByBvn(bvn).orElse(null);
     }
-    
+
     public static void assertValidBvn(String bvn) {
         if (bvn == null || bvn.trim().isEmpty()) {
             throw new IllegalArgumentException("BVN is required");
@@ -86,7 +90,7 @@ public class BvnService {
         int statusCode = 500;
         String statusMessage = "An error occured,please try again";
         try {
-            assertValidBvn(bvn); 
+            assertValidBvn(bvn);
             statusCode = 400;
             BvnLookup getBlook = this.getOrFetchAndPersist(bvn, auth);
 
@@ -143,8 +147,10 @@ public class BvnService {
     }
 
     @Transactional
-    public BvnLookup getOrFetchAndPersist(String bvn, String auth
+    public BvnLookup getOrFetchAndPersist(String bvn, String autth
     ) throws UnsupportedEncodingException {
+        System.out.println(" authKey :::::::::::::::: %S " + auth);
+        System.out.println(" subKey :::::::::::::::: %S " + subKey);
         BvnLookup cached = repo.findByBvn(bvn).orElse(null);
         if (cached != null) {
             // Optional: re-fetch if stale
@@ -160,9 +166,13 @@ public class BvnService {
         bReq.setAppReference(ref);
         bReq.setBvn(bvn);
 
+        System.out.println(" BVN Validation req :::::::::::::::: %S " + new Gson().toJson(bReq));
+
         // GetSingleBvnResponse resp = proxy.getSingleBvn(bvn, auth, subKey);
-        if (!environment.equals("dev")) {
+        // if (!environment.equals("dev")) {
+        if (gotoBreezeapay.equals("1")) {
             GetSingleBvnResponse resp = breezePayVirtApiDevAcctProxy.VerifySingleBVN(bReq, auth, subKey);
+            System.out.println(" BVN Validation resp :::::::::::::::: %S " + new Gson().toJson(resp));
             if (resp == null || resp.getData() == null) {
                 // return cached even if stale (or null)
                 return cached;
@@ -195,7 +205,7 @@ public class BvnService {
         vData.setLastName(getReg.get().getLastName());
         vData.setResponseCode("00");
         vData.setPhoneNumber(vData.getPhoneNumber());
-        
+
         resp.setData(vData);
 
         if (resp == null || resp.getData() == null) {

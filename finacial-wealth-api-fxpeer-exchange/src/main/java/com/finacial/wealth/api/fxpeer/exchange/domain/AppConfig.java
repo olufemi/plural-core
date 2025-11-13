@@ -19,7 +19,7 @@ import lombok.Data;
  *
  * @author OSHIN
  */
-//@Data
+@Data
 @Entity
 //@Builder
 @Table(name = "app_config")
@@ -31,6 +31,7 @@ public class AppConfig implements Serializable {
     private String configName;
     private String configDescription;
     private String configValue;
+    private String productValue;
 
     public AppConfig() {
     }

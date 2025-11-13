@@ -21,6 +21,10 @@ public interface SwapSlotDetailsRepo extends
 
     @Query("select ud from SwapSlotDetails ud where ud.receiverEmailAddress=:receiverEmailAddress")
     List<SwapSlotDetails> findByReceiverEmailAddress(String receiverEmailAddress);
+    
+      @Query("select ud from SwapSlotDetails ud where ud.senderEmailAddress=:senderEmailAddress")
+    List<SwapSlotDetails> findBySenderEmailAddress(String senderEmailAddress);
+
 
     @Query("select ud from SwapSlotDetails ud where ud.invitationCodeReqId=:invitationCodeReqId")
     List<SwapSlotDetails> findByInvitationCodeReqId(String invitationCodeReqId);

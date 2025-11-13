@@ -4,8 +4,6 @@
  */
 package com.finacial.wealth.api.sessionmanager.entities;
 
-
-
 import java.io.Serializable;
 import java.math.BigDecimal;
 import javax.persistence.Column;
@@ -61,12 +59,32 @@ public class WalletIndivTransactionsDetails extends AbstractAuditingEntity imple
     private String buyerName;
     private BigDecimal receiverAmount;
 
+    private String sellerEmailAddress;
+
+    private String buyerEmailAddress;
+
     public Long getId() {
         return id;
     }
 
     public void setId(Long id) {
         this.id = id;
+    }
+
+    public String getSellerEmailAddress() {
+        return sellerEmailAddress;
+    }
+
+    public void setSellerEmailAddress(String sellerEmailAddress) {
+        this.sellerEmailAddress = sellerEmailAddress;
+    }
+
+    public String getBuyerEmailAddress() {
+        return buyerEmailAddress;
+    }
+
+    public void setBuyerEmailAddress(String buyerEmailAddress) {
+        this.buyerEmailAddress = buyerEmailAddress;
     }
 
     public String getCurrencyToSell() {
@@ -140,7 +158,6 @@ public class WalletIndivTransactionsDetails extends AbstractAuditingEntity imple
     public void setCorrelationId(String correlationId) {
         this.correlationId = correlationId;
     }
-
 
     public String getTransactionId() {
         return transactionId;

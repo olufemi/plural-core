@@ -8,12 +8,18 @@ package com.finacial.wealth.api.profiling.controllers;
  *
  * @author olufemioshin
  */
+import com.finacial.wealth.api.profiling.breezpay.virt.get.bvn.ValidateBvnReq;
 import com.finacial.wealth.api.profiling.domain.Countries;
+import com.finacial.wealth.api.profiling.models.ApiResponseModel;
+import com.finacial.wealth.api.profiling.models.ValidateCountryCode;
 import com.finacial.wealth.api.profiling.models.accounts.CountryCurrencyDto;
 import com.finacial.wealth.api.profiling.models.accounts.CountryDto;
 import com.finacial.wealth.api.profiling.models.accounts.ValidationResponse;
+import com.finacial.wealth.api.profiling.response.BaseResponse;
 import com.finacial.wealth.api.profiling.services.CountryService;
+import java.io.UnsupportedEncodingException;
 import java.util.List;
+import javax.validation.Valid;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -24,11 +30,18 @@ import org.springframework.web.bind.annotation.*;
 public class CountriesController {
 
     private final CountryService service;
-    
-    
 
     public CountriesController(CountryService service) {
         this.service = service;
+    }
+
+    @PostMapping("/validate/country-code")
+    public ResponseEntity<ApiResponseModel> validateBvnCaller(
+            @RequestHeader(value = "authorization", required = true) String auth,
+            @RequestBody @Valid ValidateCountryCode rq) throws UnsupportedEncodingException {
+
+        ApiResponseModel baseResponse = service.validateCountryCode(rq, auth);
+        return new ResponseEntity<>(baseResponse, HttpStatus.OK);
     }
 
     @GetMapping("/all/existing")
@@ -46,7 +59,6 @@ public class CountriesController {
         // triggers lazy-seeding if DB is missing any country rows
         return service.listCountriesWithCurrency();
     }*/
-
     @PostMapping("/validate")
     public ResponseEntity<ValidationResponse> validate(@RequestParam("countryCode") String countryCode,
             @RequestParam("country") String country) {

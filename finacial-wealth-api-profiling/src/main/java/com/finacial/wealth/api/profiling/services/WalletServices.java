@@ -33,6 +33,7 @@ import com.finacial.wealth.api.profiling.domain.UserDetails;
 import com.finacial.wealth.api.profiling.domain.UserLimitConfig;
 import com.finacial.wealth.api.profiling.domain.VerifyEmailAddLog;
 import com.finacial.wealth.api.profiling.domain.VerifyReqIdDetailsAuth;
+import com.finacial.wealth.api.profiling.fx.p.p.wallet.WalletTransactionsDetailsRepo;
 import com.finacial.wealth.api.profiling.models.AddNewUserToLimit;
 import com.finacial.wealth.api.profiling.models.ApiResponseModel;
 import com.finacial.wealth.api.profiling.models.ChangeDevice;
@@ -178,6 +179,7 @@ public class WalletServices {
     private final RegWalletCheckLogRepo regWalletCheckLogRepo;
     private final FrontPrintProxy footprintClient;
     private final AddAccountDetailsRepo addAccountDetailsRepo;
+    private final WalletTransactionsDetailsRepo walletTransactionsDetailsRepo;
 
     @Value("${fin.wealth.foot.print.key}")
     private String secretKeyConfoged;
@@ -214,7 +216,8 @@ public class WalletServices {
             FootprintValidationRepository footprintValidationRepository,
             FootprintValidationFailedRepo footprintValidationFailedRepo,
             FootprintResponseLogRepo footprintResponseLogRepo, FootprintDecryptRepository footprintDecryptRepository,
-            AddAccountDetailsRepo addAccountDetailsRepo) {
+            AddAccountDetailsRepo addAccountDetailsRepo,
+            WalletTransactionsDetailsRepo walletTransactionsDetailsRepo) {
         this.footprintResponseLogRepo = footprintResponseLogRepo;
         this.footprintValidationFailedRepo = footprintValidationFailedRepo;
         this.footprintValidationRepository = footprintValidationRepository;
@@ -243,6 +246,7 @@ public class WalletServices {
         this.regWalletCheckLogRepo = regWalletCheckLogRepo;
         this.footprintDecryptRepository = footprintDecryptRepository;
         this.addAccountDetailsRepo = addAccountDetailsRepo;
+        this.walletTransactionsDetailsRepo = walletTransactionsDetailsRepo;
 
     }
 
@@ -3026,6 +3030,19 @@ public class WalletServices {
         return baseResponse;
     }
 
+    private String toPlain(BigDecimal v) {
+        return (v == null ? BigDecimal.ZERO : v).toPlainString();
+    }
+
+    private String escrowBalance(String email, String currency) {
+        if (email == null || email.isEmpty() || currency == null || currency.isEmpty()) {
+            return "0";
+        }
+        BigDecimal sum = walletTransactionsDetailsRepo
+                .sumEscrowAvailableByEmailAndCurrency(email, currency);
+        return toPlain(sum);
+    }
+
     public ApiResponseModel getCustomerDetailsWorking(String channel, String auth) {
         ApiResponseModel responseModel = new ApiResponseModel();
         int statusCode = 500;
@@ -3127,6 +3144,10 @@ public class WalletServices {
             primary.setMerchantBookedAccountBalance(merchantBookedBalance);
             primary.setWalletId(walletId);
             primary.setCurrencyCode(utilMeth.returnSETTING_ONBOARDING_DEFAULT_CURRENCY_CODE());
+            primary.setEscrowBalance(
+                    escrowBalance(getDecoded.emailAddress, primary.getCurrencyCode())
+            );
+
             allDetails.add(primary);
 
             // 6) Additional accounts by email
@@ -3145,6 +3166,11 @@ public class WalletServices {
                             ? addBalRes.getData().get("accountBalance") : null);
 
                     GetCustomerDetails extra = new GetCustomerDetails();
+                    extra.setCurrencyCode(currencyCode != null ? currencyCode : utilMeth.returnSETTING_ONBOARDING_DEFAULT_CURRENCY_CODE());
+                    extra.setEscrowBalance(
+                            escrowBalance(getDecoded.emailAddress, extra.getCurrencyCode())
+                    );
+
                     extra.setAccountBalance(addBal.toString());
                     extra.setBookAccountBalance(null);
                     extra.setCustomerName(addName);
@@ -3172,7 +3198,6 @@ public class WalletServices {
                     extra.setSingleTransactionLimit(singleTransactionLimit);
                     extra.setMerchantBookedAccountBalance(null);
                     extra.setWalletId(addWalletId);
-                    extra.setCurrencyCode(currencyCode != null ? currencyCode :utilMeth.returnSETTING_ONBOARDING_DEFAULT_CURRENCY_CODE());
 
                     allDetails.add(extra);
                 }

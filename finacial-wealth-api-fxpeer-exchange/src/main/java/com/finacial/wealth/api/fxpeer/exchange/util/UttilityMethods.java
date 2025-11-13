@@ -4,15 +4,25 @@
  */
 package com.finacial.wealth.api.fxpeer.exchange.util;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finacial.wealth.api.fxpeer.exchange.domain.FinWealthPayServiceConfig;
 import com.finacial.wealth.api.fxpeer.exchange.domain.FinWealthServiceConfigRepo;
 import com.finacial.wealth.api.fxpeer.exchange.domain.FxPeersCommissionCfg;
 import com.finacial.wealth.api.fxpeer.exchange.domain.FxPeersCommissionCfgRepo;
+import com.finacial.wealth.api.fxpeer.exchange.fx.p.p.wallet.FailedCreditLog;
+import com.finacial.wealth.api.fxpeer.exchange.fx.p.p.wallet.FailedCreditLogRepo;
+import com.finacial.wealth.api.fxpeer.exchange.fx.p.p.wallet.FailedDebitLog;
+import com.finacial.wealth.api.fxpeer.exchange.fx.p.p.wallet.FailedDebitLogRepo;
+import com.finacial.wealth.api.fxpeer.exchange.fx.p.p.wallet.SuccessDebitLog;
+import com.finacial.wealth.api.fxpeer.exchange.fx.p.p.wallet.SuccessDebitLogRepo;
 import com.finacial.wealth.api.fxpeer.exchange.model.BaseResponse;
+import com.finacial.wealth.api.fxpeer.exchange.model.CreditWalletCaller;
+import com.finacial.wealth.api.fxpeer.exchange.model.DebitWalletCaller;
 import com.finacial.wealth.api.fxpeer.exchange.model.ManageFeesConfigReq;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import jakarta.annotation.PostConstruct;
+import jakarta.servlet.http.HttpServletResponse;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 
@@ -82,13 +92,28 @@ public class UttilityMethods {
 
     private final FxPeersCommissionCfgRepo fxPeersCommissionCfgRepo;
     private final FinWealthServiceConfigRepo finWealthServiceConfigRepo;
+    private final SuccessDebitLogRepo successDebitLogRepo;
+    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final FailedDebitLogRepo failedDebitLogRepo;
+    private final FailedCreditLogRepo failedCreditLogRepo;
+
+//    @Qualifier("withEureka")
+//    @Autowired
+//    private RestTemplate restTemplate;
 
     public UttilityMethods(FxPeersCommissionCfgRepo fxPeersCommissionCfgRepo,
             FinWealthServiceConfigRepo finWealthServiceConfigRepo,
-            MemoryCache cache) {
+            MemoryCache cache, SuccessDebitLogRepo successDebitLogRepo,
+            FailedDebitLogRepo failedDebitLogRepo, FailedCreditLogRepo failedCreditLogRepo
+          //  ,RestTemplate restTemplate
+    ) {
         this.fxPeersCommissionCfgRepo = fxPeersCommissionCfgRepo;
         this.finWealthServiceConfigRepo = finWealthServiceConfigRepo;
         this.cache = cache;
+        this.successDebitLogRepo = successDebitLogRepo;
+        this.failedDebitLogRepo = failedDebitLogRepo;
+        this.failedCreditLogRepo = failedCreditLogRepo;
+     //   this.restTemplate = restTemplate;
 
     }
 
@@ -280,5 +305,133 @@ public class UttilityMethods {
         return decryptData;
 
     }
+
+    /*public BaseResponse debitCustomerWithType(DebitWalletCaller rq, String type, String countryCode) {
+        BaseResponse baseResponse = new BaseResponse();
+        int statusCode = 500;
+        String statusMessage = "An error occured,please try again";
+        try {
+            statusCode = 400;
+
+            BaseResponse reqres = restTemplate.postForObject("http://" + "utilities-service" + "/walletmgt/account/debit-Wallet-phone",
+                    rq, BaseResponse.class);
+            System.out.println("debitCustomer Response from core ::::::::::::::::  %S  " + new Gson().toJson(reqres));
+
+            if (reqres.getStatusCode() == HttpServletResponse.SC_OK) {
+                baseResponse.setDescription(reqres.getDescription());
+                baseResponse.setStatusCode(HttpServletResponse.SC_OK);
+                baseResponse.setData(reqres.getData());
+                SuccessDebitLog log = new SuccessDebitLog();
+                log.setPayloadType(type);
+                log.setRequestJson(objectMapper.writeValueAsString(rq));
+                log.setTransactionId(rq.getTransactionId());
+                log.setNarration(rq.getNarration());
+                log.setRetryCount(0);
+                log.setResolved(true);
+                log.setCountryCode(countryCode);
+                log.setMarkForRollBack(0);
+                log.setCreatedDate(Instant.now());
+                successDebitLogRepo.save(log);
+            } else {
+                FailedDebitLog log = new FailedDebitLog();
+                log.setPayloadType(type);
+                log.setRequestJson(objectMapper.writeValueAsString(rq));
+                log.setTransactionId(rq.getTransactionId());
+                log.setNarration(rq.getNarration());
+                log.setRetryCount(0);
+                log.setMarkForRollBack(0);
+                log.setResolved(false);
+                log.setCreatedDate(Instant.now());
+                failedDebitLogRepo.save(log);
+                baseResponse.setDescription(reqres.getDescription());
+                baseResponse.setStatusCode(HttpServletResponse.SC_BAD_REQUEST);
+            }
+
+        } catch (Exception ex) {
+            baseResponse.setDescription(statusMessage);
+            baseResponse.setStatusCode(statusCode);
+
+            ex.printStackTrace();
+        }
+
+        return baseResponse;
+
+    }*/
+
+    /*public BaseResponse creditCustomer(CreditWalletCaller rq) {
+        BaseResponse baseResponse = new BaseResponse();
+        int statusCode = 500;
+        String statusMessage = "An error occured,please try again";
+        try {
+            statusCode = 400;
+
+            BaseResponse reqres = restTemplate.postForObject("http://" + "utilities-service" + "/walletmgt/account/credit-Wallet-phone",
+                    rq, BaseResponse.class);
+            if (reqres.getStatusCode() == HttpServletResponse.SC_OK) {
+                baseResponse.setDescription(reqres.getDescription());
+                baseResponse.setStatusCode(HttpServletResponse.SC_OK);
+                baseResponse.setData(reqres.getData());
+            } else {
+                FailedCreditLog log = new FailedCreditLog();
+                log.setPayloadType("LocalTransfer");
+                log.setRequestJson(objectMapper.writeValueAsString(rq));
+                log.setTransactionId(rq.getTransactionId());
+                log.setNarration(rq.getNarration());
+                log.setRetryCount(0);
+                log.setResolved(false);
+                log.setCreatedDate(Instant.now());
+                failedCreditLogRepo.save(log);
+                baseResponse.setDescription(reqres.getDescription());
+                baseResponse.setStatusCode(HttpServletResponse.SC_BAD_REQUEST);
+            }
+
+        } catch (Exception ex) {
+            baseResponse.setDescription(statusMessage);
+            baseResponse.setStatusCode(statusCode);
+
+            ex.printStackTrace();
+        }
+
+        return baseResponse;
+
+    }
+
+    public BaseResponse creditCustomerWithType(CreditWalletCaller rq, String type) {
+        BaseResponse baseResponse = new BaseResponse();
+        int statusCode = 500;
+        String statusMessage = "An error occured,please try again";
+        try {
+            statusCode = 400;
+
+            BaseResponse reqres = restTemplate.postForObject("http://" + "utilities-service" + "/walletmgt/account/credit-Wallet-phone",
+                    rq, BaseResponse.class);
+            if (reqres.getStatusCode() == HttpServletResponse.SC_OK) {
+                baseResponse.setDescription(reqres.getDescription());
+                baseResponse.setStatusCode(HttpServletResponse.SC_OK);
+                baseResponse.setData(reqres.getData());
+            } else {
+                FailedCreditLog log = new FailedCreditLog();
+                log.setPayloadType(type);
+                log.setRequestJson(objectMapper.writeValueAsString(rq));
+                log.setTransactionId(rq.getTransactionId());
+                log.setNarration(rq.getNarration());
+                log.setRetryCount(0);
+                log.setResolved(false);
+                log.setCreatedDate(Instant.now());
+                failedCreditLogRepo.save(log);
+                baseResponse.setDescription(reqres.getDescription());
+                baseResponse.setStatusCode(HttpServletResponse.SC_BAD_REQUEST);
+            }
+
+        } catch (Exception ex) {
+            baseResponse.setDescription(statusMessage);
+            baseResponse.setStatusCode(statusCode);
+
+            ex.printStackTrace();
+        }
+
+        return baseResponse;
+
+    }*/
 
 }

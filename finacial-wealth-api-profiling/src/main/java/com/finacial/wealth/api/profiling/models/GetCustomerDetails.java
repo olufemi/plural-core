@@ -33,5 +33,14 @@ public class GetCustomerDetails {
     private String merchantBookedAccountBalance;
     private String walletId;
     private String currencyCode;
+    private String escrowBalance;  // NEW
+
+    public String getEscrowBalance() {
+        return escrowBalance;
+    }
+
+    public void setEscrowBalance(String escrowBalance) {
+        this.escrowBalance = escrowBalance;
+    }
 
 }

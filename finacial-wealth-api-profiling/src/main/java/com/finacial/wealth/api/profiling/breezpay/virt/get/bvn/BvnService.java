@@ -190,7 +190,7 @@ public class BvnService {
 
         //GetSingleBvnResponse resp = breezePayVirtApiDevAcctProxy.VerifySingleBVN(bReq, auth, subKey);
         GetSingleBvnResponse resp = new GetSingleBvnResponse();
-        DecodedJWTToken getDecoded = DecodedJWTToken.getDecoded(auth);
+        DecodedJWTToken getDecoded = DecodedJWTToken.getDecoded(autth);
         String emailAddress = getDecoded.emailAddress;
 
         Optional<RegWalletInfo> getReg = regWalletInfoRepo.findByEmail(emailAddress);

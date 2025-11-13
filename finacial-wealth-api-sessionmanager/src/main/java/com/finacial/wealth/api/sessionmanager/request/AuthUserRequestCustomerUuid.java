@@ -68,4 +68,5 @@ public class AuthUserRequestCustomerUuid {
     @Expose*/
     private String pushNotificationToken;
     private String appType;
+    private String appVersion;
 }

@@ -22,7 +22,7 @@ import org.springframework.stereotype.Component;
  * @author HRH
  */
 @Component
-//@EnableScheduling
+@EnableScheduling
 public class SchedulerComponent {
 
     private static final Logger LOG = LoggerFactory.getLogger(SchedulerComponent.class.getName());
@@ -48,7 +48,7 @@ public class SchedulerComponent {
 
     }
 
-    //@Scheduled(cron = "${pool.process.webhook.deposit.cron}")
+    @Scheduled(cron = "${pool.process.webhook.deposit.cron}")
     public void processWebHookDeposit() {
 
         if (disable.equalsIgnoreCase("false")) {

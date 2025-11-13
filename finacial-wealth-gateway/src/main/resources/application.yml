@@ -117,6 +117,7 @@ finacialwealth:
         - /session-manager/session/registration/complete
         - /session-manager/session/device/app-min-version 
         - /transactions/webhooks/transfaar/payment-deposit
+        - /transactions/peer-to-peer/credit-customer-with-type
        
         
 logstash:

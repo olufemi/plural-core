@@ -24,8 +24,8 @@ public class CreateOfferCaller {
     @NotNull(message = "min is required")
     private String minAmount;
 
-    @NotNull(message = "max is required")
-    private String maxAmount;
+    /*@NotNull(message = "max is required")
+    private String maxAmount;*/
     private boolean showInTopDeals;
     private String pin;
 

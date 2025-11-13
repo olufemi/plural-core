@@ -177,7 +177,7 @@ public class ManageWalletService {
                 settlementFailureLogRepo.save(conWall);
 
                 responseModel.setStatusCode(400);
-                responseModel.setDescription("Currency to sell can be same as currency to buy!");
+                responseModel.setDescription("Currency to sell can not be same as currency to buy!");
                 return responseModel;
 
             }
@@ -252,6 +252,7 @@ public class ManageWalletService {
             logTrans.setSellerName(getRec.get().getFullName());
             logTrans.setTransactionId("");
             logTrans.setSellerId(rq.getWalletId());
+            logTrans.setEmailAddress(getRec.get().getEmail());
             walletTransactionsDetailsRepo.save(logTrans);
 
             responseModel.setDescription("Success!");

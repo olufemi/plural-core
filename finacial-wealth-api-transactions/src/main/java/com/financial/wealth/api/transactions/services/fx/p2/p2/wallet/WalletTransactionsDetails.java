@@ -61,6 +61,7 @@ public class WalletTransactionsDetails extends AbstractAuditingEntity implements
     private String buyerId;
     private String buyerAccount;
     private String buyerName;
+    private String emailAddress;
     //private BigDecimal amountPurchased;
 
 }

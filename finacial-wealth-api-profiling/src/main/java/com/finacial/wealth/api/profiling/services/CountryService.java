@@ -12,6 +12,7 @@ import com.finacial.wealth.api.profiling.domain.AppConfig;
 import com.finacial.wealth.api.profiling.domain.Countries;
 import com.finacial.wealth.api.profiling.models.ApiResponseModel;
 import com.finacial.wealth.api.profiling.models.CountriesDetails;
+import com.finacial.wealth.api.profiling.models.ValidateCountryCode;
 import com.finacial.wealth.api.profiling.models.accounts.CountryCurrencyDto;
 import com.finacial.wealth.api.profiling.models.accounts.CountryDto;
 import com.finacial.wealth.api.profiling.models.accounts.ValidationResponse;
@@ -44,6 +45,56 @@ public class CountryService {
             AppConfigRepo appConfigRepo) {
         this.repo = repo;
         this.appConfigRepo = appConfigRepo;
+    }
+
+    public ApiResponseModel validateCountryCode(ValidateCountryCode rq, String auth) {
+
+        ApiResponseModel responseModel = new ApiResponseModel();
+        int statusCode = 500;
+        String statusMessage = "An error occured,please try again";
+
+        try {
+            statusCode = 400;
+            DecodedJWTToken getDecoded = DecodedJWTToken.getDecoded(auth);
+
+            // List<CountriesDetails> allDetails = new ArrayList<>();
+            // List<Countries> allCountries = repo.findAll();          // Countries repo
+            List<AppConfig> appConfigs = appConfigRepo.findAll(); // AppConfig repo
+
+            if (appConfigs != null && !appConfigs.isEmpty()) {
+
+                // Build a map of currencyCode -> AppConfig (normalized)
+                Map<String, AppConfig> cfgByCode = appConfigs.stream()
+                        .filter(Objects::nonNull)
+                        .filter(ac -> ac.getConfigName() != null)
+                        .collect(Collectors.toMap(
+                                ac -> norm(ac.getConfigName()),
+                                Function.identity(),
+                                (a, b) -> a // keep first on duplicates
+                        ));
+
+                AppConfig matchedCfg = cfgByCode.get(norm(rq.getCurrencyCode()));
+                if (matchedCfg == null) {
+
+                    responseModel.setStatusCode(statusCode);
+                    responseModel.setDescription("Invalid currency code!");
+                    return responseModel;
+
+                }
+            }
+
+            // success response
+            responseModel.setStatusCode(200);
+            responseModel.setDescription("Successful");
+            // responseModel.setData(allDetails);
+            return responseModel;
+
+        } catch (Exception ex) {
+            ex.printStackTrace();
+            responseModel.setDescription(statusMessage);
+            responseModel.setStatusCode(statusCode);
+            return responseModel;
+        }
     }
 
     public ApiResponseModel getCountriesDetails(String auth) {

@@ -4,6 +4,7 @@
  */
 package com.finacial.wealth.api.fxpeer.exchange.offer;
 
+import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 
 /**
@@ -12,7 +13,12 @@ import lombok.Data;
  */
 @Data
 public class UpdateOfferCallerReq {
+
     private String newRate;
     private String pin;
     private String correlationId;
+
+    private String minAmount;
+
+    private String maxAmount;
 }

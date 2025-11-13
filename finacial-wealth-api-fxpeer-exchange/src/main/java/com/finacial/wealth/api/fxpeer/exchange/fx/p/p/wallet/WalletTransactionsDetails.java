@@ -5,6 +5,7 @@
 package com.finacial.wealth.api.fxpeer.exchange.fx.p.p.wallet;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.finacial.wealth.api.fxpeer.exchange.common.OfferStatus;
 import com.finacial.wealth.api.fxpeer.exchange.domain.AbstractAuditingEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -58,14 +59,31 @@ public class WalletTransactionsDetails extends AbstractAuditingEntity implements
     private String sellerName;
     private String accountNumber;
     private String correlationId;
-    
+
     private String buyerId;
     private String buyerAccount;
     private String buyerName;
-    
-    
-    //private BigDecimal amountPurchased;
+    private String emailAddress;
+    @Column(nullable = true)
+    private OfferStatus status = OfferStatus.LIVE;
 
+    public OfferStatus getStatus() {
+        return status;
+    }
+
+    public void setStatus(OfferStatus status) {
+        this.status = status;
+    }
+
+    public String getEmailAddress() {
+        return emailAddress;
+    }
+
+    public void setEmailAddress(String emailAddress) {
+        this.emailAddress = emailAddress;
+    }
+
+    //private BigDecimal amountPurchased;
     public Long getId() {
         return id;
     }
@@ -137,9 +155,6 @@ public class WalletTransactionsDetails extends AbstractAuditingEntity implements
     public void setCorrelationId(String correlationId) {
         this.correlationId = correlationId;
     }
-
-   
-   
 
     public String getBuyerId() {
         return buyerId;

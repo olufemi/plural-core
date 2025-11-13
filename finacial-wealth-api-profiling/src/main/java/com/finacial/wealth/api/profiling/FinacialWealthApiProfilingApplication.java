@@ -26,14 +26,14 @@ public class FinacialWealthApiProfilingApplication {
         SpringApplication.run(FinacialWealthApiProfilingApplication.class, args);
         String encryptionKeyPilot = "ed36e39b7de30ad8db7137af61f898ec";
         // String aactTopDebit = encyrpt("4972233445", encryptionKeyPilot);
-        String clear = encyrpt("05055500099", encryptionKeyPilot);
-        System.out.println("clear " + "  ::::::::::::::::::::: " + clear);
+        // String clear = encyrpt("05055500099", encryptionKeyPilot);
+        //System.out.println("clear " + "  ::::::::::::::::::::: " + clear);
         //System.out.println("password " + "  ::::::::::::::::::::: " + password);
 //05044400198 -
         // String clientidDec = decrypt("sZSmsolo1Lg1sTSF1bFySA==", encryptionKeyPilot);
         //System.out.println("clientidDec " + "  ::::::::::::::::::::: " + clientidDec);
-        // String clientidDecWhole = decrypt("ST54anccPPFAD2UfSB6QZ+ypj6aZTdJnHyZ4hITSuRzbONSTf4Z2SY6pUaC3cyMvsruXWRNDk5MOZHE0QJmFBkmmX9hGPyJawZJuyVXD3/A7fYfsMdzTLwBhHdgXIiLDNwdvDyUDQecFrCwgblXkEQ==", encryptionKeyPilot);
-        // System.out.println("clientidDecWhole " + "  ::::::::::::::::::::: " + clientidDecWhole);
+        String clientidDecWhole = decrypt("ST54anccPPFAD2UfSB6QZ+ypj6aZTdJnHyZ4hITSuRzbONSTf4Z2SY6pUaC3cyMvsruXWRNDk5MOZHE0QJmFBkmmX9hGPyJawZJuyVXD3/A7fYfsMdzTLwBhHdgXIiLDNwdvDyUDQecFrCwgblXkEQ==", encryptionKeyPilot);
+        System.out.println("clientidDecWhole " + "  ::::::::::::::::::::: " + clientidDecWhole);
         // String password = encyrpt("CliPwd$@2024connect", encryptionKeyPilot);
     }
 

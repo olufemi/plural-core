@@ -13,6 +13,8 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Lock;
 import jakarta.persistence.LockModeType;
+import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.domain.Page;
@@ -60,4 +62,12 @@ public interface OfferRepository extends JpaRepository<Offer, Long>, JpaSpecific
     Page<Offer> findMarket(
             @Param("status") OfferStatus status,
             Pageable pageable);
+    
+      // Page in chunks to avoid loading everything at once
+    Page<Offer> findByExpiryAtIsNotNullAndExpiryAtLessThanEqualAndStatusIn(
+            Instant now, Collection<OfferStatus> statuses, Pageable pageable);
+
+    // Optional: a lightweight count or existence check
+    boolean existsByExpiryAtIsNotNullAndExpiryAtLessThanEqualAndStatusIn(
+            Instant now, Collection<OfferStatus> statuses);
 }

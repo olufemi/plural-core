@@ -64,6 +64,7 @@ import com.finacial.wealth.api.sessionmanager.repository.PeerToPeerFxReferralRep
 import com.finacial.wealth.api.sessionmanager.repository.RegWalletInfoRepository;
 import com.finacial.wealth.api.sessionmanager.repository.WalletIndivTransactionsDetailsRepo;
 import com.finacial.wealth.api.sessionmanager.utils.GlobalMethods;
+import com.finacial.wealth.api.sessionmanager.utils.UttilityMethods;
 
 @Service
 @RequiredArgsConstructor
@@ -78,6 +79,7 @@ public class SessionManagerClientUserService {
     private static final int LOGIN_STATUS_CODE_1 = 200;
     private static final int LOGIN_STATUS_CODE_75 = 75;
     private static final int LOGIN_STATUS_CODE_105 = 105;
+    private static final int LOGIN_BAD_APP_VERSION_STATUS_CODE = 88;
 
     private static final String AUTHENTICATION_SCHEME = "Bearer";
 
@@ -117,6 +119,7 @@ public class SessionManagerClientUserService {
     private final PeerToPeerFxReferralRepo peerToPeerFxReferralRepo;
     private final WalletIndivTransactionsDetailsRepo walletIndivTransactionsDetailsRepo;
     private final AddAccountDetailsRepo addAccountDetailsRepo;
+    private final UttilityMethods uttilityMethods;
 
     @Autowired
     private final UtilityProxy utilityServiceFeignService;
@@ -214,6 +217,23 @@ public class SessionManagerClientUserService {
 
                 // baseResponse2 = utilityServiceFeignService.checkIfDeviceBelongsToUser(userDeviceRequest,channel);
                 if (baseResponse.getStatusCode() == HttpServletResponse.SC_OK) {
+                    List<RegWalletInfo> cumLog = regWalletInfoRepository.findByEmailList(rq.getEmailAddress());
+                    String appVersion = rq.getAppVersion() == null ? "0.0" : rq.getAppVersion();
+
+                    String tblAppVersion = cumLog.get(0).getAppVersion() == null ? "0.0" : cumLog.get(0).getAppVersion();
+
+                    if (!"0.0".equals(tblAppVersion)) {
+
+                        if (!tblAppVersion.equals(appVersion)) {
+                            RegWalletInfo cumLogUp = regWalletInfoRepository.findByPhoneNumberId(cumLog.get(0).getPhoneNumber());
+                            cumLogUp.setAppVersion(appVersion);
+                            cumLogUp.setLastModifiedDate(Instant.now());
+                            regWalletInfoRepository.save(cumLogUp);
+                        }
+                    }
+
+                    res.setAppVersion(appVersion);
+
                     issueToken(baseResponse, rq.getEmailAddress(), res, loginIP, res.getUuid(), rq.getJoinTransactionId());
                     log.setUserId(rq.getEmailAddress().toLowerCase().trim());
                     log.setUuId(uuid);
@@ -222,8 +242,6 @@ public class SessionManagerClientUserService {
                     log.setMethod("Authentication-Wallet-User");
                     log.setCustomerType("Wallet");
                     log.setChannel(channel);
-
-                    List<RegWalletInfo> cumLog = regWalletInfoRepository.findByEmailList(rq.getEmailAddress());
 
                     List<DeviceDetails> getDe = deviceDetailsRepo.findAllByWalletId(cumLog.get(0).getWalletId());
                     logger.info(String.format("rq.getAppType() +++++++++++++ =>%s", rq.getAppType()));
@@ -258,6 +276,13 @@ public class SessionManagerClientUserService {
                         getDeUp.setLastModifiedBy("System");
                         deviceDetailsRepo.save(getDeUp);
 
+                    }
+
+                    logger.info(String.format("uttilityMethods.getIfAppExist(appVersion) >>>>>>=>%s", uttilityMethods.getIfAppExist(appVersion)));
+
+                    if (uttilityMethods.getIfAppExist(appVersion) == true) {
+
+                        baseResponse.setStatusCode(LOGIN_BAD_APP_VERSION_STATUS_CODE);
                     }
 
                 } else {
@@ -398,6 +423,7 @@ public class SessionManagerClientUserService {
         baseResponse.addData("merchantLink", response.getMerchantLink());
         baseResponse.addData("virtualWalletNo", response.getVirtualWalletNo());
         baseResponse.addData("walletId", response.getWalletId());
+        baseResponse.addData("appVersion", response.getAppVersion());
 
         List<AddAccountDetails> getacct = addAccountDetailsRepo.findByEmailAddress(response.getEmailAddress());
 
@@ -407,8 +433,9 @@ public class SessionManagerClientUserService {
             String getRefralCode = generateReferal("System");
             String returnedRefreeCode;
 
-            List<WalletIndivTransactionsDetails> getListWaa = walletIndivTransactionsDetailsRepo.findByAccountNumber(getacct.get(0).getEmailAddress());
-            if (getListWaa.size() > 0) {
+            List<WalletIndivTransactionsDetails> getListWaa = walletIndivTransactionsDetailsRepo.findByBuyerEmailAddress(getacct.get(0).getEmailAddress());
+            List<WalletIndivTransactionsDetails> getListSeller = walletIndivTransactionsDetailsRepo.findBySellerEmailAddress(getacct.get(0).getEmailAddress());
+            if (!getListWaa.isEmpty() || !getListSeller.isEmpty()) {
                 List<PeerToPeerFxReferral> getRef = peerToPeerFxReferralRepo.findByEmailAddress(getacct.get(0).getEmailAddress());
                 if (getRef.size() <= 0) {
                     //generate and save

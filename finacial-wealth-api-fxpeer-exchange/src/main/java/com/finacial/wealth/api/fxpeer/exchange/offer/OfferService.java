@@ -15,11 +15,14 @@ import com.finacial.wealth.api.fxpeer.exchange.domain.AppConfig;
 import com.finacial.wealth.api.fxpeer.exchange.domain.AppConfigRepo;
 import com.finacial.wealth.api.fxpeer.exchange.feign.ProfilingProxies;
 import com.finacial.wealth.api.fxpeer.exchange.feign.TransactionServiceProxies;
+import com.finacial.wealth.api.fxpeer.exchange.fx.p.p.wallet.WalletTransactionsDetails;
+import com.finacial.wealth.api.fxpeer.exchange.fx.p.p.wallet.WalletTransactionsDetailsRepo;
 import com.finacial.wealth.api.fxpeer.exchange.ledger.LedgerClient;
 
 import com.finacial.wealth.api.fxpeer.exchange.model.AddAccountObj;
 import com.finacial.wealth.api.fxpeer.exchange.model.ApiResponseModel;
 import com.finacial.wealth.api.fxpeer.exchange.model.BaseResponse;
+import com.finacial.wealth.api.fxpeer.exchange.model.CreditWalletCaller;
 import com.finacial.wealth.api.fxpeer.exchange.model.DebitWalletCaller;
 import com.finacial.wealth.api.fxpeer.exchange.model.ManageFeesConfigReq;
 import com.finacial.wealth.api.fxpeer.exchange.model.WalletNo;
@@ -36,17 +39,28 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.security.InvalidKeyException;
+import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import javax.crypto.BadPaddingException;
+import javax.crypto.IllegalBlockSizeException;
+import javax.crypto.NoSuchPaddingException;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.scheduling.annotation.EnableScheduling;
+import org.springframework.scheduling.annotation.Scheduled;
 
 @Service
 public class OfferService {
@@ -59,6 +73,14 @@ public class OfferService {
     private final ProfilingProxies profilingProxies;
     private final TransactionServiceProxies transactionServiceProxies;
     private final AppConfigRepo appConfigRepo;
+    @Value("${fx.trade.create.offer.min.amount.percent:0.05}")
+    private String createOfferMinAmountPercent;
+    private final WalletTransactionsDetailsRepo walletTransactionsDetailsRepo;
+
+    @Value("${fx.enable.run.fx.trade.expired.listings.cron:0}")
+    private String fxEnableRunFxTradeEpiredListingsCron;
+    @Value("${fx.trade.expired.listings.cron}")
+    private String fxTradeExpiredListingsCron;
 
     private static final ZoneId LAGOS = ZoneId.of("Africa/Lagos");
     private static final DateTimeFormatter EXPIRY_DMY
@@ -71,7 +93,7 @@ public class OfferService {
             AddAccountDetailsRepo addAccountDetailsRepo,
             ProfilingProxies profilingProxies,
             TransactionServiceProxies transactionServiceProxies,
-            AppConfigRepo appConfigRepo) {
+            AppConfigRepo appConfigRepo, WalletTransactionsDetailsRepo walletTransactionsDetailsRepo) {
         this.repo = repo;
         this.ledger = ledger;
         this.utilService = utilService;
@@ -80,6 +102,7 @@ public class OfferService {
         this.profilingProxies = profilingProxies;
         this.transactionServiceProxies = transactionServiceProxies;
         this.appConfigRepo = appConfigRepo;
+        this.walletTransactionsDetailsRepo = walletTransactionsDetailsRepo;
     }
 
     @Transactional(readOnly = true)
@@ -96,7 +119,125 @@ public class OfferService {
         return repo.findBySellerUserId(sellerId, pageable);
     }
 
-    public ResponseEntity<ApiResponseModel> getMyOffersCaller(String auth,
+    @Transactional(readOnly = true)
+    public ResponseEntity<ApiResponseModel> getMyOffersCaller(String auth, Pageable pageable) {
+        ApiResponseModel resp = new ApiResponseModel();
+
+        // -- auth / user lookup (unchanged but safe) --
+        final String phoneNumber;
+        try {
+            if (auth == null || auth.isBlank()) {
+                return bad(resp, "Missing Authorization header", 400);
+            }
+            phoneNumber = utilService.getClaimFromJwt(auth, "phoneNumber");
+            if (phoneNumber == null || phoneNumber.isBlank()) {
+                return bad(resp, "Invalid token: phoneNumber claim missing", 400);
+            }
+        } catch (Exception e) {
+            return bad(resp, "Unable to parse token", 400);
+        }
+
+        RegWalletInfo wallet = regWalletInfoRepository.findByPhoneNumber(phoneNumber).orElse(null);
+        if (wallet == null) {
+            return bad(resp, "Customer not found for phone number", 400);
+        }
+
+        // derive seller IDs from both sources
+        Long sellerIdA = null, sellerIdB = null;
+        List<AddAccountDetails> accounts = addAccountDetailsRepo.findByEmailAddressrData(wallet.getEmail());
+        if (accounts != null && !accounts.isEmpty() && accounts.get(0).getWalletId() != null) {
+            try {
+                sellerIdA = Long.valueOf(accounts.get(0).getWalletId());
+            } catch (NumberFormatException ignored) {
+            }
+        }
+        if (wallet.getWalletId() != null) {
+            try {
+                sellerIdB = Long.valueOf(wallet.getWalletId());
+            } catch (NumberFormatException ignored) {
+            }
+        }
+
+        // -- fetch offers (avoid double query if same ID) --
+        OfferStatus status = null; // or set if you filter by status
+        List<Offer> allOffers = new ArrayList<>();
+
+        if (sellerIdA != null && sellerIdB != null && sellerIdA.equals(sellerIdB)) {
+            allOffers.addAll(getMyOffers(sellerIdA, status, Pageable.unpaged()).getContent());
+        } else {
+            if (sellerIdA != null) {
+                allOffers.addAll(getMyOffers(sellerIdA, status, Pageable.unpaged()).getContent());
+            }
+            if (sellerIdB != null) {
+                allOffers.addAll(getMyOffers(sellerIdB, status, Pageable.unpaged()).getContent());
+            }
+        }
+
+        // -- map -> DTO, de-duplicate by offer ID, sort newest-first (expiry then id) --
+        List<OfferListItemDto> mergedSorted = allOffers.stream()
+                .map(OfferMapper::toListItem)
+                .collect(java.util.stream.Collectors.toMap(
+                        OfferListItemDto::id, // assumes your dto has a getter 'id()' or getId()
+                        java.util.function.Function.identity(),
+                        (a, b) -> a, // on duplicate, keep first
+                        java.util.LinkedHashMap::new))
+                .values().stream()
+                .sorted((a, b) -> {
+                    // Prefer expiry desc (nulls last), fallback to id desc
+                    java.time.Instant ea = a.expiryAt(); // or a.getExpiryAt()
+                    java.time.Instant eb = b.expiryAt(); // or b.getExpiryAt()
+                    int byExpiry = java.util.Comparator.nullsLast(java.util.Comparator.<java.time.Instant>naturalOrder())
+                            .reversed()
+                            .compare(ea, eb);
+                    if (byExpiry != 0) {
+                        return byExpiry;
+                    }
+                    // fallback by id desc (assumes Long)
+                    return java.util.Comparator.<Long>naturalOrder().reversed().compare(a.id(), b.id());
+                })
+                .toList();
+
+        // -- page in-memory using incoming Pageable --
+        Page<OfferListItemDto> page = pageList(mergedSorted, pageable);
+
+        if (page.isEmpty()) {
+            resp.setStatusCode(400);
+            resp.setDescription("No offer found.");
+            return ResponseEntity.ok(resp);
+
+        }
+
+        // -- build response --
+        resp.setStatusCode(200);
+        resp.setDescription("Offers fetched successfully.");
+        resp.setData(Map.of(
+                "items", page.getContent(),
+                "page", page.getNumber(),
+                "size", page.getSize(),
+                "totalPages", page.getTotalPages(),
+                "totalElements", page.getTotalElements(),
+                "hasNext", page.hasNext(),
+                "hasPrevious", page.hasPrevious()
+        ));
+        return ResponseEntity.ok(resp);
+    }
+
+    /**
+     * In-memory pagination helper.
+     */
+    private static <T> Page<T> pageList(List<T> all, Pageable pageable) {
+        if (pageable == null || pageable.isUnpaged()) {
+            return new org.springframework.data.domain.PageImpl<>(all);
+        }
+        int page = pageable.getPageNumber();
+        int size = pageable.getPageSize();
+        int from = Math.min(page * size, all.size());
+        int to = Math.min(from + size, all.size());
+        List<T> slice = (from <= to) ? all.subList(from, to) : java.util.Collections.emptyList();
+        return new org.springframework.data.domain.PageImpl<>(slice, pageable, all.size());
+    }
+
+    public ResponseEntity<ApiResponseModel> getMyOffersCallerOld(String auth,
             Pageable pageable) {
 
         int statusCode = 500;
@@ -110,8 +251,10 @@ public class OfferService {
             List<AddAccountDetails> getAdDe = addAccountDetailsRepo.findByEmailAddressrData(getRec.get().getEmail());
 
             long sellerId = Long.valueOf(getAdDe.get(0).getWalletId());
+            long selleridTwo = Long.valueOf(getRec.get().getWalletId());
             OfferStatus status = null;
             Page<Offer> page = getMyOffers(sellerId, status, pageable);
+            Page<Offer> page2 = getMyOffers(selleridTwo, status, pageable);
 
             Page<OfferListItemDto> dtoPage = page.map(OfferMapper::toListItem);
 
@@ -239,6 +382,12 @@ public class OfferService {
         }
     }
 
+    static BigDecimal parsePercentFlexible(String p) {
+        BigDecimal bd = new BigDecimal(p.trim());
+        // If ≥ 1, assume “5” means 5% -> 0.05
+        return (bd.compareTo(BigDecimal.ONE) >= 0) ? bd.movePointLeft(2) : bd;
+    }
+
     public ResponseEntity<ApiResponseModel> updateOfferCaller(UpdateOfferCallerReq rq, String auth) {
         final ApiResponseModel res = new ApiResponseModel();
 
@@ -268,6 +417,12 @@ public class OfferService {
 
             long logSellerId = Long.valueOf(offerDe.get(0).getSellerUserId());
 
+            /*BigDecimal setMin = new BigDecimal(rq.getMinAmount());
+            BigDecimal setMax = new BigDecimal(rq.getMaxAmount());
+
+            if (this.isMinLeMax(setMin, setMax) == false) {
+                return bad(res, "MinAmount must be ≤ MaxAmount.", 400);
+            }*/
             Offer updateOffer = updateRate(offerDe.get(0).getId(), new BigDecimal(rq.getNewRate()), logSellerId, rq.getCorrelationId());
             res.setStatusCode(200);
             res.setDescription("Offer created.");
@@ -280,6 +435,12 @@ public class OfferService {
             ex.printStackTrace();
             return bad(res, "An error occurred, please try again.", 500);
         }
+    }
+
+    static boolean isBelowPercent(BigDecimal amount, BigDecimal base, BigDecimal percentFraction) {
+        // percentFraction is 0.05 for 5%
+        BigDecimal threshold = base.multiply(percentFraction);
+        return amount.compareTo(threshold) < 0;
     }
 
     public ResponseEntity<ApiResponseModel> createOfferCaller(CreateOfferCaller rq, String auth) {
@@ -394,11 +555,36 @@ public class OfferService {
             }
 
             BigDecimal setMin = new BigDecimal(rq.getMinAmount());
-            BigDecimal setMax = new BigDecimal(rq.getMaxAmount());
-
-            if (this.isMinLeMax(setMin, setMax) == false) {
+            //BigDecimal setMax = new BigDecimal(rq.getMaxAmount());
+            BigDecimal setMax = BigDecimal.ZERO;
+            /*if (this.isMinLeMax(setMin, setMax) == false) {
                 return bad(res, "MinAmount must be ≤ MaxAmount.", 400);
+            }*/
+            // Calculate 5% of faceValue
+// usage
+            BigDecimal faceValue = new BigDecimal(rq.getQtyTotal());          // or whatever your base is
+            BigDecimal minAmt = new BigDecimal(rq.getMinAmount());         // the user-supplied minimum
+            BigDecimal pct = parsePercentFlexible(createOfferMinAmountPercent);
+            BigDecimal percent = pct.multiply(BigDecimal.valueOf(100));
+
+            boolean tooSmall = isBelowPercent(minAmt, faceValue, pct);
+            if (tooSmall) {
+                System.out.println("Minmum amount is less than " + percent + "% of Total Quantity");
+                return bad(res, "Minmum amount is less than " + percent + "% of Total Quantity", 400);
+
             }
+
+            /*  BigDecimal fivePercent = new BigDecimal(rq.getQtyTotal()).multiply(BigDecimal.valueOf(Integer.valueOf(createOfferMinAmountPercent)));
+            BigDecimal decimal = new BigDecimal(createOfferMinAmountPercent);
+            BigDecimal percent = decimal.multiply(BigDecimal.valueOf(100));
+// Comparex
+            if (setMin.compareTo(fivePercent) < 0) {
+
+                System.out.println("Minmum amount is less than " + percent + "% of Total Quantity");
+                return bad(res, "Minmum amount is less than " + percent + "% of Total Quantity", 400);
+            } else {
+                System.out.println("Minimum amount is at least " + percent + "% of Total Quantity");
+            }*/
             ManageFeesConfigReq mFeee = new ManageFeesConfigReq();
             mFeee.setAmount(setMin.toString());
             mFeee.setTransType("createlisting");
@@ -451,12 +637,12 @@ public class OfferService {
             WalletInfoValAcct wSend = new WalletInfoValAcct();
             wSend.setCorrelationId(correlationId);
             wSend.setCurrencyToBuy(rq.getCurrencyReceive().toString());
-            if ("CAD".equals(rq.getCurrencySell())) {
-                wSend.setAccountNumber(getAdDe.get(0).getAccountNumber());
+            if ("CAD".equals(rq.getCurrencySell().toString())) {
+                wSend.setAccountNumber(cusCadAccountNo);
                 accountToDebit = wSend.getAccountNumber();
 
             } else {
-                wSend.setAccountNumber(cusCadAccountNo);
+                wSend.setAccountNumber(getAdDe.get(0).getAccountNumber());
                 accountToDebit = wSend.getAccountNumber();
 
             }
@@ -540,7 +726,7 @@ public class OfferService {
             o.setShowInTopDeals(showInTopDeals);
             o.setPoweredBy(creators);
             o.setCorrelationId(correlationId);
-            o.setExpiryAt(Instant.now());
+            o.setExpiryAt(rq.getExpiryAt());
             repo.save(o);
 
             res.setStatusCode(200);
@@ -608,7 +794,128 @@ public class OfferService {
     private ResponseEntity<ApiResponseModel> bad(ApiResponseModel res, String msg, int statusCode) {
         res.setStatusCode(statusCode);
         res.setDescription(msg);
-        return ResponseEntity.status(HttpStatus.OK).body(res);
+        return new ResponseEntity<>(res, HttpStatus.OK);
+        //return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(res);
+    }
+
+    /**
+     * Runs every 5 minutes (Africa/Lagos). Tune to your needs.
+     */
+    //@Scheduled(cron = "0 */5 * * * *", zone = "Africa/Lagos")
+    @Scheduled(cron = "${fx.trade.expired.listings.cron}")
+    @Transactional
+    public void expireDueOffers() throws NoSuchAlgorithmException,
+            NoSuchPaddingException, InvalidKeyException,
+            IllegalBlockSizeException, BadPaddingException {
+        // If you mean "now", use Instant.now() (UTC-safe for Instant)
+        final Instant now = Instant.now();
+        System.out.println(" ****** Checking and Processing ExpiredDueOffers  >>>>>>>>>>>>>   *********** ");
+
+        if (!fxEnableRunFxTradeEpiredListingsCron.equals("0")) {
+
+            // If you truly mean "today" cut-off by calendar day in Lagos, use this instead:
+            final ZoneId ng = ZoneId.of("Africa/Lagos");
+            final Instant endOfTodayLagos = LocalDate.now(ng).plusDays(1).atStartOfDay(ng).toInstant();
+            final Instant cutoff = endOfTodayLagos;
+            final List<OfferStatus> openStatuses = Arrays.asList(OfferStatus.LIVE);
+
+            Pageable page = PageRequest.of(0, 500);
+            Page<Offer> batch;
+
+            do {
+                //  batch = repo.findByExpiryAtIsNotNullAndExpiryAtLessThanEqualAndStatusIn(now, openStatuses, page);
+                batch = repo.findByExpiryAtIsNotNullAndExpiryAtLessThanEqualAndStatusIn(cutoff, openStatuses, page);
+
+                for (Offer o : batch.getContent()) {
+                    // Your per-offer business rules:
+                    o.setStatus(OfferStatus.EXPIRED);
+                    o.setQtyAvailable(BigDecimal.ZERO);
+                    o.setUpdatedNow();
+                    // o.setShowInTopDeals(false);
+                    // notificationService.notifySellerExpired(o.getSellerUserId(), o.getId());
+                    // publisher.publishEvent(new OfferExpiredEvent(o.getId()));
+                    WalletTransactionsDetails getWalDeupdate = walletTransactionsDetailsRepo.findByCorrelationIdUpdated(o.getCorrelationId());
+                    BigDecimal availableQuantity = getWalDeupdate.getAvailableQuantity();
+
+                    //get currencyToSell
+                    // get availableQuantity
+                    //make reversal
+                    CreditWalletCaller rqC = new CreditWalletCaller();
+
+                    if (getWalDeupdate.getCurrencyToSell().equals("CAD")) {
+                        Optional<RegWalletInfo> getRec = regWalletInfoRepository.findByEmail(getWalDeupdate.getEmailAddress());
+
+                        rqC.setPhoneNumber(getRec.get().getPhoneNumber());
+                        getWalDeupdate.setLastModifiedDate(Instant.now());
+                        getWalDeupdate.setBuyerName(getRec.get().getFullName());
+
+                    } else {
+                        List<AddAccountDetails> getSellerAcct = addAccountDetailsRepo.findByEmailAddressrData(getWalDeupdate.getEmailAddress());
+                        rqC.setPhoneNumber(getSellerAcct.get(0).getAccountNumber());
+                        getWalDeupdate.setLastModifiedDate(Instant.now());
+                        Optional<RegWalletInfo> getRec = regWalletInfoRepository.findByEmail(getWalDeupdate.getEmailAddress());
+
+                        getWalDeupdate.setBuyerName(getRec.get().getFullName());
+
+                    }
+
+                    rqC.setAuth("Seller");
+                    rqC.setFees("00");
+                    rqC.setFinalCHarges(availableQuantity.toString());
+                    rqC.setNarration(getWalDeupdate.getCurrencyToSell() + "_Reversal");
+                    rqC.setTransAmount(availableQuantity.toString());
+                    rqC.setTransactionId(o.getCorrelationId());
+
+                    System.out.println(" creditSellerAcct for Reversal REQ  ::::::::::::::::  %S  " + new Gson().toJson(rqC));
+
+                    BaseResponse creditSellerAcct = transactionServiceProxies.creditCustomerWithType(rqC, "CUSTOMER", "");
+
+                    System.out.println(" creditSellerAcct Response from core ::::::::::::::::  %S  " + new Gson().toJson(creditSellerAcct));
+                    if (creditSellerAcct.getStatusCode() == 200) {
+
+                        // Credit BAAS NGN_GL
+                        CreditWalletCaller GLCredit = new CreditWalletCaller();
+                        GLCredit.setAuth("Receiver");
+                        GLCredit.setFees("0.00");
+                        GLCredit.setFinalCHarges(rqC.getFinalCHarges());
+                        GLCredit.setNarration(rqC.getNarration());
+                        String GGL_ACCOUNT = null;
+
+                        List<AppConfig> getAppConf = appConfigRepo.findByConfigName(getWalDeupdate.getCurrencyToSell());
+
+                        for (AppConfig getConfDe : getAppConf) {
+                            if (getConfDe.getConfigName().equals(getWalDeupdate.getCurrencyToSell())) {
+                                GGL_ACCOUNT = getConfDe.getConfigValue();
+
+                            }
+                        }
+                        //GLCredit.setPhoneNumber(utilService.decryptData(utilService.getSETTING_KEY_WALLET_SYSTEM_SYSTEM_GG_CAD()));
+                        GLCredit.setPhoneNumber(utilService.decryptData(GGL_ACCOUNT));
+                        GLCredit.setTransAmount(rqC.getFinalCHarges());
+                        GLCredit.setTransactionId(rqC.getTransactionId());
+
+                        System.out.println(" creditAcct_GL seller for Reversal REQ  ::::::::::::::::  %S  " + new Gson().toJson(GLCredit));
+
+                        BaseResponse creditAcct_GL = transactionServiceProxies.creditCustomerWithType(GLCredit, getWalDeupdate.getCurrencyToSell(), "");
+
+                        System.out.println(" credit GL for seller for Reversal Response from core ::::::::::::::::  %S  " + new Gson().toJson(creditAcct_GL));
+
+                    }
+
+                    System.out.println(" On CANCEL SET availableQuantity to ZERO::::::::::::::::  %S  ");
+
+                    getWalDeupdate.setStatus(OfferStatus.CANCELLED);
+
+                    getWalDeupdate.setAvailableQuantity(BigDecimal.ZERO);
+                    walletTransactionsDetailsRepo.save(getWalDeupdate);
+                }
+
+                // Persist this page before moving on
+                repo.flush(); // (if JpaRepository)
+                // Move to next page
+                page = page.next();
+            } while (!batch.isEmpty());
+        }
     }
 
     public ResponseEntity<ApiResponseModel> cancelOfferCaller(CancelOfferCallerReq rq, String auth) {
@@ -633,6 +940,75 @@ public class OfferService {
             if (offerDe.size() <= 0) {
                 return bad(res, "Offer does not exist!", 400);
             }
+
+            WalletTransactionsDetails getWalDeupdate = walletTransactionsDetailsRepo.findByCorrelationIdUpdated(rq.getCorrelationId());
+            BigDecimal availableQuantity = getWalDeupdate.getAvailableQuantity();
+
+            //get currencyToSell
+            // get availableQuantity
+            //make reversal
+            CreditWalletCaller rqC = new CreditWalletCaller();
+
+            if (getWalDeupdate.getCurrencyToSell().equals("CAD")) {
+                rqC.setPhoneNumber(phoneNumber);
+
+            } else {
+                List<AddAccountDetails> getSellerAcct = addAccountDetailsRepo.findByEmailAddressrData(getWalDeupdate.getEmailAddress());
+                rqC.setPhoneNumber(getSellerAcct.get(0).getAccountNumber());
+            }
+
+            rqC.setAuth("Seller");
+            rqC.setFees("00");
+            rqC.setFinalCHarges(availableQuantity.toString());
+            rqC.setNarration(getWalDeupdate.getCurrencyToSell() + "_Reversal");
+            rqC.setTransAmount(availableQuantity.toString());
+            rqC.setTransactionId(rq.getCorrelationId());
+
+            System.out.println(" creditSellerAcct for Reversal REQ  ::::::::::::::::  %S  " + new Gson().toJson(rqC));
+
+            BaseResponse creditSellerAcct = transactionServiceProxies.creditCustomerWithType(rqC, "CUSTOMER", auth);
+
+            System.out.println(" creditSellerAcct Response from core ::::::::::::::::  %S  " + new Gson().toJson(creditSellerAcct));
+            if (creditSellerAcct.getStatusCode() == 200) {
+
+                // Credit BAAS NGN_GL
+                CreditWalletCaller GLCredit = new CreditWalletCaller();
+                GLCredit.setAuth("Receiver");
+                GLCredit.setFees("0.00");
+                GLCredit.setFinalCHarges(rqC.getFinalCHarges());
+                GLCredit.setNarration(rqC.getNarration());
+                String GGL_ACCOUNT = null;
+
+                List<AppConfig> getAppConf = appConfigRepo.findByConfigName(getWalDeupdate.getCurrencyToSell());
+
+                for (AppConfig getConfDe : getAppConf) {
+                    if (getConfDe.getConfigName().equals(getWalDeupdate.getCurrencyToSell())) {
+                        GGL_ACCOUNT = getConfDe.getConfigValue();
+
+                    }
+                }
+                //GLCredit.setPhoneNumber(utilService.decryptData(utilService.getSETTING_KEY_WALLET_SYSTEM_SYSTEM_GG_CAD()));
+                GLCredit.setPhoneNumber(utilService.decryptData(GGL_ACCOUNT));
+                GLCredit.setTransAmount(rqC.getFinalCHarges());
+                GLCredit.setTransactionId(rqC.getTransactionId());
+
+                System.out.println(" creditAcct_GL seller for Reversal REQ  ::::::::::::::::  %S  " + new Gson().toJson(GLCredit));
+
+                BaseResponse creditAcct_GL = transactionServiceProxies.creditCustomerWithType(GLCredit, getWalDeupdate.getCurrencyToSell(), auth);
+
+                System.out.println(" credit GL for seller for Reversal Response from core ::::::::::::::::  %S  " + new Gson().toJson(creditAcct_GL));
+
+            }
+
+            getWalDeupdate.setLastModifiedDate(Instant.now());
+            getWalDeupdate.setBuyerName(getRec.get().getFullName());
+
+            System.out.println(" On CANCEL SET availableQuantity to ZERO::::::::::::::::  %S  ");
+
+            getWalDeupdate.setStatus(OfferStatus.CANCELLED);
+
+            getWalDeupdate.setAvailableQuantity(BigDecimal.ZERO);
+            walletTransactionsDetailsRepo.save(getWalDeupdate);
 
             long logSellerId = Long.valueOf(offerDe.get(0).getSellerUserId());
 

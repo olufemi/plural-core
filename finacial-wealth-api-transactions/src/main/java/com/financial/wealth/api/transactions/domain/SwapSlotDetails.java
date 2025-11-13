@@ -58,6 +58,7 @@ public class SwapSlotDetails implements Serializable {
     private String receiverEmailAddress;
     private String isSlotSwapped;
     private String isSlotSwappedStatus;
+      private String groupName;
 
     @CreatedDate
     @Column(name = "CREATED_DATE", nullable = false, updatable = false, columnDefinition = "TIMESTAMP DEFAULT CURRENT_TIMESTAMP")

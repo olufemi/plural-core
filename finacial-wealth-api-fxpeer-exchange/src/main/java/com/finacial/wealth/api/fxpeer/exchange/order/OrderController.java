@@ -21,6 +21,9 @@ import java.security.NoSuchAlgorithmException;
 import javax.crypto.BadPaddingException;
 import javax.crypto.IllegalBlockSizeException;
 import javax.crypto.NoSuchPaddingException;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.web.PageableDefault;
 
 /**
  *
@@ -38,6 +41,17 @@ public class OrderController {
         this.escrowService = escrowService;
     }
 
+    @GetMapping("/get-all-customer-transactions")
+    public ResponseEntity<ApiResponseModel> getAllOffers(
+            @RequestHeader(value = "authorization", required = true) String auth
+    //,@PageableDefault(size = 20, sort = "id", direction = Sort.Direction.DESC) Pageable pageable
+    ) {
+
+        ResponseEntity<ApiResponseModel> baseResponse = orderService.getUserTransactionsHistory(auth);
+        return baseResponse;
+
+    }
+
     @PostMapping("/buy-offer-now")
     public ResponseEntity<ApiResponseModel> createOfferCaller(
             @RequestHeader(value = "authorization", required = true) String auth,
@@ -53,7 +67,7 @@ public class OrderController {
             @PathVariable long offerId,
             @RequestBody @Valid BuyNowRq rq) throws NoSuchAlgorithmException, NoSuchPaddingException, InvalidKeyException, IllegalBlockSizeException, BadPaddingException {
         //Order ord = orderService.buyNow(offerId, rq.amount(), buyerId, rq.lockTtlSeconds());
-        Order ord = orderService.buyNow(offerId, rq.amount(), String.valueOf(buyerId), 600, "", "", "", "","");
+        Order ord = orderService.buyNow(offerId, rq.amount(), String.valueOf(buyerId), 600, "", "", "", "", "");
 
         return ResponseEntity.ok(ord);
     }

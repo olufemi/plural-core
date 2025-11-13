@@ -94,6 +94,7 @@ public class RegWalletInfo extends AbstractAuditingEntity implements Serializabl
     private String referralCode;
     @Column(name = "REFERRAL_LINK", unique = true)
     private String referralCodeLink;
+    private String appVersion;
 
     @CreatedDate
     @Column(name = "CREATED_DATE", nullable = false, updatable = false, columnDefinition = "TIMESTAMP DEFAULT CURRENT_TIMESTAMP")

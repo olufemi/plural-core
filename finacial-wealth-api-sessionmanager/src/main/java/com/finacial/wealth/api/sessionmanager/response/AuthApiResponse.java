@@ -43,6 +43,7 @@ public class AuthApiResponse {
     String virtualWalletNo;
     private String referralCode;
     private String walletId;
+    private String appVersion;
 
     private String referralCodeLink;
 

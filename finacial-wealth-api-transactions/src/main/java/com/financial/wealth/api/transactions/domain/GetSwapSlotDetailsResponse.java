@@ -25,5 +25,6 @@ public class GetSwapSlotDetailsResponse {
     private String receiverEmailAddress;
     private String isSlotSwappedStatus;
     private String notificationDate;
+     private String groupName;
 
 }

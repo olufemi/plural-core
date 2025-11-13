@@ -59,6 +59,8 @@ public class WalletIndivTransactionsDetails extends AbstractAuditingEntity imple
     private String buyerId;
     private String buyerAccount;
     private String buyerName;
+    private String sellerEmailAddress;
+    private String buyerEmailAddress;
     private BigDecimal receiverAmount;
 
     public Long getId() {
@@ -68,6 +70,25 @@ public class WalletIndivTransactionsDetails extends AbstractAuditingEntity imple
     public void setId(Long id) {
         this.id = id;
     }
+
+    public String getSellerEmailAddress() {
+        return sellerEmailAddress;
+    }
+
+    public void setSellerEmailAddress(String sellerEmailAddress) {
+        this.sellerEmailAddress = sellerEmailAddress;
+    }
+
+    public String getBuyerEmailAddress() {
+        return buyerEmailAddress;
+    }
+
+    public void setBuyerEmailAddress(String buyerEmailAddress) {
+        this.buyerEmailAddress = buyerEmailAddress;
+    }
+    
+    
+    
 
     public String getCurrencyToSell() {
         return currencyToSell;

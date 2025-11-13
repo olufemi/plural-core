@@ -23,4 +23,10 @@ public interface WalletIndivTransactionsDetailsRepo extends
     @Query("SELECT u FROM WalletIndivTransactionsDetails u where u.accountNumber = :accountNumber")
     List<WalletIndivTransactionsDetails> findByAccountNumber(@Param("accountNumber") String accountNumber);
 
+    @Query("SELECT u FROM WalletIndivTransactionsDetails u where u.sellerEmailAddress = :sellerEmailAddress")
+    List<WalletIndivTransactionsDetails> findBySellerEmailAddress(@Param("sellerEmailAddress") String sellerEmailAddress);
+
+    @Query("SELECT u FROM WalletIndivTransactionsDetails u where u.buyerEmailAddress = :buyerEmailAddress")
+    List<WalletIndivTransactionsDetails> findByBuyerEmailAddress(@Param("buyerEmailAddress") String buyerEmailAddress);
+
 }

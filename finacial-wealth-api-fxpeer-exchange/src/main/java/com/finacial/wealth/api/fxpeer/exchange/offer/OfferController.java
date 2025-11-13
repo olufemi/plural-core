@@ -9,7 +9,9 @@ package com.finacial.wealth.api.fxpeer.exchange.offer;
  * @author olufemioshin
  */
 import com.finacial.wealth.api.fxpeer.exchange.common.OfferStatus;
+
 import com.finacial.wealth.api.fxpeer.exchange.model.ApiResponseModel;
+import com.finacial.wealth.api.fxpeer.exchange.model.GetProducts;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMin;
@@ -29,9 +31,13 @@ import org.springframework.http.HttpStatus;
 public class OfferController {
 
     private final OfferService service;
+  //  private final ProcSochitelServices procSochitelServices;
 
-    public OfferController(OfferService service) {
+    public OfferController(OfferService service
+           // ProcSochitelServices procSochitelServices
+    ) {
         this.service = service;
+      //  this.procSochitelServices = procSochitelServices;
     }
 
     @GetMapping("/get-all-live-offers")
@@ -64,6 +70,8 @@ public class OfferController {
 
     }
 
+  
+
     /*@PostMapping("/create-offer")
     public ResponseEntity<ApiResponseModel> createOfferCaller(
             @RequestHeader(value = "authorization", required = true) String auth,
@@ -73,7 +81,8 @@ public class OfferController {
         return baseResponse;
     }*/
     @PostMapping("/create-offer")
-    public ResponseEntity<ApiResponseModel> createOfferCaller(@RequestHeader(value = "authorization", required = true) String auth,
+    public ResponseEntity<ApiResponseModel> createOfferCaller(
+            @RequestHeader(value = "authorization", required = true) String auth,
             @RequestBody @Valid CreateOfferCaller rq) {
 
         ResponseEntity<ApiResponseModel> baseResponse = service.createOfferCaller(rq, auth);
@@ -118,18 +127,17 @@ public class OfferController {
             @RequestBody @Valid CreateOfferRq rq) {
         return ResponseEntity.ok(service.createOffer(rq, sellerId, BigDecimal.ZERO, BigDecimal.ZERO, false, "",""));
     }*/
-
     @PatchMapping("/{id}/rate")
     public ResponseEntity<Offer> updateRate(@RequestHeader("X-User-Id") long sellerId,
             @PathVariable long id,
             @RequestParam @DecimalMin("0.000001") BigDecimal rate) {
-        return ResponseEntity.ok(service.updateRate(id, rate, sellerId,""));
+        return ResponseEntity.ok(service.updateRate(id, rate, sellerId, ""));
     }
 
     @PostMapping("/{id}/cancel")
     public ResponseEntity<Void> cancel(@RequestHeader("X-User-Id") long sellerId,
             @PathVariable long id) {
-        service.cancel(id, sellerId,"");
+        service.cancel(id, sellerId, "");
         return ResponseEntity.noContent().build();
     }
 

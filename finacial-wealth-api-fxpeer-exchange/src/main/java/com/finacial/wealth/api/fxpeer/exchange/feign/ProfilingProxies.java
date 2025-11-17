@@ -25,6 +25,6 @@ public interface ProfilingProxies {
     public BaseResponse addOtherAccount(@RequestBody AddAccountObj rq, @RequestHeader("Authorization") String authorization);
 
     @RequestMapping(value = "/countries/validate/country-code", consumes = "application/json", method = RequestMethod.POST)
-    public ApiResponseModel validateCountryCode(@RequestBody ValidateCountryCode rq, @RequestHeader("Authorization") String authorization);
+    public BaseResponse validateCountryCode(@RequestBody ValidateCountryCode rq, @RequestHeader("Authorization") String authorization);
 
 }

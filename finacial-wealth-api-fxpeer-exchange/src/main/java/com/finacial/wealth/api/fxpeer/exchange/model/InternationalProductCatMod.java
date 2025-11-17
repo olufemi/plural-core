@@ -11,7 +11,9 @@ import lombok.Data;
  * @author olufemioshin
  */
 @Data
-public class GetProducts {
-    private String currencyCode;
-  
+public class InternationalProductCatMod {
+
+    private String categoryId;
+    private String categoryName;
+
 }

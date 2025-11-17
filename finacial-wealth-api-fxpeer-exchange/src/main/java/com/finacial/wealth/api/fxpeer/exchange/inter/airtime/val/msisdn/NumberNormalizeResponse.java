@@ -21,7 +21,7 @@ public class NumberNormalizeResponse {
 
     @JsonAlias({"isValid","valid"})
     @JsonProperty("isValid")
-    private Boolean valid;
+    private boolean valid;
 
     @JsonAlias({"isForma","format","countryInfo"})
     @JsonProperty("isForma")

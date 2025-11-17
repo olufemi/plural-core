@@ -18,7 +18,9 @@ import com.finacial.wealth.api.profiling.models.accounts.CountryDto;
 import com.finacial.wealth.api.profiling.models.accounts.ValidationResponse;
 import com.finacial.wealth.api.profiling.repo.AppConfigRepo;
 import com.finacial.wealth.api.profiling.repo.CountriesRepository;
+import com.finacial.wealth.api.profiling.response.BaseResponse;
 import com.finacial.wealth.api.profiling.utils.DecodedJWTToken;
+import com.google.gson.Gson;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.Currency;
@@ -47,52 +49,96 @@ public class CountryService {
         this.appConfigRepo = appConfigRepo;
     }
 
-    public ApiResponseModel validateCountryCode(ValidateCountryCode rq, String auth) {
+    public BaseResponse validateCountryCode(ValidateCountryCode rq, String auth) {
 
-        ApiResponseModel responseModel = new ApiResponseModel();
-        int statusCode = 500;
-        String statusMessage = "An error occured,please try again";
+        BaseResponse responseModel = new BaseResponse();
+        final int defaultErrorCode = 500;
+        final String defaultErrorMessage = "An error occured,please try again";
 
         try {
-            statusCode = 400;
-            DecodedJWTToken getDecoded = DecodedJWTToken.getDecoded(auth);
-
-            // List<CountriesDetails> allDetails = new ArrayList<>();
-            // List<Countries> allCountries = repo.findAll();          // Countries repo
-            List<AppConfig> appConfigs = appConfigRepo.findAll(); // AppConfig repo
-
-            if (appConfigs != null && !appConfigs.isEmpty()) {
-
-                // Build a map of currencyCode -> AppConfig (normalized)
-                Map<String, AppConfig> cfgByCode = appConfigs.stream()
-                        .filter(Objects::nonNull)
-                        .filter(ac -> ac.getConfigName() != null)
-                        .collect(Collectors.toMap(
-                                ac -> norm(ac.getConfigName()),
-                                Function.identity(),
-                                (a, b) -> a // keep first on duplicates
-                        ));
-
-                AppConfig matchedCfg = cfgByCode.get(norm(rq.getCurrencyCode()));
-                if (matchedCfg == null) {
-
-                    responseModel.setStatusCode(statusCode);
-                    responseModel.setDescription("Invalid currency code!");
-                    return responseModel;
-
-                }
+            // 1) Basic input validation
+            if (rq == null || rq.getCurrencyCode() == null || rq.getCurrencyCode().trim().isEmpty()) {
+                responseModel.setStatusCode(400);
+                responseModel.setDescription("currencyCode is required");
+                return responseModel;
             }
 
-            // success response
+            final String currencyCode = rq.getCurrencyCode().trim().toUpperCase(Locale.ROOT);
+
+            Gson gson = new Gson();
+            System.out.println("validateCountryCode req :::::::::::::::: " + gson.toJson(rq));
+
+            // 2) Load configs and countries
+            List<AppConfig> appConfigs = appConfigRepo.findAll(); // AppConfig repo
+            List<Countries> allCountries = repo.findAll();        // Countries repo
+
+            if (appConfigs == null || appConfigs.isEmpty()
+                    || allCountries == null || allCountries.isEmpty()) {
+                responseModel.setStatusCode(400);
+                responseModel.setDescription("Country/configuration not available");
+                return responseModel;
+            }
+
+            // 3) Build a map of configName -> AppConfig (normalized)
+            Map<String, AppConfig> cfgByCode = appConfigs.stream()
+                    .filter(Objects::nonNull)
+                    .filter(ac -> ac.getConfigName() != null)
+                    .collect(Collectors.toMap(
+                            ac -> norm(ac.getConfigName()),
+                            Function.identity(),
+                            (a, b) -> a // keep first on duplicates
+                    ));
+
+            // 4) Validate currency against AppConfig
+            AppConfig matchedCfg = cfgByCode.get(norm(currencyCode));
+            if (matchedCfg == null) {
+                responseModel.setStatusCode(400);
+                responseModel.setDescription("Invalid currency code!");
+                return responseModel;
+            }
+
+            // 5) Find matching country by currency code
+            Countries matchedCountry = allCountries.stream()
+                    .filter(Objects::nonNull)
+                    .filter(c -> c.getCurrencyCode() != null)
+                    .filter(c -> currencyCode.equalsIgnoreCase(c.getCurrencyCode()))
+                    .findFirst()
+                    .orElse(null);
+
+            if (matchedCountry == null) {
+                responseModel.setStatusCode(400);
+                responseModel.setDescription("Invalid currency code!");
+                return responseModel;
+            }
+
+            // 6) Build CountriesDetails / response data
+            CountriesDetails cd = new CountriesDetails();
+            cd.setCountryCode(matchedCountry.getCountryCode());
+            cd.setCountry(matchedCountry.getCountry());
+            cd.setCurrencyCode(matchedCountry.getCurrencyCode());
+            cd.setCountrySymbol(matchedCountry.getCurrencySymbol());
+
+            // Optional: enrich from matchedCfg if needed
+            // cd.setMinAmount(matchedCfg.getMinAmount());
+            // cd.setMaxAmount(matchedCfg.getMaxAmount());
+            // cd.setEnabled(matchedCfg.isEnabled());
+            Map<String, Object> mp = new HashMap<>();
+            mp.put("countryCode", cd.getCountryCode());
+            mp.put("currencyCode", cd.getCurrencyCode());
+            mp.put("countrySymbol", cd.getCountrySymbol());
+            mp.put("country", cd.getCountry());
+
+            responseModel.setData(mp);
             responseModel.setStatusCode(200);
             responseModel.setDescription("Successful");
-            // responseModel.setData(allDetails);
+
+            System.out.println("responseModel :::::::::::::::: " + gson.toJson(responseModel));
             return responseModel;
 
         } catch (Exception ex) {
             ex.printStackTrace();
-            responseModel.setDescription(statusMessage);
-            responseModel.setStatusCode(statusCode);
+            responseModel.setStatusCode(defaultErrorCode);
+            responseModel.setDescription(defaultErrorMessage);
             return responseModel;
         }
     }
@@ -105,7 +151,7 @@ public class CountryService {
 
         try {
             statusCode = 400;
-            DecodedJWTToken getDecoded = DecodedJWTToken.getDecoded(auth);
+            // DecodedJWTToken getDecoded = DecodedJWTToken.getDecoded(auth);
 
             List<CountriesDetails> allDetails = new ArrayList<>();
             List<Countries> allCountries = repo.findAll();          // Countries repo

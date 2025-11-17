@@ -11,6 +11,8 @@ import com.finacial.wealth.api.fxpeer.exchange.inter.airtime.security.ProcSochit
 import com.finacial.wealth.api.fxpeer.exchange.inter.airtime.security.ProcessTrnsactionReq;
 import com.finacial.wealth.api.fxpeer.exchange.inter.airtime.security.ValidatePhoneNumber;
 import com.finacial.wealth.api.fxpeer.exchange.model.GetProducts;
+import com.finacial.wealth.api.fxpeer.exchange.model.GetProductsByCatId;
+import com.finacial.wealth.api.fxpeer.exchange.model.ValidateAccount;
 import jakarta.validation.Valid;
 import java.io.IOException;
 import org.springframework.http.HttpStatus;
@@ -44,7 +46,7 @@ public class FxOtherServicesController {
      * body (GetProducts) Produces: application/json (ApiResponseModel)
      */
     @PostMapping(
-            path = "/airtime-get-products",
+            path = "/get-all-products",
             consumes = MediaType.APPLICATION_JSON_VALUE,
             produces = MediaType.APPLICATION_JSON_VALUE
     )
@@ -55,6 +57,18 @@ public class FxOtherServicesController {
         return procSochitelServices.getProdocts(rq, auth);
     }
 
+    @PostMapping(
+            path = "/int-utilities-get-products",
+            consumes = MediaType.APPLICATION_JSON_VALUE,
+            produces = MediaType.APPLICATION_JSON_VALUE
+    )
+    public ResponseEntity<ApiResponseModel> getProducts(
+            @RequestHeader(name = "authorization", required = true) String auth,
+            @RequestBody @Valid GetProductsByCatId rq
+    ) {
+        return procSochitelServices.getProdoctsByCategory(rq, auth);
+    }
+
     /**
      * Simple probe to confirm you’re hitting THIS build & service. curl -s
      * http://127.0.0.1:7007/fxothers/__ping
@@ -62,6 +76,18 @@ public class FxOtherServicesController {
     @GetMapping(path = "/__ping", produces = MediaType.TEXT_PLAIN_VALUE)
     public String ping() {
         return "fxothers:ok";
+    }
+
+    @GetMapping(
+            path = "/int-utilities-get-categories",
+            consumes = MediaType.APPLICATION_JSON_VALUE,
+            produces = MediaType.APPLICATION_JSON_VALUE
+    )
+    public ResponseEntity<ApiResponseModel> validatePhoneNumber(
+            @RequestHeader(value = "authorization", required = true) String auth) {
+
+        ApiResponseModel baseResponse = procSochitelServices.getCategories(auth);
+        return new ResponseEntity<>(baseResponse, HttpStatus.OK);
     }
 
     @PostMapping(
@@ -78,7 +104,7 @@ public class FxOtherServicesController {
     }
 
     @PostMapping(
-            path = "/airtime-fulfilment",
+            path = "/int-utilities-fulfilment",
             consumes = MediaType.APPLICATION_JSON_VALUE,
             produces = MediaType.APPLICATION_JSON_VALUE
     )
@@ -88,6 +114,18 @@ public class FxOtherServicesController {
 
         ApiResponseModel baseResponse = procSochitelServices.processTrnsaction(rq, auth);
         return new ResponseEntity<>(baseResponse, HttpStatus.OK);
+    }
+
+    @PostMapping(
+            path = "/int-utilities-validate-accountid",
+            consumes = MediaType.APPLICATION_JSON_VALUE,
+            produces = MediaType.APPLICATION_JSON_VALUE
+    )
+    public ResponseEntity<ApiResponseModel> getAccountLookup(
+            @RequestHeader(name = "authorization", required = true) String auth,
+            @RequestBody @Valid ValidateAccount rq
+    ) {
+        return procSochitelServices.getAccountLookup(rq, auth);
     }
 
 }

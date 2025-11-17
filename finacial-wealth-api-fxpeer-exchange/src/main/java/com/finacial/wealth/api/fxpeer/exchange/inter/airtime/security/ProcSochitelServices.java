@@ -10,6 +10,7 @@ import com.finacial.wealth.api.fxpeer.exchange.domain.AddAccountDetailsRepo;
 import com.finacial.wealth.api.fxpeer.exchange.domain.AppConfig;
 import com.finacial.wealth.api.fxpeer.exchange.domain.AppConfigRepo;
 import com.finacial.wealth.api.fxpeer.exchange.domain.FinWealthPaymentTransaction;
+import com.finacial.wealth.api.fxpeer.exchange.domain.InternationalProductCat;
 import com.finacial.wealth.api.fxpeer.exchange.domain.RegWalletInfo;
 import com.finacial.wealth.api.fxpeer.exchange.domain.RegWalletInfoRepository;
 import com.finacial.wealth.api.fxpeer.exchange.feign.ProfilingProxies;
@@ -25,10 +26,15 @@ import com.finacial.wealth.api.fxpeer.exchange.model.BaseResponse;
 import com.finacial.wealth.api.fxpeer.exchange.model.CreditWalletCaller;
 import com.finacial.wealth.api.fxpeer.exchange.model.DebitWalletCaller;
 import com.finacial.wealth.api.fxpeer.exchange.model.GetProducts;
+import com.finacial.wealth.api.fxpeer.exchange.model.GetProductsByCatId;
+import com.finacial.wealth.api.fxpeer.exchange.model.InternationalProductCatMod;
 import com.finacial.wealth.api.fxpeer.exchange.model.ManageFeesConfigReq;
+import com.finacial.wealth.api.fxpeer.exchange.model.SochitelAccountLookupResponse;
+import com.finacial.wealth.api.fxpeer.exchange.model.ValidateAccount;
 
 import com.finacial.wealth.api.fxpeer.exchange.model.ValidateCountryCode;
 import com.finacial.wealth.api.fxpeer.exchange.order.WalletInfoValiAcctBal;
+import com.finacial.wealth.api.fxpeer.exchange.repo.InternationalProductCatRepo;
 import com.finacial.wealth.api.fxpeer.exchange.util.GlobalMethods;
 import com.finacial.wealth.api.fxpeer.exchange.util.UttilityMethods;
 import jakarta.annotation.PostConstruct;
@@ -42,6 +48,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.PrivateKey;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -58,6 +65,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StreamUtils;
+import org.springframework.web.util.UriUtils;
 
 @Service
 public class ProcSochitelServices {
@@ -104,6 +112,7 @@ public class ProcSochitelServices {
     private final TransactionServiceProxies transactionServiceProxies;
     private final AddAccountDetailsRepo addAccountDetailsRepo;
     private final AppConfigRepo appConfigRepo;
+    private final InternationalProductCatRepo internationalProductCatRepo;
 
     public ProcSochitelServices(
             ProfilingProxies profilingProxies,
@@ -113,7 +122,7 @@ public class ProcSochitelServices {
             TransactionServiceProxies transactionServiceProxies,
             AddAccountDetailsRepo addAccountDetailsRepo,
             RegWalletInfoRepository regWalletInfoRepository,
-            AppConfigRepo appConfigRepo) {
+            AppConfigRepo appConfigRepo, InternationalProductCatRepo internationalProductCatRepo) {
 
         this.profilingProxies = profilingProxies;
         this.resourceLoader = resourceLoader;
@@ -123,6 +132,7 @@ public class ProcSochitelServices {
         this.addAccountDetailsRepo = addAccountDetailsRepo;
         this.regWalletInfoRepository = regWalletInfoRepository;
         this.appConfigRepo = appConfigRepo;
+        this.internationalProductCatRepo = internationalProductCatRepo;
     }
 
     // ---------- Utility ----------
@@ -214,7 +224,284 @@ public class ProcSochitelServices {
         return new ResponseEntity<>(res, HttpStatus.OK);
     }
 
+    public ResponseEntity<ApiResponseModel> getAccountLookup(ValidateAccount rq, String auth) {
+        ApiResponseModel resp = new ApiResponseModel();
+        try {
+            // 1) Validate inputs
+            /*if (productId == null || productId.isBlank()) {
+                resp.setStatusCode(400);
+                resp.setDescription("productId is required");
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(resp);
+            }*/
+            String accountId = rq.getAccountId();
+            if (accountId == null || accountId.isBlank()) {
+                resp.setStatusCode(400);
+                resp.setDescription("accountId is required");
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(resp);
+            }
+
+            // (optional) pre-validate productId exists for your business rules
+            final String safeAccount = UriUtils.encodePathSegment(accountId.trim(), StandardCharsets.UTF_8);
+
+            final String providerBody;
+            if (!mockEnabled) {
+                // 2) Build signed client
+                String pem = loadPem();
+                if (pem == null || pem.isBlank()) {
+                    resp.setStatusCode(400);
+                    resp.setDescription("Provider signing key not configured");
+                    return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(resp);
+                }
+                PrivateKey key = loadPkcs8PrivateKeyFromPem(pem);
+
+                if (serviceSochiBaseUrl == null || serviceSochiBaseUrl.isBlank()) {
+                    resp.setStatusCode(400);
+                    resp.setDescription("Provider base URL not configured");
+                    return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(resp);
+                }
+                URI base = URI.create(serviceSochiBaseUrl);
+
+                // IMPORTANT: Do not set 'Host' manually inside the client
+                SochitelSignedClient client = new SochitelSignedClient(base, keyId, key);
+
+                // 3) Call provider GET /account/{productId}/{accountId}
+                // String path = "/account/" + productId.trim() + "/" + safeAccount;
+                String path = "/account/" + safeAccount;
+                HttpResponse<String> providerResp = client.get(path);
+                int http = providerResp.statusCode();
+                providerBody = providerResp.body();
+                System.out.println("[sochitel/account] http=" + http + " path=" + path);
+
+                if (http < 200 || http >= 300) {
+                    resp.setStatusCode(400);
+                    resp.setDescription("Provider HTTP error: " + http);
+                    resp.setOther(providerBody);
+                    return ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(resp);
+                }
+            } else {
+                // 4) Mock: load from file/classpath JSON that mirrors sample response
+                // e.g., mockedAccountLookup points to file:/root/secrets/sochitel/account-1-ctv123456.json
+                providerBody = readResourceAsString(mockedOperators);
+            }
+
+            // 5) Parse payload
+            SochitelAccountLookupResponse acct = mapper
+                    .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
+                    .readValue(providerBody, SochitelAccountLookupResponse.class);
+
+            if (acct == null || acct.getErrno() == null || acct.getErrno() != 0) {
+                String err = (acct == null ? "null response" : String.valueOf(acct.getError()));
+                resp.setStatusCode(400);
+                resp.setDescription("Provider error: " + err);
+                return ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(resp);
+            }
+
+            // 6) Success – return the useful fields
+            resp.setStatusCode(200);
+            resp.setDescription("Successful");
+            resp.setData(Map.of(
+                    "accountId", acct.getAccountId(),
+                    "accountStatus", acct.getAccountStatus(),
+                    "customerNumber", acct.getCustomerNumber(),
+                    "customerName", acct.getCustomerName()
+            ));
+            return ResponseEntity.ok(resp);
+
+        } catch (Exception ex) {
+            ex.printStackTrace();
+            resp.setStatusCode(500);
+            resp.setDescription("Internal error: " + ex.getClass().getSimpleName() + " - " + ex.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(resp);
+        }
+    }
+
+    public ApiResponseModel getCategories(String auth) {
+        ApiResponseModel responseModel = new ApiResponseModel();
+        int statusCode = 500;
+        String statusMessage = "An error occured,please try again";
+        try {
+            statusCode = 400;
+
+            List<Object> mapAll = new ArrayList<Object>();
+            for (InternationalProductCat getDe : internationalProductCatRepo.findAll()) {
+                if (getDe.getEnabled().equals("1")) {
+                    InternationalProductCatMod getK = new InternationalProductCatMod();
+                    getK.setCategoryId(getDe.getCategoryId());
+                    getK.setCategoryName(getDe.getCategoryName());
+
+                    mapAll.add(getK);
+                }
+
+            }
+            responseModel.setData(mapAll);
+            responseModel.setDescription("Categories pulled successfully.");
+            responseModel.setStatusCode(200);
+
+        } catch (Exception ex) {
+            responseModel.setDescription(statusMessage);
+            responseModel.setStatusCode(statusCode);
+
+            ex.printStackTrace();
+        }
+
+        return responseModel;
+    }
     // ---------- Operators ----------
+
+    public ResponseEntity<ApiResponseModel> getProdoctsByCategory(GetProductsByCatId rq, String auth) {
+        ApiResponseModel resp = new ApiResponseModel();
+        try {
+            if (rq == null || rq.getCurrencyCode() == null || rq.getCurrencyCode().trim().isEmpty()) {
+                resp.setStatusCode(400);
+                resp.setDescription("currencyCode is required");
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(resp);
+            }
+            final String currency = rq.getCurrencyCode().trim().toUpperCase(Locale.ROOT);
+            //validate categoryId
+            boolean isCategoryCorrect = false;
+            for (InternationalProductCat getDe : internationalProductCatRepo.findAll()) {
+                if (getDe.getCategoryId().equals(rq.getCategoryId())) {
+                    isCategoryCorrect = true;
+                }
+            }
+
+            if (!isCategoryCorrect) {
+                resp.setStatusCode(400);
+                resp.setDescription("Invalid category-id");
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(resp);
+            }
+
+            ValidateCountryCode valReq = new ValidateCountryCode();
+            valReq.setCurrencyCode(currency);
+            BaseResponse valCode = profilingProxies.validateCountryCode(valReq, auth);
+            int vStatus = (valCode == null ? -1 : valCode.getStatusCode());
+            log.info("[validateCountryCode] status={} desc={}", vStatus, (valCode == null ? "null" : valCode.getDescription()));
+            if (valCode == null || vStatus != 200) {
+                resp.setStatusCode(400);
+                resp.setDescription(valCode != null && valCode.getDescription() != null ? valCode.getDescription() : "validateCountryCode failed");
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(resp);
+            }
+
+            String providerBody;
+            if (!mockEnabled) {
+                String pem = loadPem();
+                if (pem == null || pem.trim().isEmpty()) {
+                    resp.setStatusCode(500);
+                    resp.setDescription("Provider signing key is not configured");
+                    return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(resp);
+                }
+                PrivateKey key = loadPkcs8PrivateKeyFromPem(pem);
+
+                if (serviceSochiBaseUrl == null || serviceSochiBaseUrl.isEmpty()) {
+                    resp.setStatusCode(500);
+                    resp.setDescription("Provider base URL not configured");
+                    return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(resp);
+                }
+
+                String normalizedBase = serviceSochiBaseUrl.replaceAll("/+$", "");
+                URI base = URI.create(normalizedBase);
+                String basePath = base.getPath() == null ? "" : base.getPath();
+                String countryCode = (String) valCode.getData()
+                        .get("countryCode");
+                //GET /api/operators?productCategory=1.0&country=NG
+                final String operatorsP = basePath.contains("/api") ? "operators?" : "/api/operators?";
+                System.out.println("operatorsP :::::::::::::::: " + operatorsP);
+
+                // final String operatorsPath = basePath + "operators?" + "productCategory=" + rq.getCategoryId() + "&country=" + countryCode;
+                final String operatorsPath = operatorsP + "productCategory=" + rq.getCategoryId() + "&country=" + countryCode;
+                System.out.println("operatorsPath :::::::::::::::: " + operatorsPath);
+                ///api/operators?productCategory=1.0&country=NG
+
+                log.info("[sochitel] base={} path={}", base, operatorsPath);
+
+                SochitelSignedClient client = new SochitelSignedClient(base, keyId, key);
+                HttpResponse<String> providerResp = client.get(operatorsPath);
+                int providerHttp = providerResp.statusCode();
+                providerBody = providerResp.body();
+                log.info("[sochitel/operators] http={}", providerHttp);
+                log.info("[sochitel/providers/raw] http={} bodyPreview={}",
+                        providerHttp,
+                        providerBody != null && providerBody.length() > 500 ? providerBody.substring(0, 500) + "..." : providerBody);
+
+                if (providerHttp < 200 || providerHttp >= 300) {
+                    resp.setStatusCode(502);
+                    resp.setDescription("Provider HTTP error: " + providerHttp);
+                    resp.setOther(providerBody);
+                    return ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(resp);
+                }
+            } else {
+                providerBody = readResourceAsString(mockedOperators);
+            }
+
+            if (looksLikeHtml(providerBody)) {
+                resp.setStatusCode(502);
+                resp.setDescription("Provider returned HTML instead of JSON");
+                resp.setOther(providerBody.length() > 400 ? providerBody.substring(0, 400) + "…" : providerBody);
+                return ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(resp);
+            }
+
+            SochitelProductsResponse products;
+            try {
+                products = mapper.readValue(providerBody, SochitelProductsResponse.class);
+            } catch (Exception parseEx) {
+                resp.setStatusCode(502);
+                resp.setDescription("Provider JSON parse error");
+                resp.setOther(providerBody != null && providerBody.length() > 500 ? providerBody.substring(0, 500) + "…" : providerBody);
+                return ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(resp);
+            }
+
+            boolean ok = false;
+            String errSummary = null;
+            if (products != null) {
+                Integer errno = products.getErrno();
+                Integer sysErr = products.getSysErr();
+                if (errno != null) {
+                    ok = (errno == 0);
+                    if (!ok) {
+                        errSummary = "errno=" + errno + (products.getError() != null ? (", error=" + products.getError()) : "");
+                    }
+                } else if (sysErr != null) {
+                    ok = (sysErr == 0);
+                    if (!ok) {
+                        errSummary = "sysErr=" + sysErr + (products.getSysId() != null ? (", sysId=" + products.getSysId()) : "");
+                    }
+                } else {
+                    ok = products.getOperators() != null && !products.getOperators().isEmpty();
+                }
+            }
+
+            if (!ok) {
+                resp.setStatusCode(502);
+                resp.setDescription("Provider error" + (errSummary != null ? (": " + errSummary) : ""));
+                resp.setOther(providerBody);
+                return ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(resp);
+            }
+
+            List<OperatorEntry> all = Optional.ofNullable(products.getOperators()).orElse(Collections.emptyList());
+            log.info("[sochitel/operators] count={} sampleCurrency={}", all.size(), all.isEmpty() ? "n/a" : all.get(0).getCurrency());
+            List<OperatorEntry> filtered = all.stream()
+                    .filter(op -> currency.equalsIgnoreCase(safe(op.getCurrency())))
+                    .collect(Collectors.toList());
+
+            if (filtered.isEmpty()) {
+                resp.setStatusCode(404);
+                resp.setDescription("No operators found for currency " + currency);
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(resp);
+            }
+
+            resp.setStatusCode(200);
+            resp.setDescription("Successful");
+            resp.setData(filtered);
+            return ResponseEntity.ok(resp);
+
+        } catch (Exception ex) {
+            log.error("getProdocts error", ex);
+            resp.setStatusCode(500);
+            resp.setDescription("Internal error: " + ex.getClass().getSimpleName() + " - " + ex.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(resp);
+        }
+    }
+
     public ResponseEntity<ApiResponseModel> getProdocts(GetProducts rq, String auth) {
         ApiResponseModel resp = new ApiResponseModel();
         try {
@@ -227,7 +514,7 @@ public class ProcSochitelServices {
 
             ValidateCountryCode valReq = new ValidateCountryCode();
             valReq.setCurrencyCode(currency);
-            ApiResponseModel valCode = profilingProxies.validateCountryCode(valReq, auth);
+            BaseResponse valCode = profilingProxies.validateCountryCode(valReq, auth);
             int vStatus = (valCode == null ? -1 : valCode.getStatusCode());
             log.info("[validateCountryCode] status={} desc={}", vStatus, (valCode == null ? "null" : valCode.getDescription()));
             if (valCode == null || vStatus != 200) {
@@ -363,7 +650,7 @@ public class ProcSochitelServices {
 
             ValidateCountryCode rqq = new ValidateCountryCode();
             rqq.setCurrencyCode(currency);
-            ApiResponseModel valCode = profilingProxies.validateCountryCode(rqq, auth);
+            BaseResponse valCode = profilingProxies.validateCountryCode(rqq, auth);
             if (valCode == null || valCode.getStatusCode() != 200) {
                 resp.setStatusCode(400);
                 resp.setDescription(valCode != null && valCode.getDescription() != null ? valCode.getDescription() : "validateCountryCode failed");
@@ -379,7 +666,7 @@ public class ProcSochitelServices {
             PrivateKey key = loadPkcs8PrivateKeyFromPem(pem);
 
             if (serviceSochiBaseUrl == null || serviceSochiBaseUrl.isEmpty()) {
-                resp.setStatusCode(500);
+                resp.setStatusCode(400);
                 resp.setDescription("Provider base URL not configured");
                 return resp;
             }
@@ -398,14 +685,14 @@ public class ProcSochitelServices {
             log.info("[sochitel/msisdn] bodyPreview={}", body == null ? "null" : (body.length() > 500 ? body.substring(0, 500) + "..." : body));
 
             if (http < 200 || http >= 300) {
-                resp.setStatusCode(502);
+                resp.setStatusCode(400);
                 resp.setDescription("Provider HTTP error: " + http);
                 resp.addData("other", body);
                 return resp;
             }
 
             if (looksLikeHtml(body)) {
-                resp.setStatusCode(502);
+                resp.setStatusCode(400);
                 resp.setDescription("Provider returned HTML instead of JSON");
                 resp.addData("other", body.length() > 400 ? body.substring(0, 400) + "…" : body);
                 return resp;
@@ -428,19 +715,25 @@ public class ProcSochitelServices {
                     errSummary = "sysErr=" + sysErr + (n.getSysId() != null ? (", sysId=" + n.getSysId()) : "");
                 }
             } else {
-                ok = Boolean.TRUE.equals(n.getValid());
+                //  ok = Boolean.TRUE.equals(n.getValid());
+                ok = n.isValid();
             }
 
             if (!ok) {
-                resp.setStatusCode(502);
+                resp.setStatusCode(400);
                 resp.setDescription("Provider error" + (errSummary != null ? (": " + errSummary) : ""));
                 resp.addData("other", body);
                 return resp;
             }
-
+            if (n.isValid() == false) {
+                resp.setStatusCode(400);
+                resp.setDescription("Phonenumber is invalid");
+                resp.addData("isValid", n.isValid());
+                return resp;
+            }
             resp.setStatusCode(200);
-            resp.setDescription("Successful");
-            resp.addData("isValid", n.getValid());
+            resp.setDescription("Phonenumber is valid");
+            resp.addData("isValid", n.isValid());
             if (n.getIsForma() != null && n.getIsForma().getId() != null) {
                 resp.addData("country", n.getIsForma().getId());
             } else if (n.getCountry() != null) {
@@ -493,7 +786,7 @@ public class ProcSochitelServices {
 
             ValidateCountryCode rqq = new ValidateCountryCode();
             rqq.setCurrencyCode(currency);
-            ApiResponseModel valCode = profilingProxies.validateCountryCode(rqq, auth);
+            BaseResponse valCode = profilingProxies.validateCountryCode(rqq, auth);
             if (valCode == null || valCode.getStatusCode() != 200) {
                 resp.setStatusCode(400);
                 resp.setDescription(valCode != null && valCode.getDescription() != null ? valCode.getDescription() : "validateCountryCode failed");
@@ -565,7 +858,7 @@ public class ProcSochitelServices {
             TopupPurchaseResponse t = mapper.readValue(body, TopupPurchaseResponse.class);
             ApiResponseModel getStatus = null;
             getStatus.setStatusCode(200);
-            if (checkTransactionStatusenabled==true) {
+            if (checkTransactionStatusenabled == true) {
                 getStatus = this.getTransactionStatus("artx", t.getOperator().getReference());
                 log.error("Check transaction status after failed ::::::::::::::::::: ", getStatus);
             }

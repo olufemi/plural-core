@@ -11,7 +11,6 @@ import lombok.Data;
  * @author olufemioshin
  */
 @Data
-public class GetProducts {
-    private String currencyCode;
-  
+public class ValidateAccount {
+    private String accountId;
 }

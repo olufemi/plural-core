@@ -36,11 +36,11 @@ public class CountriesController {
     }
 
     @PostMapping("/validate/country-code")
-    public ResponseEntity<ApiResponseModel> validateBvnCaller(
+    public ResponseEntity<BaseResponse> validateBvnCaller(
             @RequestHeader(value = "authorization", required = true) String auth,
             @RequestBody @Valid ValidateCountryCode rq) throws UnsupportedEncodingException {
 
-        ApiResponseModel baseResponse = service.validateCountryCode(rq, auth);
+        BaseResponse baseResponse = service.validateCountryCode(rq, auth);
         return new ResponseEntity<>(baseResponse, HttpStatus.OK);
     }
 

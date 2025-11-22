@@ -100,12 +100,11 @@ public class UttilityMethods {
 //    @Qualifier("withEureka")
 //    @Autowired
 //    private RestTemplate restTemplate;
-
     public UttilityMethods(FxPeersCommissionCfgRepo fxPeersCommissionCfgRepo,
             FinWealthServiceConfigRepo finWealthServiceConfigRepo,
             MemoryCache cache, SuccessDebitLogRepo successDebitLogRepo,
             FailedDebitLogRepo failedDebitLogRepo, FailedCreditLogRepo failedCreditLogRepo
-          //  ,RestTemplate restTemplate
+    //  ,RestTemplate restTemplate
     ) {
         this.fxPeersCommissionCfgRepo = fxPeersCommissionCfgRepo;
         this.finWealthServiceConfigRepo = finWealthServiceConfigRepo;
@@ -113,7 +112,7 @@ public class UttilityMethods {
         this.successDebitLogRepo = successDebitLogRepo;
         this.failedDebitLogRepo = failedDebitLogRepo;
         this.failedCreditLogRepo = failedCreditLogRepo;
-     //   this.restTemplate = restTemplate;
+        //   this.restTemplate = restTemplate;
 
     }
 
@@ -227,9 +226,12 @@ public class UttilityMethods {
         String description = "Something went wrong";
 
         try {
+            System.out.println(" ManageFeesConfigReq rq ::::::::::::::::  %S  " + new Gson().toJson(rq));
+
             statusCode = 400;
             BigDecimal pFees = BigDecimal.ZERO;
             BigDecimal ammmount = new BigDecimal(rq.getAmount());
+
             List<FinWealthPayServiceConfig> getKulList = finWealthServiceConfigRepo.findByServiceTypeAndCurrencyCode(rq.getTransType(), rq.getCurrencyCode());
 
             List<FxPeersCommissionCfg> pullData = findAllByTransactionType(rq.getTransType(), rq.getCurrencyCode());
@@ -358,7 +360,7 @@ public class UttilityMethods {
 
     }*/
 
-    /*public BaseResponse creditCustomer(CreditWalletCaller rq) {
+ /*public BaseResponse creditCustomer(CreditWalletCaller rq) {
         BaseResponse baseResponse = new BaseResponse();
         int statusCode = 500;
         String statusMessage = "An error occured,please try again";
@@ -433,5 +435,4 @@ public class UttilityMethods {
         return baseResponse;
 
     }*/
-
 }

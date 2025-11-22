@@ -38,4 +38,5 @@ public class PreDebitResult {
     private boolean legGLDebited;        // debit GL (buyer leg)    - receiveAmount
     private boolean legSellerCredited;   // credit seller           - receiveAmount
     private boolean legGLCredited;       // credit GL (seller leg)  - receiveAmount
+    private String walletId;
 }

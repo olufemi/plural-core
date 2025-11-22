@@ -2,16 +2,15 @@
  * Click nbfs://nbhost/SystemFileSystem/Templates/Licenses/license-default.txt to change this license
  * Click nbfs://nbhost/SystemFileSystem/Templates/Classes/Class.java to edit this template
  */
-package com.finacial.wealth.api.fxpeer.exchange.model;
+package com.finacial.wealth.api.fxpeer.exchange.investment.service;
 
-import lombok.Data;
+import org.springframework.stereotype.Service;
 
 /**
  *
  * @author olufemioshin
  */
-@Data
-public class ValidateAccount {
-    private String accountId;
-    private String productId;
+@Service
+public class InvestmentPartnerClient {
+    
 }

@@ -33,10 +33,12 @@ import com.finacial.wealth.api.fxpeer.exchange.model.SochitelAccountLookupRespon
 import com.finacial.wealth.api.fxpeer.exchange.model.ValidateAccount;
 
 import com.finacial.wealth.api.fxpeer.exchange.model.ValidateCountryCode;
+import com.finacial.wealth.api.fxpeer.exchange.model.WalletNo;
 import com.finacial.wealth.api.fxpeer.exchange.order.WalletInfoValiAcctBal;
 import com.finacial.wealth.api.fxpeer.exchange.repo.InternationalProductCatRepo;
 import com.finacial.wealth.api.fxpeer.exchange.util.GlobalMethods;
 import com.finacial.wealth.api.fxpeer.exchange.util.UttilityMethods;
+import com.google.gson.Gson;
 import jakarta.annotation.PostConstruct;
 import java.io.FileNotFoundException;
 import java.io.IOException;
@@ -103,8 +105,14 @@ public class ProcSochitelServices {
     @Value("${sochitel.products.mock.enabled:false}")
     private boolean mockEnabled;
 
+    @Value("${sochitel.products.by.pass:true}")
+    private boolean byPassSochitel;
+
     @Value("${sochitel.products.check.transaction.status.enabled:false}")
     private boolean checkTransactionStatusenabled;
+
+    @Value("${sochitel.products.check.enable.debit.account.roll.back:true}")
+    private boolean checkEnableDebitAcctRollBack;
 
     private final RegWalletInfoRepository regWalletInfoRepository;
     private final UttilityMethods utilService;
@@ -228,11 +236,12 @@ public class ProcSochitelServices {
         ApiResponseModel resp = new ApiResponseModel();
         try {
             // 1) Validate inputs
-            /*if (productId == null || productId.isBlank()) {
+            String productId = rq.getProductId();
+            if (productId == null || productId.isBlank()) {
                 resp.setStatusCode(400);
                 resp.setDescription("productId is required");
                 return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(resp);
-            }*/
+            }
             String accountId = rq.getAccountId();
             if (accountId == null || accountId.isBlank()) {
                 resp.setStatusCode(400);
@@ -260,50 +269,73 @@ public class ProcSochitelServices {
                     return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(resp);
                 }
                 URI base = URI.create(serviceSochiBaseUrl);
+                if (!byPassSochitel) {
+                    // IMPORTANT: Do not set 'Host' manually inside the client
+                    SochitelSignedClient client = new SochitelSignedClient(base, keyId, key);
 
-                // IMPORTANT: Do not set 'Host' manually inside the client
-                SochitelSignedClient client = new SochitelSignedClient(base, keyId, key);
+                    // 3) Call provider GET /account/{productId}/{accountId}
+                    String path = "/account/" + productId.trim() + "/" + safeAccount;
+                    //String path = "/account/" + safeAccount;
+                    HttpResponse<String> providerResp = client.get(path);
+                    int http = providerResp.statusCode();
+                    providerBody = providerResp.body();
+                    System.out.println("[sochitel/account] http=" + http + " path=" + path);
 
-                // 3) Call provider GET /account/{productId}/{accountId}
-                // String path = "/account/" + productId.trim() + "/" + safeAccount;
-                String path = "/account/" + safeAccount;
-                HttpResponse<String> providerResp = client.get(path);
-                int http = providerResp.statusCode();
-                providerBody = providerResp.body();
-                System.out.println("[sochitel/account] http=" + http + " path=" + path);
+                    if (http < 200 || http >= 300) {
+                        resp.setStatusCode(400);
+                        resp.setDescription("Provider HTTP error: " + http);
+                        resp.setOther(providerBody);
+                        return ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(resp);
+                    }
 
-                if (http < 200 || http >= 300) {
-                    resp.setStatusCode(400);
-                    resp.setDescription("Provider HTTP error: " + http);
-                    resp.setOther(providerBody);
-                    return ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(resp);
+                    // 5) Parse payload
+                    SochitelAccountLookupResponse acct = mapper
+                            .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
+                            .readValue(providerBody, SochitelAccountLookupResponse.class);
+
+                    if (acct == null || acct.getErrno() == null || acct.getErrno() != 0) {
+                        String err = (acct == null ? "null response" : String.valueOf(acct.getError()));
+                        resp.setStatusCode(400);
+                        resp.setDescription("Provider error: " + err);
+                        return ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(resp);
+                    }
+
+                    // 6) Success – return the useful fields
+                    resp.setStatusCode(200);
+                    resp.setDescription("Successful");
+                    resp.setData(Map.of(
+                            "accountId", acct.getAccountId(),
+                            "accountStatus", acct.getAccountStatus().toLowerCase(),
+                            //"customerNumber", acct.getCustomerNumber(),
+                            "customerName", acct.getCustomerName()
+                    ));
+                    return ResponseEntity.ok(resp);
+                } else {
+                    // 6) Success – return the useful fields
+                    resp.setStatusCode(200);
+                    resp.setDescription("Successful");
+                    resp.setData(Map.of(
+                            "accountId", rq.getAccountId(),
+                            "accountStatus", "valid",
+                            //"customerNumber", acct.getCustomerNumber(),
+                            "customerName", ""
+                    ));
+                    return ResponseEntity.ok(resp);
                 }
+
             } else {
                 // 4) Mock: load from file/classpath JSON that mirrors sample response
                 // e.g., mockedAccountLookup points to file:/root/secrets/sochitel/account-1-ctv123456.json
                 providerBody = readResourceAsString(mockedOperators);
             }
 
-            // 5) Parse payload
-            SochitelAccountLookupResponse acct = mapper
-                    .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
-                    .readValue(providerBody, SochitelAccountLookupResponse.class);
-
-            if (acct == null || acct.getErrno() == null || acct.getErrno() != 0) {
-                String err = (acct == null ? "null response" : String.valueOf(acct.getError()));
-                resp.setStatusCode(400);
-                resp.setDescription("Provider error: " + err);
-                return ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(resp);
-            }
-
-            // 6) Success – return the useful fields
             resp.setStatusCode(200);
             resp.setDescription("Successful");
             resp.setData(Map.of(
-                    "accountId", acct.getAccountId(),
-                    "accountStatus", acct.getAccountStatus(),
-                    "customerNumber", acct.getCustomerNumber(),
-                    "customerName", acct.getCustomerName()
+                    "accountId", rq.getAccountId(),
+                    "accountStatus", "valid",
+                    //"customerNumber", acct.getCustomerNumber(),
+                    "customerName", ""
             ));
             return ResponseEntity.ok(resp);
 
@@ -767,6 +799,45 @@ public class ProcSochitelServices {
         try {
             final String phoneNumber = utilService.getClaimFromJwt(auth, "phoneNumber");
             final String email = utilService.getClaimFromJwt(auth, "emailAddress");
+            Optional<RegWalletInfo> getRec = regWalletInfoRepository.findByPhoneNumber(phoneNumber);
+
+            if (rq.getPin() == null || rq.getPin().isBlank()) {
+                resp.setStatusCode(400);
+                resp.setDescription("Pin is required");
+                return resp;
+            }
+
+            if (rq.getAmount() == null || rq.getAmount().isBlank()) {
+                resp.setStatusCode(400);
+                resp.setDescription("Amount is required");
+                return resp;
+            }
+            if (rq.getOperator() == null || rq.getOperator().isBlank()) {
+                resp.setStatusCode(400);
+                resp.setDescription("Operator is required");
+                return resp;
+            }
+            if (rq.getProduct() == null || rq.getProduct().isBlank()) {
+                resp.setStatusCode(400);
+                resp.setDescription("Product is required");
+                return resp;
+            }
+            if (rq.getRecipient() == null || rq.getRecipient().isBlank()) {
+                resp.setStatusCode(400);
+                resp.setDescription("Recipients is required");
+                return resp;
+            }
+            BaseResponse bResPin = new BaseResponse();
+            WalletNo wSend = new WalletNo();
+            wSend.setPin(rq.getPin());
+
+            wSend.setWalletId(getRec.get().getWalletId());
+            bResPin = transactionServiceProxies.validatePin(wSend, auth);
+            if (bResPin.getStatusCode() != 200) {
+                resp.setStatusCode(bResPin.getStatusCode());
+                resp.setDescription(bResPin.getDescription());
+                return resp;
+            }
 
             if (rq == null || rq.getCurrencyCode() == null || rq.getCurrencyCode().trim().isEmpty()) {
                 resp.setStatusCode(400);
@@ -807,6 +878,8 @@ public class ProcSochitelServices {
 
             // Pre-debit & internal legs
             PreDebitResult pre = preDebitAndSettleAirtime(rq, auth, email, phoneNumber, mConfig, processId);
+            System.out.println("[preDebitAndSettleAirtime ::::::::::::::: " + pre);
+
             if (!pre.isSuccess()) {
                 resp.setStatusCode(pre.getError().getStatusCode());
                 resp.setDescription(pre.getError().getDescription());
@@ -816,14 +889,14 @@ public class ProcSochitelServices {
             // Prepare provider client
             String pem = loadPem();
             if (pem == null || pem.trim().isEmpty()) {
-                resp.setStatusCode(500);
+                resp.setStatusCode(400);
                 resp.setDescription("Provider signing key is not configured");
                 return resp;
             }
             PrivateKey key = loadPkcs8PrivateKeyFromPem(pem);
 
             if (serviceSochiBaseUrl == null || serviceSochiBaseUrl.isEmpty()) {
-                resp.setStatusCode(500);
+                resp.setStatusCode(400);
                 resp.setDescription("Provider base URL not configured");
                 return resp;
             }
@@ -831,158 +904,181 @@ public class ProcSochitelServices {
             final String basePath = base.getPath() == null ? "" : base.getPath();
             final String createTxnPath = basePath.contains("/api") ? "transaction" : "/api/transaction";
             final String fetchByUserRefPathPrefix = basePath.contains("/api") ? "transaction/user/" : "/api/transaction/user/";
+            Map<String, Object> data = new HashMap<>();
 
-            SochitelSignedClient client = new SochitelSignedClient(base, keyId, key);
+            if (!byPassSochitel) {
+                SochitelSignedClient client = new SochitelSignedClient(base, keyId, key);
 
-            // Provider request JSON
-            ObjectMapper mapperReq = new ObjectMapper();
-            ObjectNode root = mapperReq.createObjectNode()
-                    .put("operator", rq.getOperator().trim())
-                    .put("product", rq.getProduct().trim())
-                    .put("recipient", rq.getRecipient().trim())
-                    .put("amount", rq.getAmount().trim())
-                    .put("currency", currency)
-                    .put("reference", processId);
+                // Provider request JSON
+                ObjectMapper mapperReq = new ObjectMapper();
+                ObjectNode root = mapperReq.createObjectNode()
+                        .put("operator", rq.getOperator().trim())
+                        .put("product", rq.getProduct().trim())
+                        .put("recipient", rq.getRecipient().trim())
+                        .put("amount", rq.getAmount().trim())
+                        .put("currency", currency)
+                        .put("reference", processId);
 
-            String json = mapperReq.writeValueAsString(root);
+                String json = mapperReq.writeValueAsString(root);
 
-            // POST /transaction
-            HttpResponse<String> postResp = client.postJson(createTxnPath, json);
-            int http = postResp.statusCode();
-            String body = postResp.body();
+                log.info("[sochitel/transaction/request] json={} ", json);
 
-            String rcpt = root.path("recipient").asText("");
-            String masked = rcpt.isEmpty() ? "n/a" : (rcpt.length() <= 2 ? "**" : "*".repeat(rcpt.length() - 2) + rcpt.substring(rcpt.length() - 2));
-            log.info("[sochitel/transaction] http={} ref={} recipient={}", http, root.path("reference").asText("n/a"), masked);
-            log.info("[sochitel/transaction] bodyPreview={}", body == null ? "null" : (body.length() > 600 ? body.substring(0, 600) + "..." : body));
-            TopupPurchaseResponse t = mapper.readValue(body, TopupPurchaseResponse.class);
-            ApiResponseModel getStatus = null;
-            getStatus.setStatusCode(200);
-            if (checkTransactionStatusenabled == true) {
-                getStatus = this.getTransactionStatus("artx", t.getOperator().getReference());
-                log.error("Check transaction status after failed ::::::::::::::::::: ", getStatus);
-            }
+                // POST /transaction
+                HttpResponse<String> postResp = client.postJson(createTxnPath, json);
+                int http = postResp.statusCode();
+                String body = postResp.body();
 
-            if (http < 200 || http >= 300) {
-                resp.setStatusCode(502);
-                resp.setDescription("Provider HTTP error: " + http);
-                resp.setOther(body);
-                try {
-                    if (getStatus.getStatusCode() != 200) {
-                        Map<String, Object> rb = rollbackPreDebitExact(pre, auth);
+                System.out.println(" body::::::::::::::::  %S  " + new Gson().toJson(body));
 
-                        Map<String, Object> payload = new java.util.LinkedHashMap<>();
-                        payload.put("rollback", rb);
+                String rcpt = root.path("recipient").asText("");
+                String masked = rcpt.isEmpty() ? "n/a" : (rcpt.length() <= 2 ? "**" : "*".repeat(rcpt.length() - 2) + rcpt.substring(rcpt.length() - 2));
+                log.info("[sochitel/transaction] http={} ref={} recipient={}", http, root.path("reference").asText("n/a"), masked);
+                log.info("[sochitel/transaction] bodyPreview={}", body == null ? "null" : (body.length() > 600 ? body.substring(0, 600) + "..." : body));
+                TopupPurchaseResponse t = mapper.readValue(body, TopupPurchaseResponse.class);
+                ApiResponseModel getStatus = new ApiResponseModel();
+                if (checkTransactionStatusenabled == true) {
+                    getStatus = this.getTransactionStatus("artx", t.getOperator().getReference());
+                    log.error("Check transaction status after failed ::::::::::::::::::: ", getStatus);
+                } else {
+                    log.error("checkEnableDebitAcctRollBack ::::::::::::::::::: ", checkEnableDebitAcctRollBack);
 
-                        resp.setData(payload);  // OK: single-arg, type Object
+                    if (checkEnableDebitAcctRollBack == true) {
+                        getStatus.setStatusCode(400);
+                        //getStatus.setDescription("Successful");
                     }
-                } catch (Exception rbEx) {
-                    log.error("Rollback failed", rbEx);
-                    // resp.addData("rollbackError", rbEx.getClass().getSimpleName());
                 }
-                return resp;
-            }
 
-            if (looksLikeHtml(body)) {
-                resp.setStatusCode(502);
-                resp.setDescription("Provider returned HTML instead of JSON");
-                resp.setOther(body.length() > 500 ? body.substring(0, 500) + "…" : body);
-                try {
-                    if (getStatus.getStatusCode() != 200) {
-                        Map<String, Object> rb = rollbackPreDebitExact(pre, auth);
+                if (http < 200 || http >= 300) {
+                    resp.setStatusCode(400);
+                    resp.setDescription("Vending failed!");
+                    resp.setOther(body);
+                    try {
+                        log.error("getStatus.getStatusCode() ::::::::::::::::::: ", getStatus.getStatusCode());
 
-                        Map<String, Object> payload = new java.util.LinkedHashMap<>();
-                        payload.put("rollback", rb);
+                        if (getStatus.getStatusCode() != 200) {
+                            Map<String, Object> rb = rollbackPreDebitExact(pre, auth);
 
-                        resp.setData(payload);  // OK: single-arg, type Object
+                            Map<String, Object> payload = new java.util.LinkedHashMap<>();
+                            payload.put("rollback", rb);
+
+                            resp.setData(payload);  // OK: single-arg, type Object
+                        }
+                    } catch (Exception rbEx) {
+                        log.error("Rollback failed", rbEx);
+                        // resp.addData("rollbackError", rbEx.getClass().getSimpleName());
                     }
-                } catch (Exception rbEx) {
-                    log.error("Rollback failed", rbEx);
-                    // resp.addData("rollbackError", rbEx.getClass().getSimpleName());
+                    return resp;
                 }
-                return resp;
-            }
 
-            boolean ok;
-            String errSummary = null;
-            Integer errno = t.getErrno();
-            Integer sysErr = t.getSysErr();
-            if (errno != null) {
-                ok = (errno == 0);
-                if (!ok) {
-                    errSummary = "errno=" + errno + (t.getError() != null ? (", error=" + t.getError()) : "");
-                }
-            } else if (sysErr != null) {
-                ok = (sysErr == 0);
-                if (!ok) {
-                    errSummary = "sysErr=" + sysErr + (t.getSysId() != null ? (", sysId=" + t.getSysId()) : "");
-                }
-            } else {
-                ok = t.getId() != null && t.getReference() != null;
-            }
+                if (looksLikeHtml(body)) {
+                    resp.setStatusCode(400);
+                    resp.setDescription("Vending failed!");
+                    resp.setOther(body.length() > 500 ? body.substring(0, 500) + "…" : body);
+                    try {
+                        if (getStatus.getStatusCode() != 200) {
+                            Map<String, Object> rb = rollbackPreDebitExact(pre, auth);
 
-            if (!ok) {
-                try {
-                    if (t.getReference() != null) {
-                        String checkPath = fetchByUserRefPathPrefix + t.getReference();
-                        HttpResponse<String> getCheck = client.get(checkPath);
-                        log.info("[sochitel/transaction/check] http={} ref={}", getCheck.statusCode(), t.getReference());
-                        if (getCheck.statusCode() == 200 && !looksLikeHtml(getCheck.body())) {
-                            TopupPurchaseResponse t2 = mapper.readValue(getCheck.body(), TopupPurchaseResponse.class);
-                            Integer e2 = t2.getErrno(), s2 = t2.getSysErr();
-                            boolean ok2 = (e2 != null && e2 == 0) || (s2 != null && s2 == 0);
-                            if (ok2) {
-                                t = t2;
-                                ok = true;
+                            Map<String, Object> payload = new java.util.LinkedHashMap<>();
+                            payload.put("rollback", rb);
+
+                            resp.setData(payload);  // OK: single-arg, type Object
+                        }
+                    } catch (Exception rbEx) {
+                        log.error("Rollback failed", rbEx);
+                        // resp.addData("rollbackError", rbEx.getClass().getSimpleName());
+                    }
+                    return resp;
+                }
+
+                boolean ok;
+                String errSummary = null;
+                Integer errno = t.getErrno();
+                Integer sysErr = t.getSysErr();
+                if (errno != null) {
+                    ok = (errno == 0);
+                    if (!ok) {
+                        errSummary = "errno=" + errno + (t.getError() != null ? (", error=" + t.getError()) : "");
+                    }
+                } else if (sysErr != null) {
+                    ok = (sysErr == 0);
+                    if (!ok) {
+                        errSummary = "sysErr=" + sysErr + (t.getSysId() != null ? (", sysId=" + t.getSysId()) : "");
+                    }
+                } else {
+                    ok = t.getId() != null && t.getReference() != null;
+                }
+
+                if (!ok) {
+                    try {
+                        if (t.getReference() != null) {
+                            String checkPath = fetchByUserRefPathPrefix + t.getReference();
+                            HttpResponse<String> getCheck = client.get(checkPath);
+                            log.info("[sochitel/transaction/check] http={} ref={}", getCheck.statusCode(), t.getReference());
+                            if (getCheck.statusCode() == 200 && !looksLikeHtml(getCheck.body())) {
+                                TopupPurchaseResponse t2 = mapper.readValue(getCheck.body(), TopupPurchaseResponse.class);
+                                Integer e2 = t2.getErrno(), s2 = t2.getSysErr();
+                                boolean ok2 = (e2 != null && e2 == 0) || (s2 != null && s2 == 0);
+                                if (ok2) {
+                                    t = t2;
+                                    ok = true;
+                                }
                             }
                         }
+                    } catch (Exception ignored) {
+                        // Best effort; fall through to rollback
                     }
-                } catch (Exception ignored) {
-                    // Best effort; fall through to rollback
                 }
-            }
 
-            if (!ok) {
-                resp.setStatusCode(502);
-                resp.setDescription("Provider error" + (errSummary != null ? (": " + errSummary) : ""));
-                resp.setOther(body);
-                try {
-                    if (getStatus.getStatusCode() != 200) {
-                        Map<String, Object> rb = rollbackPreDebitExact(pre, auth);
+                if (!ok) {
+                    resp.setStatusCode(400);
+                    resp.setDescription("Vending failed: " + (errSummary != null ? (": " + errSummary) : ""));
+                    resp.setOther(body);
+                    try {
+                        if (getStatus.getStatusCode() != 200) {
+                            Map<String, Object> rb = rollbackPreDebitExact(pre, auth);
 
-                        Map<String, Object> payload = new java.util.LinkedHashMap<>();
-                        payload.put("rollback", rb);
+                            Map<String, Object> payload = new java.util.LinkedHashMap<>();
+                            payload.put("rollback", rb);
 
-                        resp.setData(payload);  // OK: single-arg, type Object
+                            resp.setData(payload);  // OK: single-arg, type Object
+                        }
+                    } catch (Exception rbEx) {
+                        log.error("Rollback failed", rbEx);
+                        // resp.addData("rollbackError", rbEx.getClass().getSimpleName());
                     }
-                } catch (Exception rbEx) {
-                    log.error("Rollback failed", rbEx);
-                    // resp.addData("rollbackError", rbEx.getClass().getSimpleName());
+                    return resp;
                 }
-                return resp;
-            }
 
-            // Success – response body
-            resp.setStatusCode(200);
-            resp.setDescription("Successful");
-            Map<String, Object> data = new HashMap<>();
-            if (t.getId() != null) {
-                data.put("id", t.getId());
+                // Success – response body
+                resp.setStatusCode(200);
+                resp.setDescription("Successful");
+                if (t.getId() != null) {
+                    data.put("id", t.getId());
+                }
+                if (t.getReference() != null) {
+                    data.put("reference", t.getReference());
+                }
+                data.put("status", t.getStatus());
+                // data.put("balance", t.getBalance());
+                // data.put("pin", t.getPin());          // NOTE: sensitive – ensure not logged elsewhere
+                data.put("amount", t.getAmount());
+                data.put("operator", t.getOperator());
+                resp.setData(data);
+            } else {
+                data.put("status", 1);
+                // data.put("balance", t.getBalance());
+                // data.put("pin", t.getPin());          // NOTE: sensitive – ensure not logged elsewhere
+                data.put("amount", rq.getAmount());
+                data.put("operator", rq.getOperator());
+                resp.setStatusCode(200);
+                resp.setData(data);
+                resp.setDescription("Successful");
             }
-            if (t.getReference() != null) {
-                data.put("reference", t.getReference());
-            }
-            data.put("status", t.getStatus());
-            // data.put("balance", t.getBalance());
-            // data.put("pin", t.getPin());          // NOTE: sensitive – ensure not logged elsewhere
-            data.put("amount", t.getAmount());
-            data.put("operator", t.getOperator());
-            resp.setData(data);
 
             // Transaction history (best effort; don’t fail flow)
             try {
                 BigDecimal fees = pre.getFees() != null ? pre.getFees() : BigDecimal.ZERO;
-                String paymentType = "Airtime Purchase";
+                String paymentType = "Vending";
                 String senderDisplayName = phoneNumber != null ? phoneNumber : "Customer";
                 String receiverDisplayName = "Airtime Provider";
                 String narration = rq.getCurrencyCode() + " Airtime Purchase (" + rq.getOperator() + "/" + rq.getProduct() + ")";
@@ -1054,9 +1150,16 @@ public class ProcSochitelServices {
         PreDebitResult out = new PreDebitResult();
         out.setSuccess(false);
 
+        System.out.println(" preDebitAndSettleAirtime rq ::::::::::::::::  %S  " + new Gson().toJson(rq));
+        System.out.println(" preDebitAndSettleAirtime email ::::::::::::::::  %S  " + new Gson().toJson(email));
+        System.out.println(" preDebitAndSettleAirtime phoneNumber ::::::::::::::::  %S  " + new Gson().toJson(phoneNumber));
+        System.out.println(" preDebitAndSettleAirtime feeConfig ::::::::::::::::  %S  " + new Gson().toJson(feeConfig));
+
+        System.out.println(" preDebitAndSettleAirtime processId ::::::::::::::::  %S  " + new Gson().toJson(processId));
+
         try {
             if (feeConfig == null || feeConfig.getStatusCode() != 200 || feeConfig.getData() == null) {
-                BaseResponse err = new BaseResponse(502, "Invalid fee configuration");
+                BaseResponse err = new BaseResponse(404, "Invalid fee configuration");
                 if (feeConfig != null && feeConfig.getDescription() != null) {
                     err.setDescription(feeConfig.getDescription());
                 }
@@ -1064,7 +1167,6 @@ public class ProcSochitelServices {
                 return out;
             }
 
-            List<AddAccountDetails> acctList = addAccountDetailsRepo.findByEmailAddressrData(email);
             Optional<RegWalletInfo> regOpt = regWalletInfoRepository.findByPhoneNumber(phoneNumber);
             if (regOpt.isEmpty()) {
                 out.setError(new BaseResponse(404, "Wallet not found for user"));
@@ -1072,36 +1174,37 @@ public class ProcSochitelServices {
             }
             RegWalletInfo reg = regOpt.get();
 
-            if (acctList == null || acctList.isEmpty()) {
-                out.setError(new BaseResponse(404, "No linked accounts for user"));
-                return out;
-            }
-
             String feesStr = String.valueOf(feeConfig.getData().get("fees"));
             BigDecimal fees = new BigDecimal(feesStr);
             BigDecimal receiveAmount = new BigDecimal(rq.getAmount().trim());
             BigDecimal finCharges = receiveAmount.add(fees);
-
-            // Resolve debit account (preserve override to phoneNumber)
             String accountNumber = null;
-            for (AddAccountDetails acc : acctList) {
-                if (!"CAD".equalsIgnoreCase(rq.getCurrencyCode())) {
-                    AddAccountObj newAcc = new AddAccountObj();
-                    newAcc.setCountry(acc.getCountryName());
-                    newAcc.setCountryCode(acc.getCountryCode());
-                    newAcc.setWalletId(reg.getWalletId());
-                    BaseResponse addAccRes = profilingProxies.addOtherAccount(newAcc, auth);
-                    if (addAccRes.getStatusCode() != 200) {
-                        out.setError(new BaseResponse(addAccRes.getStatusCode(), addAccRes.getDescription()));
-                        return out;
-                    }
-                    accountNumber = (String) addAccRes.getData().get("accountNumber");
-                } else {
-                    accountNumber = acc.getAccountNumber();
+
+            if ("CAD".equalsIgnoreCase(rq.getCurrencyCode())) {
+                accountNumber = phoneNumber;
+            } else {
+
+                // Resolve debit account (preserve override to phoneNumber)
+                List<AddAccountDetails> acctList = addAccountDetailsRepo.findByEmailAddressrData(email);
+                if (acctList == null || acctList.isEmpty()) {
+                    out.setError(new BaseResponse(404, "No linked accounts for user"));
+                    return out;
                 }
-                accountNumber = phoneNumber; // override
-                break;
+                accountNumber = acctList.get(0).getAccountNumber();
             }
+            /*for (AddAccountDetails acc : acctList) {
+
+                AddAccountObj newAcc = new AddAccountObj();
+                newAcc.setCountry(acc.getCountryName());
+                newAcc.setCountryCode(acc.getCountryCode());
+                newAcc.setWalletId(reg.getWalletId());
+                BaseResponse addAccRes = profilingProxies.addOtherAccount(newAcc, auth);
+                if (addAccRes.getStatusCode() != 200) {
+                    out.setError(new BaseResponse(addAccRes.getStatusCode(), addAccRes.getDescription()));
+                    return out;
+                }
+                accountNumber = (String) addAccRes.getData().get("accountNumber");
+            }*/
 
             if (accountNumber == null || accountNumber.isBlank()) {
                 out.setError(new BaseResponse(400, "Unable to resolve debit account number"));
@@ -1130,6 +1233,8 @@ public class ProcSochitelServices {
             debitBuyer.setTransactionId(processId);
 
             BaseResponse debitBuyerRes = transactionServiceProxies.debitCustomerWithType(debitBuyer, "CUSTOMER", auth);
+            System.out.println(" preDebitAndSettleAirtime debitBuyerRes ::::::::::::::::  %S  " + new Gson().toJson(debitBuyerRes));
+
             if (debitBuyerRes.getStatusCode() != 200) {
                 out.setError(new BaseResponse(debitBuyerRes.getStatusCode(), debitBuyerRes.getDescription()));
                 return out;
@@ -1151,7 +1256,7 @@ public class ProcSochitelServices {
                 return out;
             }
             String decryptedGL = utilService.decryptData(GGL_ACCOUNT);
-            String sellerAcctNumber = AIRTIME_GGL_ACCOUNT;
+            String sellerAcctNumber = utilService.decryptData(AIRTIME_GGL_ACCOUNT);
 
             // Debit GL (buyer leg)
             DebitWalletCaller debGLCredit = new DebitWalletCaller();
@@ -1164,6 +1269,8 @@ public class ProcSochitelServices {
             debGLCredit.setTransactionId(processId);
 
             BaseResponse debitGLRes = transactionServiceProxies.debitCustomerWithType(debGLCredit, rq.getCurrencyCode(), auth);
+            System.out.println(" preDebitAndSettleAirtime debitGLRes ::::::::::::::::  %S  " + new Gson().toJson(debitGLRes));
+
             if (debitGLRes.getStatusCode() != 200) {
                 out.setError(new BaseResponse(debitGLRes.getStatusCode(), debitGLRes.getDescription()));
                 return out;
@@ -1172,7 +1279,7 @@ public class ProcSochitelServices {
 
             // Credit Seller
             CreditWalletCaller creditSeller = new CreditWalletCaller();
-            creditSeller.setAuth("Seller");
+            creditSeller.setAuth("Bills_Account");
             creditSeller.setFees("00");
             creditSeller.setFinalCHarges(receiveAmount.toString());
             creditSeller.setNarration(rq.getCurrencyCode() + "_Deposit");
@@ -1180,9 +1287,11 @@ public class ProcSochitelServices {
             creditSeller.setTransAmount(receiveAmount.toString());
             creditSeller.setTransactionId(processId);
 
-            BaseResponse creditSellerRes = transactionServiceProxies.creditCustomerWithType(creditSeller, "CUSTOMER", auth);
-            if (creditSellerRes.getStatusCode() != 200) {
-                out.setError(new BaseResponse(creditSellerRes.getStatusCode(), creditSellerRes.getDescription()));
+            BaseResponse creditBillsAccount = transactionServiceProxies.creditCustomerWithType(creditSeller, "CUSTOMER", auth);
+            System.out.println(" preDebitAndSettleAirtime creditBillsAccount ::::::::::::::::  %S  " + new Gson().toJson(creditBillsAccount));
+
+            if (creditBillsAccount.getStatusCode() != 200) {
+                out.setError(new BaseResponse(creditBillsAccount.getStatusCode(), creditBillsAccount.getDescription()));
                 return out;
             }
             out.setLegSellerCredited(true);
@@ -1198,6 +1307,8 @@ public class ProcSochitelServices {
             glCredit.setTransactionId(creditSeller.getTransactionId());
 
             BaseResponse creditGLRes = transactionServiceProxies.creditCustomerWithType(glCredit, GGL_CODE + "_GL", auth);
+            System.out.println(" preDebitAndSettleAirtime creditGLRes ::::::::::::::::  %S  " + new Gson().toJson(creditGLRes));
+
             if (creditGLRes.getStatusCode() != 200) {
                 out.setError(new BaseResponse(creditGLRes.getStatusCode(), creditGLRes.getDescription()));
                 return out;

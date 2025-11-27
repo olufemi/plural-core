@@ -11,7 +11,8 @@ import java.math.BigDecimal;
  * @author olufemioshin
  */
 public record LiquidateInvestmentRequest(
-        Long positionId,
+       // Long positionId,
         BigDecimal liquidationAmount, // if null => full liquidation
         String orderId
+       
 ) {}

@@ -5,7 +5,6 @@
 package com.finacial.wealth.api.fxpeer.exchange.investment.domain;
 
 import com.finacial.wealth.api.fxpeer.exchange.investment.ennum.InvestmentType;
-import com.finacial.wealth.api.fxpeer.exchange.investment.ennum.ScheduleMode;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
@@ -16,7 +15,7 @@ import jakarta.persistence.Table;
 import lombok.Data;
 import jakarta.persistence.*;
 import java.math.BigDecimal;
-import java.time.Instant;
+
 
 /**
  *
@@ -70,30 +69,12 @@ public class InvestmentProduct {
 
     @Lob
     private String metaJson;             // configuration/eligibility rules
-
-    private BigDecimal percentageCurrValue;
-    //private BigDecimal accruedInterest; 
-
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 20)
-    private ScheduleMode scheduleMode = ScheduleMode.RELATIVE;
-
-    // all RELATIVE values stored in minutes
-    @Column(nullable = false)
-    private Long settlementDelayMinutes = 0L;   // editable
-
-    @Column(nullable = false)
-    private Long tenorMinutes = 30L * 24L * 60L; // default 30 days in minutes (editable)
-
-    @Column(nullable = false)
-    private Boolean maturityAtEndOfDay = true; // optional behavior
     
-     // FIXED mode fields (still allowed)
-    @Column
-    private Instant settlementAt;
-
-    @Column
-    private Instant maturityAt;
+    private BigDecimal percentageCurrValue; 
+    //private BigDecimal accruedInterest; 
+    
+    
 
     // getters/setters/constructors
 }
+

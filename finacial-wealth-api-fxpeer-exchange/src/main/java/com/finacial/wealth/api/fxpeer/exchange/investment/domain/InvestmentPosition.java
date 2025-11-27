@@ -3,6 +3,7 @@
  * Click nbfs://nbhost/SystemFileSystem/Templates/Classes/Class.java to edit this template
  */
 package com.finacial.wealth.api.fxpeer.exchange.investment.domain;
+
 import com.finacial.wealth.api.fxpeer.exchange.investment.ennum.InvestmentPositionStatus;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -61,6 +62,14 @@ public class InvestmentPosition {
     @Column(nullable = false)
     private Instant updatedAt;
 
+    private String orderRef;
+
+    // FIXED mode fields (still allowed)
+    @Column
+    private Instant settlementAt;
+
+    @Column
+    private Instant maturityAt;
+
     // getters/setters
 }
-

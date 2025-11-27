@@ -45,11 +45,13 @@ public interface InvestmentPositionRepository extends JpaRepository<InvestmentPo
     @Query("""
     select p from InvestmentPosition p
     where p.status in (
-       com.finacial.wealth.api.fxpeer.exchange.investment.domain.InvestmentPositionStatus.ACTIVE,
-       com.finacial.wealth.api.fxpeer.exchange.investment.domain.InvestmentPositionStatus.PARTIALLY_LIQUIDATED
+       com.finacial.wealth.api.fxpeer.exchange.investment.ennum.InvestmentPositionStatus.ACTIVE,
+       com.finacial.wealth.api.fxpeer.exchange.investment.ennum.InvestmentPositionStatus.PARTIALLY_LIQUIDATED
     )
 """)
     List<InvestmentPosition> findAllActivePositions();
+    
+    Optional<InvestmentPosition> findByOrderRef( String orderRef);
     
     
 }

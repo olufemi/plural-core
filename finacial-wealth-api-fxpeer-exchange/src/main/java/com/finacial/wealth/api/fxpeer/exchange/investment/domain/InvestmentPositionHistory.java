@@ -8,8 +8,6 @@ package com.finacial.wealth.api.fxpeer.exchange.investment.domain;
  *
  * @author olufemioshin
  */
-
-
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
@@ -22,20 +20,21 @@ import jakarta.persistence.*;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
+
 @Entity
 @Data
 @Table(
-    name = "fx_investment_position_history",
-    uniqueConstraints = {
-        @UniqueConstraint(
-            name = "uk_position_date",
-            columnNames = {"position_id", "valuation_date"}
-        )
-    },
-    indexes = {
-        @Index(name = "idx_hist_position", columnList = "position_id"),
-        @Index(name = "idx_hist_date", columnList = "valuation_date")
-    }
+        name = "fx_investment_position_history",
+        uniqueConstraints = {
+            @UniqueConstraint(
+                    name = "uk_position_date",
+                    columnNames = {"position_id", "valuation_date"}
+            )
+        },
+        indexes = {
+            @Index(name = "idx_hist_position", columnList = "position_id"),
+            @Index(name = "idx_hist_date", columnList = "valuation_date")
+        }
 )
 public class InvestmentPositionHistory {
 
@@ -60,6 +59,9 @@ public class InvestmentPositionHistory {
     @Column(name = "subscription_amount", nullable = false, precision = 19, scale = 2)
     private BigDecimal subscriptionAmount; // original invested amount (capital)
 
+    @Column(name = "investment_amount", nullable = false, precision = 19, scale = 2)
+    private BigDecimal investmentAmount; // original invested amount (capital)
+
     @Column(name = "market_value", nullable = false, precision = 19, scale = 2)
     private BigDecimal marketValue;  // value as at day end
 
@@ -68,5 +70,16 @@ public class InvestmentPositionHistory {
 
     @Column(nullable = false)
     private Instant createdAt;
-}
 
+    @Column(nullable = true)
+    private Instant maturityDate;
+    
+    @Column(nullable = true)
+    private Instant activeDate;
+    
+    private String emailAddress;
+    
+    private String investmentId;
+     private String productName;
+   
+}

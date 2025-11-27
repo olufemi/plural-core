@@ -43,6 +43,7 @@ import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
@@ -173,27 +174,44 @@ public class OfferService {
             }
         }
 
-        // -- map -> DTO, de-duplicate by offer ID, sort newest-first (expiry then id) --
+        // timezone for "today" and "end of today"
+        final ZoneId zone = ZoneId.of("Africa/Lagos");
+        final LocalDate today = LocalDate.now(zone);
+        final Instant endOfToday = today.atTime(LocalTime.MAX).atZone(zone).toInstant();
+
+        // -- map -> DTO, if expiry is today set to end-of-today, de-duplicate, sort --
         List<OfferListItemDto> mergedSorted = allOffers.stream()
                 .map(OfferMapper::toListItem)
+                .map(dto -> {
+                    Instant exp = dto.expiryAt(); // or dto.getExpiryAt()
+                    if (exp != null) {
+                        LocalDate expDate = exp.atZone(zone).toLocalDate();
+                        if (expDate.equals(today)) {
+                            setDtoExpiry(dto, endOfToday); // << key change
+                        }
+                    }
+                    return dto;
+                })
                 .collect(java.util.stream.Collectors.toMap(
-                        OfferListItemDto::id, // assumes your dto has a getter 'id()' or getId()
+                        OfferListItemDto::id,
                         java.util.function.Function.identity(),
-                        (a, b) -> a, // on duplicate, keep first
+                        (a, b) -> a,
                         java.util.LinkedHashMap::new))
                 .values().stream()
                 .sorted((a, b) -> {
-                    // Prefer expiry desc (nulls last), fallback to id desc
-                    java.time.Instant ea = a.expiryAt(); // or a.getExpiryAt()
-                    java.time.Instant eb = b.expiryAt(); // or b.getExpiryAt()
-                    int byExpiry = java.util.Comparator.nullsLast(java.util.Comparator.<java.time.Instant>naturalOrder())
+                    Instant ea = a.expiryAt();
+                    Instant eb = b.expiryAt();
+                    int byExpiry = java.util.Comparator
+                            .nullsLast(java.util.Comparator.<Instant>naturalOrder())
                             .reversed()
                             .compare(ea, eb);
                     if (byExpiry != 0) {
                         return byExpiry;
                     }
-                    // fallback by id desc (assumes Long)
-                    return java.util.Comparator.<Long>naturalOrder().reversed().compare(a.id(), b.id());
+
+                    return java.util.Comparator.<Long>naturalOrder()
+                            .reversed()
+                            .compare(a.id(), b.id());
                 })
                 .toList();
 
@@ -204,7 +222,6 @@ public class OfferService {
             resp.setStatusCode(400);
             resp.setDescription("No offer found.");
             return ResponseEntity.ok(resp);
-
         }
 
         // -- build response --
@@ -220,6 +237,29 @@ public class OfferService {
                 "hasPrevious", page.hasPrevious()
         ));
         return ResponseEntity.ok(resp);
+    }
+
+    /**
+     * Sets expiryAt on OfferListItemDto. Works if DTO has setExpiryAt(Instant),
+     * otherwise tries direct field access.
+     */
+    private void setDtoExpiry(OfferListItemDto dto, Instant newExpiry) {
+        try {
+            // try setter first
+            var m = dto.getClass().getMethod("setExpiryAt", Instant.class);
+            m.invoke(dto, newExpiry);
+            return;
+        } catch (Exception ignored) {
+        }
+
+        try {
+            // fallback: set field directly (for records / no setter)
+            var f = dto.getClass().getDeclaredField("expiryAt");
+            f.setAccessible(true);
+            f.set(dto, newExpiry);
+        } catch (Exception ignored) {
+            // if neither works, we silently keep original expiry
+        }
     }
 
     /**

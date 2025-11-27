@@ -28,7 +28,7 @@ public class InvestmentHistoryService {
     }
 
     @Transactional
-    public void createInitialHistory(InvestmentPosition position) {
+    public void createInitialHistory(InvestmentPosition position, String email, Instant maturityDate, String orderId) {
 
         LocalDate today = LocalDate.now();
 
@@ -51,7 +51,15 @@ public class InvestmentHistoryService {
         hist.setMarketValue(position.getCurrentValue());
         hist.setGainLoss(position.getCurrentValue().subtract(position.getInvestedAmount()));
         hist.setCreatedAt(Instant.now());
+        hist.setInvestmentAmount(position.getInvestedAmount());
+        //hist.setMarketValue(price);
+        hist.setActiveDate(Instant.now());
+        hist.setMaturityDate(maturityDate);
+        hist.setEmailAddress(email);
+        hist.setInvestmentId(orderId);
+        hist.setProductName(position.getProduct().getName());
 
         historyRepo.save(hist);
     }
+
 }

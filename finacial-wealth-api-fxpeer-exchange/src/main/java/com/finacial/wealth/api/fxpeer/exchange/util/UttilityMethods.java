@@ -237,7 +237,7 @@ public class UttilityMethods {
             List<FxPeersCommissionCfg> pullData = findAllByTransactionType(rq.getTransType(), rq.getCurrencyCode());
 
             for (FxPeersCommissionCfg partData : pullData) {
-                if (getKulList.get(0).getServiceType().trim().equals(partData.getTransType())) {
+                //if (getKulList.get(0).getServiceType().trim().equals(partData.getTransType())) {
 
                     if (betweenTransBand(new BigDecimal(rq.getAmount()), new BigDecimal(partData.getAmountMin()), new BigDecimal(partData.getAmountMax())) == true) {
 
@@ -287,7 +287,7 @@ public class UttilityMethods {
                     responseModel.setDescription("Peer to Peer service, success");
                     responseModel.setStatusCode(200);
                     return responseModel;
-                }
+                //}
 
             }
         } catch (Exception ex) {

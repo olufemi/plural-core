@@ -14,6 +14,8 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 public interface InvestmentPositionHistoryRepository
         extends JpaRepository<InvestmentPositionHistory, Long> {
@@ -24,4 +26,17 @@ public interface InvestmentPositionHistoryRepository
 
     List<InvestmentPositionHistory> findByPositionIdAndValuationDateBetweenOrderByValuationDateAsc(
             Long positionId, LocalDate start, LocalDate end);
+
+    // NEW: history per customer (email), latest first
+    // List<InvestmentPositionHistory> findByEmailAddressOrderByValuationDateDesc(String emailAddress);
+    @Query("""
+           select h
+           from InvestmentPositionHistory h
+           join fetch h.position p
+           join fetch p.product
+           where h.emailAddress = :email
+           order by h.valuationDate desc
+           """)
+    List<InvestmentPositionHistory> findHistoryByEmailAddress(@Param("email") String email);
+
 }

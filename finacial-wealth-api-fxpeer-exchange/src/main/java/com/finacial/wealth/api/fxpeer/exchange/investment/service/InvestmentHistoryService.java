@@ -32,15 +32,15 @@ public class InvestmentHistoryService {
 
         LocalDate today = LocalDate.now();
 
-        // avoid duplicates if called twice
-        historyRepo.findByPositionIdAndValuationDate(position.getId(), today)
-                .ifPresent(h -> {
-                    throw new BusinessException("History already exists for today");
-                });
+        // ===== Idempotent behaviour: if today's history already exists, SKIP =====
+        var existing = historyRepo.findByPositionIdAndValuationDate(position.getId(), today);
+        if (existing.isPresent()) {
+            return;  // Do NOT throw or stop settlement
+        }
 
         BigDecimal price = position.getProduct().getUnitPrice() != null
                 ? position.getProduct().getUnitPrice()
-                : BigDecimal.ONE; // money market typical NAV = 1
+                : BigDecimal.ONE;
 
         InvestmentPositionHistory hist = new InvestmentPositionHistory();
         hist.setPosition(position);
@@ -52,7 +52,6 @@ public class InvestmentHistoryService {
         hist.setGainLoss(position.getCurrentValue().subtract(position.getInvestedAmount()));
         hist.setCreatedAt(Instant.now());
         hist.setInvestmentAmount(position.getInvestedAmount());
-        //hist.setMarketValue(price);
         hist.setActiveDate(Instant.now());
         hist.setMaturityDate(maturityDate);
         hist.setEmailAddress(email);

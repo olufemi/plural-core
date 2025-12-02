@@ -40,6 +40,7 @@ import com.finacial.wealth.api.profiling.models.ChangeDevice;
 import com.finacial.wealth.api.profiling.models.ChangePasswordInApp;
 import com.finacial.wealth.api.profiling.models.ChangePasswordRequest;
 import com.finacial.wealth.api.profiling.models.ChangePinInApp;
+import com.finacial.wealth.api.profiling.models.ComputeInvestmentBalance;
 import com.finacial.wealth.api.profiling.models.CreatePinOtp;
 import com.finacial.wealth.api.profiling.models.DecryptRequest;
 import com.finacial.wealth.api.profiling.models.DecryptResponse;
@@ -48,6 +49,7 @@ import com.finacial.wealth.api.profiling.models.FootprintDecryptResponse;
 import com.finacial.wealth.api.profiling.models.GetCustomerDetails;
 import com.finacial.wealth.api.profiling.models.InitiateForgetPwdDataWallet;
 import com.finacial.wealth.api.profiling.models.InitiateUserOnboarding;
+import com.finacial.wealth.api.profiling.models.InvestmentOrderStatus;
 import com.finacial.wealth.api.profiling.models.OnBoardUserForSDK;
 import com.finacial.wealth.api.profiling.models.UpgradeUserToLimit;
 import com.finacial.wealth.api.profiling.models.UserDetailsRequest;
@@ -66,6 +68,7 @@ import com.finacial.wealth.api.profiling.repo.FootprintResponseLogRepo;
 import com.finacial.wealth.api.profiling.repo.FootprintValidationFailedRepo;
 import com.finacial.wealth.api.profiling.repo.FootprintValidationRepository;
 import com.finacial.wealth.api.profiling.repo.GlobalLimitConfigRepo;
+import com.finacial.wealth.api.profiling.repo.InvestmentOrderRepository;
 import com.finacial.wealth.api.profiling.repo.OtpRepository;
 import com.finacial.wealth.api.profiling.repo.PinActFailedTransLogRepo;
 import com.finacial.wealth.api.profiling.repo.ProcessorUserFailedTransInfoRepo;
@@ -99,6 +102,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
@@ -121,6 +125,7 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestTemplate;
 
 /**
@@ -180,6 +185,7 @@ public class WalletServices {
     private final FrontPrintProxy footprintClient;
     private final AddAccountDetailsRepo addAccountDetailsRepo;
     private final WalletTransactionsDetailsRepo walletTransactionsDetailsRepo;
+    private final InvestmentOrderRepository investmentOrderRepository;
 
     @Value("${fin.wealth.foot.print.key}")
     private String secretKeyConfoged;
@@ -217,7 +223,8 @@ public class WalletServices {
             FootprintValidationFailedRepo footprintValidationFailedRepo,
             FootprintResponseLogRepo footprintResponseLogRepo, FootprintDecryptRepository footprintDecryptRepository,
             AddAccountDetailsRepo addAccountDetailsRepo,
-            WalletTransactionsDetailsRepo walletTransactionsDetailsRepo) {
+            WalletTransactionsDetailsRepo walletTransactionsDetailsRepo,
+            InvestmentOrderRepository investmentOrderRepository) {
         this.footprintResponseLogRepo = footprintResponseLogRepo;
         this.footprintValidationFailedRepo = footprintValidationFailedRepo;
         this.footprintValidationRepository = footprintValidationRepository;
@@ -247,6 +254,7 @@ public class WalletServices {
         this.footprintDecryptRepository = footprintDecryptRepository;
         this.addAccountDetailsRepo = addAccountDetailsRepo;
         this.walletTransactionsDetailsRepo = walletTransactionsDetailsRepo;
+        this.investmentOrderRepository = investmentOrderRepository;
 
     }
 
@@ -3043,7 +3051,20 @@ public class WalletServices {
         return toPlain(sum);
     }
 
-    public ApiResponseModel getCustomerDetailsWorking(String channel, String auth) {
+    private String computeInvestmentBalance(ComputeInvestmentBalance rq) {
+        System.out.println("ComputeInvestmentBalance reqq  " + "::::: " + new Gson().toJson(rq));
+
+        BigDecimal total = investmentOrderRepository
+                .sumInvestmentBalanceByEmailWalletAndCurrency(
+                        rq.getEmail(), rq.getWalletId(), rq.getCurrencyCode(), InvestmentOrderStatus.ACTIVE
+                );
+
+        System.out.println("BigDecimal total   " + "::::: " + total);
+
+        return total != null ? total.toPlainString() : "0";
+    }
+
+    public ApiResponseModel getCustomerDetailsWorkingold(String channel, String auth) {
         ApiResponseModel responseModel = new ApiResponseModel();
         int statusCode = 500;
         String statusMessage = "An error occured,please try again";
@@ -3077,7 +3098,7 @@ public class WalletServices {
 
             // 2) Virtual account info
             String virtAcctNo = null, virtAcctName = null, virtAcctType = null;
-            List<CreateVirtualAcctSucc> getVirt = createVirtualAcctSuccRepo.findByWallettNo(walletNo);
+            List<CreateVirtualAcctSucc> getVirt = createVirtualAcctSuccRepo.findByWallettNoList(walletNo);
             if (getVirt != null && !getVirt.isEmpty()) {
                 CreateVirtualAcctSucc v = getVirt.get(0);
                 virtAcctNo = v.getAccountNumber() == null ? "" : v.getAccountNumber();
@@ -3148,6 +3169,16 @@ public class WalletServices {
                     escrowBalance(getDecoded.emailAddress, primary.getCurrencyCode())
             );
 
+            String email = getCus.get(0).getEmail();
+            String walletIdds = getCus.get(0).getWalletId();
+            String currCode = primary.getCurrencyCode();
+            ComputeInvestmentBalance rqq = new ComputeInvestmentBalance();
+            rqq.setCurrencyCode(currCode);
+            rqq.setEmail(email);
+            rqq.setWalletId(walletId);
+            primary.setInvestmentBalance(computeInvestmentBalance(rqq));
+            System.out.println("primary.getInvestmentBalance()  " + "::::: " + primary.getInvestmentBalance());
+
             allDetails.add(primary);
 
             // 6) Additional accounts by email
@@ -3170,6 +3201,15 @@ public class WalletServices {
                     extra.setEscrowBalance(
                             escrowBalance(getDecoded.emailAddress, extra.getCurrencyCode())
                     );
+
+                    ComputeInvestmentBalance rqq2 = new ComputeInvestmentBalance();
+                    rqq2.setCurrencyCode(currCode);
+                    rqq2.setEmail(addAcc.getEmailAddress());
+                    rqq2.setWalletId(addAcc.getWalletId());
+
+                    extra.setInvestmentBalance(computeInvestmentBalance(rqq2));
+
+                    System.out.println("extra.getInvestmentBalance()  " + "::::: " + extra.getInvestmentBalance());
 
                     extra.setAccountBalance(addBal.toString());
                     extra.setBookAccountBalance(null);
@@ -3216,11 +3256,250 @@ public class WalletServices {
         return responseModel;
     }
 
+    private boolean isEmpty(String value) {
+        return value == null || value.trim().isEmpty();
+    }
+
+    @Transactional(readOnly = true)
+    public ApiResponseModel getCustomerDetailsWorking(String channel, String auth) {
+
+        ApiResponseModel response = new ApiResponseModel();
+        int failCode = 400;
+
+        try {
+            DecodedJWTToken decoded = DecodedJWTToken.getDecoded(auth);
+
+            // ===================== 1) MAIN CUSTOMER ==========================
+            List<RegWalletInfo> list = regWalletInfoRepo.findByPhoneNumberData(decoded.phoneNumber);
+            if (list == null || list.isEmpty()) {
+                recordFailedTrans(channel);
+                return error(response, failCode, "Wallet to Wallet transfer, Customer is invalid!");
+            }
+
+            RegWalletInfo main = list.get(0);
+            String customerEmail = main.getEmail();
+            String primaryWalletNo = main.getPhoneNumber();
+            String primaryWalletId = main.getWalletId();
+            String emailValidation = main.isEmailVerification() ? "1" : "0";
+            String pinCreated = main.isActivation() ? "1" : "0";
+
+            // ===================== 2) VIRTUAL ACCOUNT =========================
+            CreateVirtualAcctSucc virt = createVirtualAcctSuccRepo.findByWalletNo(primaryWalletNo).orElse(null);
+
+            String virtAcctNo = virt != null ? nv(virt.getAccountNumber(), null) : null;
+            String virtAcctName = virt != null ? nv(virt.getAccountName(), null) : null;
+            String virtAcctType = virt != null ? nv(virt.getAccountType(), null) : null;
+
+            String customerName
+                    = !isEmpty(virtAcctName)
+                    ? virtAcctName
+                    : (main.getFirstName() + " " + main.getLastName()).trim();
+
+            // ===================== 3) ACCOUNT BALANCE =========================
+            BaseResponse balRes = walletSystemProxyService.getAccountBalanceCallerPhoneNumber(primaryWalletNo);
+            BigDecimal primaryBalance
+                    = toBigDecimalSafe(balRes != null && balRes.getData() != null
+                            ? balRes.getData().get("accountBalance")
+                            : null);
+
+            // ===================== 4) LIMITS =========================
+            LimitInfo limits = getLimitInfo(primaryWalletNo);
+
+            // ===================== 5) RESULT LIST =========================
+            List<GetCustomerDetails> results = new ArrayList<>();
+
+            // ===================== PRIMARY WALLET DTO =========================
+            GetCustomerDetails primary = new GetCustomerDetails();
+            String primaryCurrency = utilMeth.returnSETTING_ONBOARDING_DEFAULT_CURRENCY_CODE();
+
+            primary.setCustomerName(customerName);
+            primary.setWalletNo(primaryWalletNo);
+            primary.setWalletId(primaryWalletId);
+            primary.setAccountBalance(primaryBalance.toString());
+
+            primary.setCustomerTier(limits.tier);
+            primary.setDailyLimit(limits.dailyLimit);
+            primary.setDailyLimitBalance(limits.dailyLimitBalance);
+            primary.setUsedDailyLimitBalance(limits.usedDailyLimitBalance);
+            primary.setMaxAccountBalance(limits.maxBalance);
+            primary.setSingleTransactionLimit(limits.singleTxnLimit);
+
+            primary.setEmailAddressValidation(emailValidation);
+            primary.setPinCreatedValidation(pinCreated);
+
+            primary.setVirtualAccount(virtAcctNo);
+            primary.setVirtualAccountName(virtAcctName);
+            primary.setVirtualAccountType(virtAcctType);
+
+            primary.setCurrencyCode(primaryCurrency);
+            primary.setEscrowBalance(escrowBalance(customerEmail, primaryCurrency));
+
+            // ---- Correct investment balance for PRIMARY wallet ----
+            ComputeInvestmentBalance rq = new ComputeInvestmentBalance();
+            rq.setCurrencyCode(primaryCurrency);
+            rq.setEmail(customerEmail);
+            rq.setWalletId(primaryWalletId);
+            System.out.println("Calling ComputeInvestmentBalance primary  " + "::::: " + new Gson().toJson(rq));
+
+            primary.setInvestmentBalance(computeInvestmentBalance(rq));
+
+            results.add(primary);
+
+            // ===================== 6) EXTRA WALLETS =========================
+            List<AddAccountDetails> extras = addAccountDetailsRepo.findByEmailAddress(customerEmail);
+
+            if (extras != null && !extras.isEmpty()) {
+
+                for (AddAccountDetails acc : extras) {
+
+                    String extraWalletNo = nv(acc.getAccountNumber(), primaryWalletNo);
+                    String extraWalletId = nv(acc.getWalletId(), primaryWalletId);
+                    String extraCurrency = nv(acc.getCurrencyCode(), primaryCurrency);
+                    String extraVirtAcct = nv(acc.getVirtualAccountNumber(), null);
+                    String extraName = nv(acc.getVirtualAccountName(), customerName);
+
+                    BaseResponse balExtra = walletSystemProxyService.getAccountBalanceCallerPhoneNumber(extraWalletNo);
+                    BigDecimal extraBalance
+                            = toBigDecimalSafe(balExtra != null && balExtra.getData() != null
+                                    ? balExtra.getData().get("accountBalance")
+                                    : null);
+
+                    GetCustomerDetails dto = new GetCustomerDetails();
+                    dto.setCustomerName(extraName);
+                    dto.setWalletNo(extraWalletNo);
+                    dto.setWalletId(extraWalletId);
+                    dto.setAccountBalance(extraBalance.toString());
+
+                    dto.setCustomerTier(limits.tier);
+                    dto.setDailyLimit(limits.dailyLimit);
+                    dto.setDailyLimitBalance(limits.dailyLimitBalance);
+                    dto.setUsedDailyLimitBalance(limits.usedDailyLimitBalance);
+                    dto.setMaxAccountBalance(limits.maxBalance);
+                    dto.setSingleTransactionLimit(limits.singleTxnLimit);
+
+                    dto.setEmailAddressValidation(emailValidation);
+                    dto.setPinCreatedValidation(pinCreated);
+
+                    dto.setVirtualAccount(extraVirtAcct);
+                    dto.setVirtualAccountName(extraName);
+                    dto.setVirtualAccountType(extraCurrency);
+
+                    dto.setCurrencyCode(extraCurrency);
+                    dto.setEscrowBalance(escrowBalance(customerEmail, extraCurrency));
+
+                    // ---- CORRECT investment balance per wallet & currency ----
+                    ComputeInvestmentBalance rq2 = new ComputeInvestmentBalance();
+                    rq2.setCurrencyCode(extraCurrency);
+                    rq2.setEmail(acc.getEmailAddress());
+                    rq2.setWalletId(extraWalletId);
+                    System.out.println("Calling ComputeInvestmentBalance rq2  " + "::::: " + new Gson().toJson(rq2));
+
+                    dto.setInvestmentBalance(computeInvestmentBalance(rq2));
+
+                    results.add(dto);
+                }
+            }
+
+            // ===================== SUCCESS =========================
+            response.setDescription("Customer details retrieved successfully.");
+            response.setStatusCode(200);
+            response.setData(results);
+            return response;
+
+        } catch (Exception ex) {
+            ex.printStackTrace();
+            return error(response, failCode, "An error occurred, please try again");
+        }
+    }
+
+    private LimitInfo getLimitInfo(String walletNo) {
+
+        LimitInfo info = new LimitInfo();
+        info.tier = "0";
+        info.maxBalance = "0";
+        info.dailyLimit = "0";
+        info.singleTxnLimit = "0";
+        info.dailyLimitBalance = "0";
+        info.usedDailyLimitBalance = "0";
+
+        try {
+            List<UserLimitConfig> userLimit = userLimitConfigRepo.findByWalletNumber(walletNo);
+            if (userLimit != null && !userLimit.isEmpty()) {
+
+                String tierCategory = userLimit.get(0).getTierCategory();
+                List<GlobalLimitConfig> gl = globalLimitConfigRepo.findByLimitCategory(tierCategory);
+
+                if (gl != null && !gl.isEmpty()) {
+                    GlobalLimitConfig g = gl.get(0);
+                    info.tier = nv(g.getCategory(), "0");
+                    info.maxBalance = nv(g.getMaximumBalance(), "0");
+                    info.dailyLimit = nv(g.getDailyLimit(), "0");
+                    info.singleTxnLimit = nv(g.getSingleTransactionLimit(), "0");
+                }
+            }
+
+            List<RegWalletCheckLog> logs = regWalletCheckLogRepo.findByPhoneNumberList(walletNo);
+            if (logs != null && !logs.isEmpty()) {
+                String used = logs.get(0).getWalletTransferCumm();
+                info.usedDailyLimitBalance = nv(used, "0");
+
+                BigDecimal dLimit = toBigDecimalSafe(info.dailyLimit);
+                BigDecimal usedLimit = toBigDecimalSafe(info.usedDailyLimitBalance);
+
+                info.dailyLimitBalance = dLimit.subtract(usedLimit).toString();
+            }
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+        return info;
+    }
+
+    private static class LimitInfo {
+
+        String tier;
+        String maxBalance;
+        String dailyLimit;
+        String singleTxnLimit;
+        String dailyLimitBalance;
+        String usedDailyLimitBalance;
+    }
+
+    private ApiResponseModel error(ApiResponseModel resp, int statusCode, String description) {
+        resp.setStatusCode(statusCode);
+        resp.setDescription(description);
+        resp.setData(Collections.emptyList());  // always return an array structure
+        return resp;
+    }
+
+    private void recordFailedTrans(String channel) {
+
+        ProcessorUserFailedTransInfo failed = new ProcessorUserFailedTransInfo(
+                "resend-otp",
+                "Wallet to Wallet transfer, Customer is invalid!",
+                String.valueOf(GlobalMethods.generateTransactionId()),
+                "",
+                channel,
+                "Profiling-Service"
+        );
+
+        procFailedRepo.save(failed);
+    }
+
+    private String nv(String value, String defaultValue) {
+        return (value == null || value.trim().isEmpty()) ? defaultValue : value;
+    }
+
     /**
      * Null-to-empty helper for Strings.
      */
     private static String nv(String s) {
         return (s == null) ? "" : s;
+    }
+
+    private BigDecimal nv(BigDecimal value, BigDecimal defaultValue) {
+        return value == null ? defaultValue : value;
     }
 
     /**

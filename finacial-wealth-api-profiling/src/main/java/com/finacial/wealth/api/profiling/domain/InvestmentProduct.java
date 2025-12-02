@@ -2,20 +2,21 @@
  * Click nbfs://nbhost/SystemFileSystem/Templates/Licenses/license-default.txt to change this license
  * Click nbfs://nbhost/SystemFileSystem/Templates/Classes/Class.java to edit this template
  */
-package com.finacial.wealth.api.fxpeer.exchange.investment.domain;
+package com.finacial.wealth.api.profiling.domain;
 
-import com.finacial.wealth.api.fxpeer.exchange.investment.ennum.InvestmentType;
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.Lob;
-import jakarta.persistence.Table;
+
+import com.finacial.wealth.api.profiling.models.InvestmentType;
+import javax.persistence.Column;
+import javax.persistence.Entity;
+import javax.persistence.GeneratedValue;
+import javax.persistence.GenerationType;
+import javax.persistence.Id;
+import javax.persistence.Lob;
+import javax.persistence.Table;
 import lombok.Data;
-import jakarta.persistence.*;
+import javax.persistence.*;
 import java.math.BigDecimal;
-
+import java.time.Instant;
 
 /**
  *
@@ -69,12 +70,27 @@ public class InvestmentProduct {
 
     @Lob
     private String metaJson;             // configuration/eligibility rules
-    
-    private BigDecimal percentageCurrValue; 
+
+    private BigDecimal percentageCurrValue;
     //private BigDecimal accruedInterest; 
+
+
+    // all RELATIVE values stored in minutes
+    @Column(nullable = false)
+    private Long settlementDelayMinutes = 0L;   // editable
+
+    @Column(nullable = false)
+    private Long tenorMinutes = 30L * 24L * 60L; // default 30 days in minutes (editable)
+
+    @Column(nullable = false)
+    private Boolean maturityAtEndOfDay = true; // optional behavior
     
-    
+     // FIXED mode fields (still allowed)
+    @Column
+    private Instant settlementAt;
+
+    @Column
+    private Instant maturityAt;
 
     // getters/setters/constructors
 }
-

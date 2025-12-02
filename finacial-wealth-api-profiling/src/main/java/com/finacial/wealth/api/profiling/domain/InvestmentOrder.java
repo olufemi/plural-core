@@ -2,19 +2,19 @@
  * Click nbfs://nbhost/SystemFileSystem/Templates/Licenses/license-default.txt to change this license
  * Click nbfs://nbhost/SystemFileSystem/Templates/Classes/Class.java to edit this template
  */
-package com.finacial.wealth.api.fxpeer.exchange.investment.domain;
+package com.finacial.wealth.api.profiling.domain;
 
-import com.finacial.wealth.api.fxpeer.exchange.investment.ennum.InvestmentOrderStatus;
-import com.finacial.wealth.api.fxpeer.exchange.investment.ennum.InvestmentOrderType;
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.Lob;
-import jakarta.persistence.Table;
+import com.finacial.wealth.api.profiling.models.InvestmentOrderStatus;
+import com.finacial.wealth.api.profiling.models.InvestmentOrderType;
+import javax.persistence.Column;
+import javax.persistence.Entity;
+import javax.persistence.GeneratedValue;
+import javax.persistence.GenerationType;
+import javax.persistence.Id;
+import javax.persistence.Lob;
+import javax.persistence.Table;
 import lombok.Data;
-import jakarta.persistence.*;
+import javax.persistence.*;
 import java.math.BigDecimal;
 import java.time.Instant;
 
@@ -46,14 +46,11 @@ public class InvestmentOrder {
 
     @Column(nullable = false, length = 64)
     private String walletId;
-
-    @ManyToOne(fetch = FetchType.LAZY)
+    
+     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "product_id", nullable = false)
     private InvestmentProduct product;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "position_id")
-    private InvestmentPosition position; // null for FIRST subscription
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 32)

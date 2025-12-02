@@ -123,6 +123,8 @@ public class InvestmentValuationScheduler {
             hist.setActiveDate(pos.getSettlementAt());
             hist.setEmailAddress(pos.getEmailAddress());
             hist.setInvestmentAmount(pos.getInvestedAmount());
+            hist.setInvestmentId(pos.getOrderRef());
+            hist.setProductName(pos.getProductName());
 
             historyRepo.save(hist);
         }

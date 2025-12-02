@@ -651,6 +651,7 @@ public class InvestmentOrderService {
                 p.setCreatedAt(Instant.now());
                 p.setUpdatedAt(Instant.now());
                 p.setOrderRef(getOrderr.get(0).getOrderRef());
+                p.setProductName(getOrderr.get(0).getProduct().getName());
                 return p;
             });
 
@@ -669,7 +670,8 @@ public class InvestmentOrderService {
             position.setEmailAddress(getRec.getEmailAddress());
             position.setMaturityAt(maturityAt);
             position.setStatus(InvestmentPositionStatus.ACTIVE);
-            position.setOrderRef(getOrderr.get(0).getOrderRef());
+            position.setOrderRef(getRec.getOrderRef());
+            position.setProductName(getRec.getProduct().getName());
             positionRepo.save(position);
 
             getRec.setPosition(position);

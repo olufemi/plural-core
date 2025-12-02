@@ -63,6 +63,7 @@ public class InvestmentPosition {
     private Instant updatedAt;
 
     private String orderRef;
+    private String productName;
 
     // FIXED mode fields (still allowed)
     @Column

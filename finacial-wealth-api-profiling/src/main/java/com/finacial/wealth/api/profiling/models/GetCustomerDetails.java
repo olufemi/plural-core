@@ -34,6 +34,9 @@ public class GetCustomerDetails {
     private String walletId;
     private String currencyCode;
     private String escrowBalance;  // NEW
+    private String investmentBalance;
+    
+    
 
     public String getEscrowBalance() {
         return escrowBalance;

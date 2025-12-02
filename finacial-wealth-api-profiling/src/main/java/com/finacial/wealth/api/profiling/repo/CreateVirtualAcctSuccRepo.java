@@ -7,6 +7,7 @@ package com.finacial.wealth.api.profiling.repo;
 
 import com.finacial.wealth.api.profiling.domain.CreateVirtualAcctSucc;
 import java.util.List;
+import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 
@@ -25,6 +26,8 @@ public interface CreateVirtualAcctSuccRepo extends JpaRepository<CreateVirtualAc
     List<CreateVirtualAcctSucc> findByRefrenceAndVirtAcctNo(String refrence, String accountNumber);
 
     @Query("select bs from CreateVirtualAcctSucc bs where bs.walletNo=:walletNo ")
-    List<CreateVirtualAcctSucc> findByWallettNo(String walletNo);
+    List<CreateVirtualAcctSucc> findByWallettNoList(String walletNo);
+    
+    Optional<CreateVirtualAcctSucc> findByWalletNo(String wallettNo);
 
 }

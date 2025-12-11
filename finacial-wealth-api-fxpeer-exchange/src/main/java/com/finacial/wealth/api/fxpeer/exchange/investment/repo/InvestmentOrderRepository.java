@@ -44,6 +44,14 @@ public interface InvestmentOrderRepository extends JpaRepository<InvestmentOrder
     where p.status = :status
 """)
     List<InvestmentOrder> findAllByStatus(@Param("status") InvestmentOrderStatus status);
-    
+
     Optional<InvestmentOrder> findByOrderRefAndEmailAddress(String orderRef, String emailAddress);
+
+    @Query("""
+        select p from InvestmentOrder p
+        where p.emailAddress = :emailAddress 
+          and p.status in (com.finacial.wealth.api.fxpeer.exchange.investment.ennum.InvestmentOrderStatus.ACTIVE)
+        """)
+    List<InvestmentOrder> findActiveByEmailAddress(String emailAddress);
+
 }

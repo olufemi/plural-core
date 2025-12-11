@@ -4,9 +4,12 @@
  */
 package com.finacial.wealth.api.fxpeer.exchange.investment.service;
 
+import com.finacial.wealth.api.fxpeer.exchange.investment.domain.InvestmentOrder;
 import com.finacial.wealth.api.fxpeer.exchange.investment.domain.InvestmentPosition;
 import com.finacial.wealth.api.fxpeer.exchange.investment.domain.InvestmentPositionHistory;
+import com.finacial.wealth.api.fxpeer.exchange.investment.record.CustomerInvestmentsPojo;
 import com.finacial.wealth.api.fxpeer.exchange.investment.record.InvestmentPositionHistoryPojo;
+import com.finacial.wealth.api.fxpeer.exchange.investment.repo.InvestmentOrderRepository;
 import com.finacial.wealth.api.fxpeer.exchange.investment.repo.InvestmentPositionHistoryRepository;
 import com.finacial.wealth.api.fxpeer.exchange.investment.repo.InvestmentPositionRepository;
 import com.finacial.wealth.api.fxpeer.exchange.model.ApiResponseModel;
@@ -40,6 +43,7 @@ public class InvestmentValuationScheduler {
     private final InvestmentPartnerClient partnerClient;
     private final InvestmentOrderService investmentOrderService;
     private final UttilityMethods utilService;
+    private final InvestmentOrderRepository investmentOrderRepository;
     final ZoneId zone = ZoneId.of("Africa/Lagos");
 
     @Value("${jobs.one-shot-delay-ms:10}")
@@ -48,13 +52,15 @@ public class InvestmentValuationScheduler {
     public InvestmentValuationScheduler(InvestmentPositionRepository positionRepo,
             InvestmentPositionHistoryRepository historyRepo,
             InvestmentPartnerClient partnerClient, InvestmentOrderService investmentOrderService,
-            UttilityMethods utilService
+            UttilityMethods utilService,
+            InvestmentOrderRepository investmentOrderRepository
     ) {
         this.positionRepo = positionRepo;
         this.historyRepo = historyRepo;
         this.partnerClient = partnerClient;
         this.investmentOrderService = investmentOrderService;
         this.utilService = utilService;
+        this.investmentOrderRepository = investmentOrderRepository;
     }
 
     public static final ScheduledExecutorService scheduler
@@ -103,8 +109,12 @@ public class InvestmentValuationScheduler {
             BigDecimal getCurrValuePerc = pos.getProduct().getPercentageCurrValue() == null ? BigDecimal.ZERO : pos.getProduct().getPercentageCurrValue();
             // BigDecimal getAccruedInterest = pos.getProduct().getAccruedInterest() == null ? BigDecimal.ZERO : pos.getProduct().getAccruedInterest();
             BigDecimal getCurrValue = pos.getInvestedAmount().add(getCurrValuePerc.multiply(pos.getInvestedAmount()));
+            BigDecimal cuurentAccruedInterest = pos.getAccruedInterest();
+            BigDecimal newAccruedInterest = getCurrValuePerc.multiply(pos.getInvestedAmount());
             pos.setCurrentValue(getCurrValue);
-            pos.setAccruedInterest(getCurrValue.subtract(pos.getInvestedAmount()));
+            pos.setAccruedInterest(newAccruedInterest);
+            pos.setTotalAccruedInterest(cuurentAccruedInterest.add(newAccruedInterest));
+
             pos.setUpdatedAt(Instant.now());
             positionRepo.save(pos);
 
@@ -133,6 +143,60 @@ public class InvestmentValuationScheduler {
     private LocalDate retDate(Instant exp) {
         LocalDate expDate = exp.atZone(zone).toLocalDate();
         return expDate;
+    }
+
+    @Transactional(readOnly = true)
+    public ResponseEntity<ApiResponseModel> getCustomerInvestments(String auth) {
+        ApiResponseModel responseModel = new ApiResponseModel();
+        int statusCode = 500;
+        String statusMessage = "Something went wrong!";
+
+        try {
+            statusCode = 400;
+
+            if (auth == null || auth.trim().isEmpty()) {
+                responseModel.setStatusCode(statusCode);
+                responseModel.setDescription("Missing Authorization header");
+                responseModel.setData(Collections.emptyList());
+                return ResponseEntity.ok(responseModel);
+            }
+
+            final String email = utilService.getClaimFromJwt(auth, "emailAddress");
+            if (email == null || email.trim().isEmpty()) {
+                responseModel.setStatusCode(statusCode);
+                responseModel.setDescription("Invalid token: emailAddress claim missing");
+                responseModel.setData(Collections.emptyList());
+                return ResponseEntity.ok(responseModel);
+            }
+
+            List<InvestmentOrder> currInvPojo
+                    = investmentOrderRepository.findActiveByEmailAddress(email);
+
+            List<CustomerInvestmentsPojo> items = new ArrayList<>();
+
+            long counter = 1L;  // local generated id
+            for (InvestmentOrder h : currInvPojo) {
+                CustomerInvestmentsPojo pojo = toPojoCustomerInvestment(h, email);
+                pojo.setId(counter++);   // <-- set non-DB id here
+                items.add(pojo);
+            }
+
+            responseModel.setData(items);
+            responseModel.setStatusCode(200);
+            responseModel.setDescription(
+                    items.isEmpty()
+                    ? "No investment history found for this customer."
+                    : "Investment history fetched successfully."
+            );
+
+        } catch (Exception ex) {
+            ex.printStackTrace();
+            responseModel.setStatusCode(statusCode);
+            responseModel.setDescription(statusMessage);
+            responseModel.setData(Collections.emptyList());
+        }
+
+        return ResponseEntity.ok(responseModel);
     }
 
     @Transactional(readOnly = true)
@@ -216,6 +280,29 @@ public class InvestmentValuationScheduler {
         dto.setInvestmentId(h.getInvestmentId());
         dto.setProductName(h.getProductName());
 
+        return dto;
+    }
+
+    private CustomerInvestmentsPojo toPojoCustomerInvestment(InvestmentOrder h, String email) {
+        CustomerInvestmentsPojo dto = new CustomerInvestmentsPojo();
+
+        /* dto.setActiveDate(retDateZoneId(h.getUpdatedAt()));
+        dto.setCreatedAt(retDateZoneId(h.getCreatedAt()));
+        dto.setCurrency(h.getPosition().getProduct().getCurrency());
+        dto.setEmailAddress(email);
+        dto.setGainLoss(h.getGainLoss());
+        dto.setInvestmentAmount(h.getAmount());
+        dto.setMarketValue(h.getMarketValue());
+        dto.setMaturityDate(retDateZoneId(h.getMaturityDate()));
+        dto.setPrice(h.getPrice());
+        dto.setProductId(String.valueOf(h.getPosition().getProduct().getId()));
+        dto.setStatus(h.getPosition().getStatus().toString());
+        dto.setSubscriptionAmount(h.getAmount());
+        dto.setUnits(h.getUnits());
+        dto.setValuationDate(h.getValuationDate());
+        dto.setInvestmentId(h.getInvestmentId());
+        dto.setProductName(h.getProductName());
+         */
         return dto;
     }
 }

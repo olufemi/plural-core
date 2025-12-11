@@ -636,7 +636,7 @@ public class InvestmentOrderService {
             //walletClient.confirmInvestmentDebit(order.getWalletId(), orderRef);
 
             // Create or update position
-            var existingPositionOpt = positionRepo.findActiveByEmailAddressAndProduct(getRec.getEmailAddress(), getRec.getProduct().getId());
+            var existingPositionOpt = positionRepo.findActiveByEmailAddressAndProductAndOrderRef(getRec.getEmailAddress(), getRec.getProduct().getId(), getRec.getOrderRef());
 
             InvestmentPosition position = existingPositionOpt.orElseGet(() -> {
                 InvestmentPosition p = new InvestmentPosition();
@@ -660,7 +660,7 @@ public class InvestmentOrderService {
             position.setCurrentValue(getRec.getAmount());
 
             position.setUpdatedAt(Instant.now());
-            position.setAccruedInterest(getRec.getAmountBalance());
+            position.setAccruedInterest(BigDecimal.ZERO);
 
             Instant subscribedAt = Instant.now();
             Instant settlementAt = TimeUnitMinutes.computeSettlementAt(getRec.getProduct(), subscribedAt);
@@ -680,7 +680,7 @@ public class InvestmentOrderService {
             orderRepo.save(getRec);
 
             // ✅ create day-0 history snapshot
-            investmentHistoryService.createInitialHistory(position,getRec.getEmailAddress(),getRec.getProduct().getMaturityAt(),getRec.getOrderRef());
+            investmentHistoryService.createInitialHistory(position, getRec.getEmailAddress(), getRec.getProduct().getMaturityAt(), getRec.getOrderRef());
 
             // Activity + notification
             activityService.logInvestmentSubscription(getRec, position, grossDebit);

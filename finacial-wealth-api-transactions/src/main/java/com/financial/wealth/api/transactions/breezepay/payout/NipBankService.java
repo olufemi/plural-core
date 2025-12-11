@@ -1393,7 +1393,7 @@ public class NipBankService {
 
                     String getToken = getDepuFireSender.get(0).getToken() == null ? "" : getDepuFireSender.get(0).getToken();
 
-                    if (getToken != "") {
+                    if (getToken != null && !getToken.trim().isEmpty()) {
 
                         System.out.println("Sender has token::::::::::::::::  %S  ");
 

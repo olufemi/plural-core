@@ -35,6 +35,7 @@ public class GetCustomerDetails {
     private String currencyCode;
     private String escrowBalance;  // NEW
     private String investmentBalance;
+    private String totalAccruedInterest;
     
     
 

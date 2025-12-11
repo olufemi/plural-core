@@ -36,10 +36,11 @@ public interface InvestmentPositionRepository extends JpaRepository<InvestmentPo
     where p.emailAddress = :emailAddress
       and p.product.id = :productId
       and p.status = com.finacial.wealth.api.fxpeer.exchange.investment.ennum.InvestmentPositionStatus.ACTIVE
+      and p.orderRef= :orderRef
 """)
-    Optional<InvestmentPosition> findActiveByEmailAddressAndProduct(
+    Optional<InvestmentPosition> findActiveByEmailAddressAndProductAndOrderRef(
             @Param("emailAddress") String emailAddress,
-            @Param("productId") Long productId
+            @Param("productId") Long productId, @Param("orderRef") String orderRef
     );
 
     @Query("""
@@ -50,8 +51,7 @@ public interface InvestmentPositionRepository extends JpaRepository<InvestmentPo
     )
 """)
     List<InvestmentPosition> findAllActivePositions();
-    
-    Optional<InvestmentPosition> findByOrderRef( String orderRef);
-    
-    
+
+    Optional<InvestmentPosition> findByOrderRef(String orderRef);
+
 }

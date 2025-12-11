@@ -43,4 +43,17 @@ public interface InvestmentOrderRepository extends JpaRepository<InvestmentOrder
             @Param("status") InvestmentOrderStatus status
     );
 
+    @Query("select o "
+            + "from InvestmentOrder o "
+            + "where o.emailAddress     = :emailAddress "
+            + "  and o.walletId         = :walletId "
+            + "  and o.product.currency = :currency "
+            + "  and o.status           = :status")
+    List<InvestmentOrder> findByEmailAdressWaaletIdCurrencyStatus(
+            @Param("emailAddress") String emailAddress,
+            @Param("walletId") String walletId,
+            @Param("currency") String currency,
+            @Param("status") InvestmentOrderStatus status
+    );
+
 }

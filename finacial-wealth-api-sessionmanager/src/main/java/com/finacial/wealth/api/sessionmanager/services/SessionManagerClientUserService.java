@@ -153,6 +153,8 @@ public class SessionManagerClientUserService {
 
         try {
 
+            System.out.println(" " + new Gson().toJson(rq));
+
             logger.info(String.format("rq.getPushNotificationToken()>>>>>> +++++++++++++ =>%s", rq.getPushNotificationToken()));
 
             BaseResponse response = utilityServiceFeignService.authenticateWalletUserUuid(rq, channel);

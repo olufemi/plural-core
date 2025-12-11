@@ -1568,14 +1568,12 @@ public class LocalTransferService {
 
             }
 
-           // System.out.println("getNameLookUpDe.get(0).getLTransServiceType() " + "  ::::::::::::::::::::: " + getNameLookUpDe.get(0).getLTransServiceType());
-
+            // System.out.println("getNameLookUpDe.get(0).getLTransServiceType() " + "  ::::::::::::::::::::: " + getNameLookUpDe.get(0).getLTransServiceType());
             Optional<FinWealthPayServiceConfig> getKul = kuleanPayServiceConfigRepo.findAllByServiceType(getNameLookUpDe.get(0).getLTransServiceType());
             BigDecimal kulFees = BigDecimal.ZERO;
 
-           // System.out.println("getKul.get().getMinimumAmmount() " + "  ::::::::::::::::::::: " + getKul.get().getMinimumAmmount());
+            // System.out.println("getKul.get().getMinimumAmmount() " + "  ::::::::::::::::::::: " + getKul.get().getMinimumAmmount());
             //System.out.println("processTransfer rq.getAmount() " + "  ::::::::::::::::::::: " + rq.getAmount());
-
             //check minimum amount
             String flagMinAmt = "amount cannot be less than N" + getKul.get().getMinimumAmmount() + ".00, please check!";
             if (new BigDecimal(rq.getAmount()).compareTo(new BigDecimal(getKul.get().getMinimumAmmount())) == -1) {
@@ -1836,7 +1834,7 @@ public class LocalTransferService {
             rqD.setPhoneNumber(reqq.getPhonenumber());
             rqD.setTransAmount(rq.getAmount());
             rqD.setTransactionId(rq.getProcessId());
-            BaseResponse debitAcct = utilMeth.debitCustomerWithType(rqD, "CUSTOMER",CCY);
+            BaseResponse debitAcct = utilMeth.debitCustomerWithType(rqD, "CUSTOMER", CCY);
 
             //   System.out.println("Debit Response from core ::::::::::::::::  %S  " + new Gson().toJson(debitAcct));
             // BaseResponse debitAcct = genLedgerProxy.debitOneTime(reqq);
@@ -1855,7 +1853,7 @@ public class LocalTransferService {
                 debGLCredit.setTransAmount(amount);
                 debGLCredit.setTransactionId(rq.getProcessId());
 
-                utilMeth.debitCustomerWithType(debGLCredit, "CAD_GL",CCY);
+                utilMeth.debitCustomerWithType(debGLCredit, "CAD_GL", CCY);
                 /* KuleanPaymentTransaction kTrans = new KuleanPaymentTransaction();
                 kTrans.setAmmount(amountToDebit);
                 kTrans.setCreatedDate(Instant.now());
@@ -1906,8 +1904,7 @@ public class LocalTransferService {
                 rqC.setTransactionId(rq.getProcessId());
                 BaseResponse creditAcct = utilMeth.creditCustomer(rqC);
 
-              //  System.out.println("Credit Response from core ::::::::::::::::  %S  " + new Gson().toJson(creditAcct));
-
+                //  System.out.println("Credit Response from core ::::::::::::::::  %S  " + new Gson().toJson(creditAcct));
                 //BaseResponse creditAcct = genLedgerProxy.creditOneTime(rqq);
                 if (creditAcct.getStatusCode() == 200) {
 
@@ -2058,7 +2055,7 @@ public class LocalTransferService {
 
                         String getToken = getDepuFireSender.get(0).getToken() == null ? "" : getDepuFireSender.get(0).getToken();
 
-                        if (getToken != "") {
+                        if (getToken != null && !getToken.trim().isEmpty()) {
 
                             System.out.println("Sender has token::::::::::::::::  %S  ");
 

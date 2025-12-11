@@ -21,6 +21,9 @@ import com.finacial.wealth.api.profiling.domain.FootprintResponseLog;
 import com.finacial.wealth.api.profiling.domain.FootprintValidation;
 import com.finacial.wealth.api.profiling.domain.FootprintValidationFailed;
 import com.finacial.wealth.api.profiling.domain.GlobalLimitConfig;
+import com.finacial.wealth.api.profiling.domain.InvestmentOrder;
+import com.finacial.wealth.api.profiling.domain.InvestmentPosition;
+import com.finacial.wealth.api.profiling.domain.InvestmentProduct;
 import com.finacial.wealth.api.profiling.domain.Otp;
 import com.finacial.wealth.api.profiling.domain.PinActFailedTransLog;
 import com.finacial.wealth.api.profiling.domain.ProcessorUserFailedTransInfo;
@@ -69,6 +72,8 @@ import com.finacial.wealth.api.profiling.repo.FootprintValidationFailedRepo;
 import com.finacial.wealth.api.profiling.repo.FootprintValidationRepository;
 import com.finacial.wealth.api.profiling.repo.GlobalLimitConfigRepo;
 import com.finacial.wealth.api.profiling.repo.InvestmentOrderRepository;
+import com.finacial.wealth.api.profiling.repo.InvestmentPositionRepository;
+import com.finacial.wealth.api.profiling.repo.InvestmentProductRepository;
 import com.finacial.wealth.api.profiling.repo.OtpRepository;
 import com.finacial.wealth.api.profiling.repo.PinActFailedTransLogRepo;
 import com.finacial.wealth.api.profiling.repo.ProcessorUserFailedTransInfoRepo;
@@ -94,6 +99,7 @@ import com.finacial.wealth.api.profiling.utils.UttilityMethods;
 import com.google.gson.Gson;
 import java.io.UnsupportedEncodingException;
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.net.MalformedURLException;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
@@ -186,6 +192,8 @@ public class WalletServices {
     private final AddAccountDetailsRepo addAccountDetailsRepo;
     private final WalletTransactionsDetailsRepo walletTransactionsDetailsRepo;
     private final InvestmentOrderRepository investmentOrderRepository;
+    private final InvestmentProductRepository investmentProductRepository;
+    private final InvestmentPositionRepository investmentPositionRepository;
 
     @Value("${fin.wealth.foot.print.key}")
     private String secretKeyConfoged;
@@ -224,7 +232,9 @@ public class WalletServices {
             FootprintResponseLogRepo footprintResponseLogRepo, FootprintDecryptRepository footprintDecryptRepository,
             AddAccountDetailsRepo addAccountDetailsRepo,
             WalletTransactionsDetailsRepo walletTransactionsDetailsRepo,
-            InvestmentOrderRepository investmentOrderRepository) {
+            InvestmentOrderRepository investmentOrderRepository,
+            InvestmentProductRepository investmentProductRepository,
+            InvestmentPositionRepository investmentPositionRepository) {
         this.footprintResponseLogRepo = footprintResponseLogRepo;
         this.footprintValidationFailedRepo = footprintValidationFailedRepo;
         this.footprintValidationRepository = footprintValidationRepository;
@@ -255,6 +265,8 @@ public class WalletServices {
         this.addAccountDetailsRepo = addAccountDetailsRepo;
         this.walletTransactionsDetailsRepo = walletTransactionsDetailsRepo;
         this.investmentOrderRepository = investmentOrderRepository;
+        this.investmentProductRepository = investmentProductRepository;
+        this.investmentPositionRepository = investmentPositionRepository;
 
     }
 
@@ -3051,17 +3063,138 @@ public class WalletServices {
         return toPlain(sum);
     }
 
-    private String computeInvestmentBalance(ComputeInvestmentBalance rq) {
-        System.out.println("ComputeInvestmentBalance reqq  " + "::::: " + new Gson().toJson(rq));
+    private String computeTotalAccuredAmount(ComputeInvestmentBalance rq) {
 
-        BigDecimal total = investmentOrderRepository
-                .sumInvestmentBalanceByEmailWalletAndCurrency(
-                        rq.getEmail(), rq.getWalletId(), rq.getCurrencyCode(), InvestmentOrderStatus.ACTIVE
+        System.out.println("computeTotalAccuredAmount req  ::::: " + new Gson().toJson(rq));
+
+        //Get data
+        // BigDecimal principal = BigDecimal.ZERO;
+        List<InvestmentOrder> getData = investmentOrderRepository
+                .findByEmailAdressWaaletIdCurrencyStatus(
+                        rq.getEmail(),
+                        rq.getWalletId(),
+                        rq.getCurrencyCode(),
+                        InvestmentOrderStatus.ACTIVE
                 );
 
-        System.out.println("BigDecimal total   " + "::::: " + total);
+        BigDecimal totalAccruedInterest = BigDecimal.ZERO;
 
-        return total != null ? total.toPlainString() : "0";
+        /*if (getData.size() <= 0) {
+            principal = BigDecimal.ZERO;
+        }*/
+        // 2) Sum accrued interest from positions for same email + currency
+        // You currently have: findByEmailAddress(...)
+        List<InvestmentOrder> orders = investmentOrderRepository.findByEmailAddress(rq.getEmail());
+
+        if (orders != null && !orders.isEmpty()) {
+            for (InvestmentOrder ord : orders) {
+
+                InvestmentProduct product = ord.getProduct();
+                if (product == null) {
+                    continue;
+                }
+
+                // Match only this currency
+                if (!rq.getCurrencyCode().equalsIgnoreCase(product.getCurrency())) {
+                    continue;
+                }
+
+                // (Optional) If you only want active orders, add:
+                if (ord.getStatus() != InvestmentOrderStatus.ACTIVE) {
+                    continue;
+                }
+
+                // Find linked position by orderRef
+                Optional<InvestmentPosition> posOpt = investmentPositionRepository.findByOrderRef(ord.getOrderRef());
+                if (!posOpt.isPresent()) {
+                    continue;
+                }
+
+                InvestmentPosition pos = posOpt.get();
+                BigDecimal accrued = pos.getTotalAccruedInterest();
+                if (accrued != null) {
+                    // BigDecimal is immutable – you MUST reassign
+                    totalAccruedInterest = totalAccruedInterest.add(accrued);
+                }
+            }
+        }
+
+        // System.out.println("Total principal              ::::: " + principal);
+        System.out.println("Total accrued interest       ::::: " + totalAccruedInterest);
+
+        BigDecimal finalTotal = totalAccruedInterest;
+
+        // Normalise to 2dp (or whatever you prefer)
+        finalTotal = finalTotal.setScale(2, RoundingMode.HALF_UP);
+
+        return finalTotal.toPlainString();
+    }
+
+    private String computeInvestmentBalance(ComputeInvestmentBalance rq) {
+
+        System.out.println("ComputeInvestmentBalance req  ::::: " + new Gson().toJson(rq));
+
+        // 1) Sum principal (capital) from orders – handle null safely
+        BigDecimal principal = investmentOrderRepository
+                .sumInvestmentBalanceByEmailWalletAndCurrency(
+                        rq.getEmail(),
+                        rq.getWalletId(),
+                        rq.getCurrencyCode(),
+                        InvestmentOrderStatus.ACTIVE
+                );
+
+        if (principal == null) {
+            principal = BigDecimal.ZERO;
+        }
+
+        // 2) Sum accrued interest from positions for same email + currency
+        BigDecimal totalAccruedInterest = BigDecimal.ZERO;
+
+        // You currently have: findByEmailAddress(...)
+        List<InvestmentOrder> orders = investmentOrderRepository.findByEmailAddress(rq.getEmail());
+
+        if (orders != null && !orders.isEmpty()) {
+            for (InvestmentOrder ord : orders) {
+
+                InvestmentProduct product = ord.getProduct();
+                if (product == null) {
+                    continue;
+                }
+
+                // Match only this currency
+                if (!rq.getCurrencyCode().equalsIgnoreCase(product.getCurrency())) {
+                    continue;
+                }
+
+                // (Optional) If you only want active orders, add:
+                if (ord.getStatus() != InvestmentOrderStatus.ACTIVE) {
+                    continue;
+                }
+
+                // Find linked position by orderRef
+                Optional<InvestmentPosition> posOpt = investmentPositionRepository.findByOrderRef(ord.getOrderRef());
+                if (!posOpt.isPresent()) {
+                    continue;
+                }
+
+                InvestmentPosition pos = posOpt.get();
+                BigDecimal accrued = pos.getTotalAccruedInterest();
+                if (accrued != null) {
+                    // BigDecimal is immutable – you MUST reassign
+                    totalAccruedInterest = totalAccruedInterest.add(accrued);
+                }
+            }
+        }
+
+        System.out.println("Total principal              ::::: " + principal);
+        System.out.println("Total accrued interest       ::::: " + totalAccruedInterest);
+
+        BigDecimal finalTotal = principal.add(totalAccruedInterest);
+
+        // Normalise to 2dp (or whatever you prefer)
+        finalTotal = finalTotal.setScale(2, RoundingMode.HALF_UP);
+
+        return finalTotal.toPlainString();
     }
 
     public ApiResponseModel getCustomerDetailsWorkingold(String channel, String auth) {
@@ -3340,8 +3473,10 @@ public class WalletServices {
             rq.setEmail(customerEmail);
             rq.setWalletId(primaryWalletId);
             System.out.println("Calling ComputeInvestmentBalance primary  " + "::::: " + new Gson().toJson(rq));
-
             primary.setInvestmentBalance(computeInvestmentBalance(rq));
+            System.out.println("Calling ComputeTotalAccuredAmount primary  " + "::::: " + new Gson().toJson(rq));
+
+            primary.setTotalAccruedInterest(computeTotalAccuredAmount(rq));
 
             results.add(primary);
 
@@ -3393,8 +3528,10 @@ public class WalletServices {
                     rq2.setEmail(acc.getEmailAddress());
                     rq2.setWalletId(extraWalletId);
                     System.out.println("Calling ComputeInvestmentBalance rq2  " + "::::: " + new Gson().toJson(rq2));
-
                     dto.setInvestmentBalance(computeInvestmentBalance(rq2));
+                    System.out.println("Calling ComputeTotalAccuredAmount: rq2 " + "::::: " + new Gson().toJson(rq2));
+
+                    dto.setTotalAccruedInterest(computeTotalAccuredAmount(rq2));
 
                     results.add(dto);
                 }

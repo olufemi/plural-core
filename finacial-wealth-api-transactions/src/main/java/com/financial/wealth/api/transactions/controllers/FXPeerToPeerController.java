@@ -4,6 +4,7 @@
  */
 package com.financial.wealth.api.transactions.controllers;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.financial.wealth.api.transactions.models.BaseResponse;
 import com.financial.wealth.api.transactions.models.CreditWalletCaller;
 import com.financial.wealth.api.transactions.models.DebitWalletCaller;
@@ -12,6 +13,7 @@ import com.financial.wealth.api.transactions.services.fx.p2.p2.wallet.ManageWall
 import com.financial.wealth.api.transactions.services.fx.p2.p2.wallet.WalletInfoValAcct;
 import com.financial.wealth.api.transactions.services.fx.p2.p2.wallet.WalletInfoValiAcctBal;
 import com.financial.wealth.api.transactions.utils.UttilityMethods;
+import java.net.MalformedURLException;
 import javax.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -52,7 +54,7 @@ public class FXPeerToPeerController {
 
     @PostMapping("/debit-customer-with-type")
     public ResponseEntity<BaseResponse> debitCustomerWithType(@RequestHeader(value = "user-type", required = true) String userType,
-            @RequestBody @Valid DebitWalletCaller rq) {
+            @RequestBody @Valid DebitWalletCaller rq) throws JsonProcessingException {
 
         BaseResponse baseResponse = utilMeth.debitCustomerWithType(rq, userType, "");
         return new ResponseEntity<>(baseResponse, HttpStatus.OK);
@@ -60,7 +62,7 @@ public class FXPeerToPeerController {
 
     @PostMapping("/credit-customer-with-type")
     public ResponseEntity<BaseResponse> creditCustomerWithType(@RequestHeader(value = "user-type", required = true) String userType,
-            @RequestBody @Valid CreditWalletCaller rq) {
+            @RequestBody @Valid CreditWalletCaller rq) throws MalformedURLException, JsonProcessingException {
 
         BaseResponse baseResponse = utilMeth.creditCustomerWithType(rq, userType);
         return new ResponseEntity<>(baseResponse, HttpStatus.OK);

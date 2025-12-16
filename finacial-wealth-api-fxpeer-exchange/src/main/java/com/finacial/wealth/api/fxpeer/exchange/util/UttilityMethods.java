@@ -239,54 +239,54 @@ public class UttilityMethods {
             for (FxPeersCommissionCfg partData : pullData) {
                 //if (getKulList.get(0).getServiceType().trim().equals(partData.getTransType())) {
 
-                    if (betweenTransBand(new BigDecimal(rq.getAmount()), new BigDecimal(partData.getAmountMin()), new BigDecimal(partData.getAmountMax())) == true) {
+                if (betweenTransBand(new BigDecimal(rq.getAmount()), new BigDecimal(partData.getAmountMin()), new BigDecimal(partData.getAmountMax())) == true) {
 
-                        //compute the fees
-                        //1.8% + 100 (convenience fee)
-                        System.out.println("rq.getAmount()" + "  :::::::::::::::::::::   " + rq.getAmount());
-                        System.out.println("pullData.get(0).getFee()" + "  :::::::::::::::::::::   " + partData.getFee());
-                        if (partData.getHasPercent().equals("1")) {
-                            pFees = returnPerResult(ammmount, partData.getCommPercent());
-                        } else {
-                            pFees = partData.getFee();
-                        }
-                        System.out.println("pFees" + "  :::::::::::::::::::::   " + pFees);
-                        if (getKulList.size() <= 0) {
-                            responseModel.setDescription("Peer to Peer service, service type not configured!");
-                            responseModel.setStatusCode(statusCode);
+                    //compute the fees
+                    //1.8% + 100 (convenience fee)
+                    System.out.println("rq.getAmount()" + "  :::::::::::::::::::::   " + rq.getAmount());
+                    System.out.println("pullData.get(0).getFee()" + "  :::::::::::::::::::::   " + partData.getFee());
+                    if (partData.getHasPercent().equals("1")) {
+                        pFees = returnPerResult(ammmount, partData.getCommPercent());
+                    } else {
+                        pFees = partData.getFee();
+                    }
+                    System.out.println("pFees" + "  :::::::::::::::::::::   " + pFees);
+                    if (getKulList.size() <= 0) {
+                        responseModel.setDescription("Peer to Peer service, service type not configured!");
+                        responseModel.setStatusCode(statusCode);
 
-                            return responseModel;
-                        }
+                        return responseModel;
+                    }
 
-                        if (!getKulList.get(0).isEnabled()) {
+                    if (!getKulList.get(0).isEnabled()) {
 
-                            responseModel.setDescription("Peer to Peer service, service type is disabled!");
-                            responseModel.setStatusCode(statusCode);
+                        responseModel.setDescription("Peer to Peer service, service type is disabled!");
+                        responseModel.setStatusCode(statusCode);
 
-                            return responseModel;
-
-                        }
-
-                        Optional<FinWealthPayServiceConfig> getKul = finWealthServiceConfigRepo.findAllByServiceType(rq.getTransType(), rq.getCurrencyCode());
-
-                        String flagMinAmt = "Minimum amount cannot be less than N" + getKul.get().getMinimumAmmount() + ".00, please check!";
-                        if (new BigDecimal(rq.getAmount()).compareTo(new BigDecimal(getKul.get().getMinimumAmmount())) == -1) {
-
-                            responseModel.setDescription("Peer to Peer service transfer, " + flagMinAmt);
-                            responseModel.setStatusCode(statusCode);
-
-                            return responseModel;
-                        }
+                        return responseModel;
 
                     }
 
-                    Map reList = new HashMap();
-                    reList.put("fees", pFees);
-                    responseModel.setData(reList);
+                    Optional<FinWealthPayServiceConfig> getKul = finWealthServiceConfigRepo.findAllByServiceType(rq.getTransType(), rq.getCurrencyCode());
 
-                    responseModel.setDescription("Peer to Peer service, success");
-                    responseModel.setStatusCode(200);
-                    return responseModel;
+                    String flagMinAmt = "Minimum amount cannot be less than N" + getKul.get().getMinimumAmmount() + ".00, please check!";
+                    if (new BigDecimal(rq.getAmount()).compareTo(new BigDecimal(getKul.get().getMinimumAmmount())) == -1) {
+
+                        responseModel.setDescription("Peer to Peer service transfer, " + flagMinAmt);
+                        responseModel.setStatusCode(statusCode);
+
+                        return responseModel;
+                    }
+
+                }
+
+                Map reList = new HashMap();
+                reList.put("fees", pFees);
+                responseModel.setData(reList);
+
+                responseModel.setDescription("Peer to Peer service, success");
+                responseModel.setStatusCode(200);
+                return responseModel;
                 //}
 
             }

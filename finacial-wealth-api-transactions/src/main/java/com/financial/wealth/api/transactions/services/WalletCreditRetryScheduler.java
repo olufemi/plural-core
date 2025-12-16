@@ -5,24 +5,27 @@
 package com.financial.wealth.api.transactions.services;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.financial.wealth.api.transactions.domain.CreateCreditLog;
+import com.financial.wealth.api.transactions.domain.CreateDebitLog;
 
-import com.financial.wealth.api.transactions.domain.FailedCreditLog;
-import com.financial.wealth.api.transactions.domain.FailedDebitLog;
 import com.financial.wealth.api.transactions.domain.FinWealthPaymentTransaction;
 import com.financial.wealth.api.transactions.domain.RegWalletInfo;
 import com.financial.wealth.api.transactions.domain.SuccessDebitLog;
+import com.financial.wealth.api.transactions.enumm.CreditLogStatus;
 import com.financial.wealth.api.transactions.models.BaseResponse;
 import com.financial.wealth.api.transactions.models.CreditWalletCaller;
 import com.financial.wealth.api.transactions.models.DebitWalletCaller;
+import com.financial.wealth.api.transactions.repo.CreateCreditLogRepository;
+import com.financial.wealth.api.transactions.repo.CreateDebitLogRepository;
 import com.financial.wealth.api.transactions.repo.FailedCreditLogRepo;
 import com.financial.wealth.api.transactions.repo.FailedDebitLogRepo;
 import com.financial.wealth.api.transactions.repo.FinWealthPaymentTransactionRepo;
 import com.financial.wealth.api.transactions.repo.RegWalletInfoRepository;
 import com.financial.wealth.api.transactions.repo.SuccessDebitLogRepo;
 import com.financial.wealth.api.transactions.utils.UttilityMethods;
-import com.google.gson.Gson;
+
 import java.math.BigDecimal;
-import org.springframework.scheduling.annotation.Scheduled;
+
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
@@ -43,28 +46,34 @@ public class WalletCreditRetryScheduler {
     private final FinWealthPaymentTransactionRepo finWealthPaymentTransactionRepo;
     private final FailedDebitLogRepo failedDebitLogRepo;
     private final SuccessDebitLogRepo successDebitLogRepo;
+    private final CreateDebitLogRepository createDebitLogRepository;
+    private final CreateCreditLogRepository ceateCreditLogRepository;
 
     public WalletCreditRetryScheduler(FailedCreditLogRepo failedCreditLogRepository,
             UttilityMethods utilMeth,
             RegWalletInfoRepository regWalletInfoRepository,
             FinWealthPaymentTransactionRepo finWealthPaymentTransactionRepo,
             FailedDebitLogRepo failedDebitLogRepo,
-            SuccessDebitLogRepo successDebitLogRepo) {
+            SuccessDebitLogRepo successDebitLogRepo,
+            CreateDebitLogRepository createDebitLogRepository,
+            CreateCreditLogRepository ceateCreditLogRepository) {
         this.failedCreditLogRepository = failedCreditLogRepository;
         this.utilMeth = utilMeth;
         this.regWalletInfoRepository = regWalletInfoRepository;
         this.finWealthPaymentTransactionRepo = finWealthPaymentTransactionRepo;
         this.failedDebitLogRepo = failedDebitLogRepo;
         this.successDebitLogRepo = successDebitLogRepo;
+        this.createDebitLogRepository = createDebitLogRepository;
+        this.ceateCreditLogRepository = ceateCreditLogRepository;
     }
 
     //@Scheduled(fixedDelay = 60000) // retry every 1 minute
     public void retryFailedCredits() {
         System.out.println("schedule retryFailedCredits ::::::::::::::::  %S  ");
 
-        List<FailedCreditLog> pendingLogs = failedCreditLogRepository.findByResolvedFalse();
+        List<CreateCreditLog> pendingLogs = ceateCreditLogRepository.findByResolvedFalse();
 
-        for (FailedCreditLog log : pendingLogs) {
+        for (CreateCreditLog log : pendingLogs) {
             try {
 
                 CreditWalletCaller request = objectMapper.readValue(log.getRequestJson(), CreditWalletCaller.class);
@@ -72,6 +81,7 @@ public class WalletCreditRetryScheduler {
 
                 if (res.getStatusCode() == 200) {
                     log.setResolved(true);
+                    log.setStatus(CreditLogStatus.SUCCESS);
                     log.setLastModifiedDate(Instant.now());
                     if (log.getPayloadType().equals("CUSTOMER")) {
 
@@ -101,7 +111,7 @@ public class WalletCreditRetryScheduler {
                     log.setLastModifiedDate(Instant.now());
                 }
 
-                failedCreditLogRepository.save(log);
+                ceateCreditLogRepository.save(log);
             } catch (Exception ex) {
                 ex.printStackTrace(); // log if needed
             }
@@ -111,26 +121,28 @@ public class WalletCreditRetryScheduler {
     // @Scheduled(fixedDelay = 60000) // retry every 1 minute
     public void retryFailedDebits() {
         System.out.println("schedule retryFailedDebits ::::::::::::::::  %S  ");
-        List<FailedDebitLog> pendingLogs = failedDebitLogRepo.findByResolvedFalse();
+        List<CreateDebitLog> pendingLogs = createDebitLogRepository.findByResolvedFalse();
 
-        for (FailedDebitLog log : pendingLogs) {
+        for (CreateDebitLog log : pendingLogs) {
             try {
+                if (!log.getStatus().equals(CreditLogStatus.PENDING)) {
+                    CreditWalletCaller request = objectMapper.readValue(log.getRequestJson(), CreditWalletCaller.class);
+                    BaseResponse res = utilMeth.creditCustomer(request);
 
-                CreditWalletCaller request = objectMapper.readValue(log.getRequestJson(), CreditWalletCaller.class);
-                BaseResponse res = utilMeth.creditCustomer(request);
+                    if (res.getStatusCode() == 200) {
+                        log.setResolved(true);
+                        log.setStatus(CreditLogStatus.SUCCESS);
+                        log.setLastModifiedDate(Instant.now());
+                        if (log.getPayloadType().equals("CUSTOMER")) {
 
-                if (res.getStatusCode() == 200) {
-                    log.setResolved(true);
-                    log.setLastModifiedDate(Instant.now());
-                    if (log.getPayloadType().equals("CUSTOMER")) {
-
+                        }
+                    } else {
+                        log.setRetryCount(log.getRetryCount() + 1);
+                        log.setLastModifiedDate(Instant.now());
                     }
-                } else {
-                    log.setRetryCount(log.getRetryCount() + 1);
-                    log.setLastModifiedDate(Instant.now());
-                }
 
-                failedDebitLogRepo.save(log);
+                    createDebitLogRepository.save(log);
+                }
             } catch (Exception ex) {
                 ex.printStackTrace(); // log if needed
             }

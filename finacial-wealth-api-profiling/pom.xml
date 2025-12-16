@@ -23,6 +23,13 @@
         <validation-api.version>2.0.1.Final</validation-api.version>
     </properties>
     <dependencies>
+        <!-- Firebase Admin SDK (includes GCS client under the hood) -->
+        <dependency>
+            <groupId>com.google.firebase</groupId>
+            <artifactId>firebase-admin</artifactId>
+            <version>9.7.0</version>
+        </dependency>
+
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>
@@ -235,7 +242,18 @@
             <artifactId>flyway-core</artifactId>
             <version>8.5.13</version>
         </dependency-->
-
+        <dependency>
+            <groupId>com.google.auth</groupId>
+            <artifactId>google-auth-library-oauth2-http</artifactId>
+            <version>1.35.0</version>
+            <type>jar</type>
+        </dependency>
+        <dependency>
+            <groupId>com.netflix.feign</groupId>
+            <artifactId>feign-core</artifactId>
+            <version>8.18.0</version>
+            <type>jar</type>
+        </dependency>
     </dependencies>
     <profiles>
         <profile>

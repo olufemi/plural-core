@@ -5,13 +5,19 @@
  */
 package com.financial.wealth.api.transactions.utils;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.financial.wealth.api.transactions.domain.CreateCreditLog;
+import com.financial.wealth.api.transactions.domain.CreateDebitLog;
 import com.financial.wealth.api.transactions.domain.FailedCreditLog;
 import com.financial.wealth.api.transactions.domain.FailedDebitLog;
 import com.financial.wealth.api.transactions.domain.SuccessDebitLog;
+import com.financial.wealth.api.transactions.enumm.CreditLogStatus;
 import com.financial.wealth.api.transactions.models.BaseResponse;
 import com.financial.wealth.api.transactions.models.CreditWalletCaller;
 import com.financial.wealth.api.transactions.models.DebitWalletCaller;
+import com.financial.wealth.api.transactions.repo.CreateCreditLogRepository;
+import com.financial.wealth.api.transactions.repo.CreateDebitLogRepository;
 import com.financial.wealth.api.transactions.repo.FailedCreditLogRepo;
 import com.financial.wealth.api.transactions.repo.FailedDebitLogRepo;
 import com.financial.wealth.api.transactions.repo.SuccessDebitLogRepo;
@@ -19,6 +25,7 @@ import com.google.common.collect.Range;
 import com.google.gson.Gson;
 import com.google.gson.JsonSyntaxException;
 import java.math.BigDecimal;
+import java.net.MalformedURLException;
 
 import java.security.InvalidKeyException;
 import java.security.Key;
@@ -60,12 +67,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.MediaType;
-import org.springframework.http.ResponseEntity;
-import org.springframework.http.converter.HttpMessageConverter;
-import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
-import org.springframework.security.crypto.password.PasswordEncoder;
+
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestTemplate;
@@ -121,16 +123,22 @@ public class UttilityMethods {
     private final FailedCreditLogRepo failedCreditLogRepo;
     private final FailedDebitLogRepo failedDebitLogRepo;
     private final SuccessDebitLogRepo successDebitLogRepo;
+    private final CreateCreditLogRepository createCreditLogRepository;
+    private final CreateDebitLogRepository createDebitLogRepository;
 
     public UttilityMethods(MemoryCache cache, RestTemplate restTemplate,
             FailedCreditLogRepo failedCreditLogRepo,
-            FailedDebitLogRepo failedDebitLogRepo, SuccessDebitLogRepo successDebitLogRepo
+            FailedDebitLogRepo failedDebitLogRepo, SuccessDebitLogRepo successDebitLogRepo,
+            CreateCreditLogRepository createCreditLogRepository,
+            CreateDebitLogRepository createDebitLogRepository
     ) {
         this.cache = cache;
         this.restTemplate = restTemplate;
         this.failedCreditLogRepo = failedCreditLogRepo;
         this.failedDebitLogRepo = failedDebitLogRepo;
         this.successDebitLogRepo = successDebitLogRepo;
+        this.createCreditLogRepository = createCreditLogRepository;
+        this.createDebitLogRepository = createDebitLogRepository;
     }
 
     @PostConstruct
@@ -180,10 +188,20 @@ public class UttilityMethods {
         return SETTING_KEY_WALLET_SYSTEM_SYSTEM_GG_NIG;
     }
 
-    public BaseResponse debitCustomer(DebitWalletCaller rq) {
+    public BaseResponse debitCustomer(DebitWalletCaller rq) throws JsonProcessingException {
         BaseResponse baseResponse = new BaseResponse();
         int statusCode = 500;
         String statusMessage = "An error occured,please try again";
+        CreateDebitLog creLog = new CreateDebitLog();
+        creLog.setPayloadType("");
+        creLog.setRequestJson(objectMapper.writeValueAsString(rq));
+        creLog.setTransactionId(rq.getTransactionId());
+        creLog.setNarration(rq.getNarration());
+        creLog.setRetryCount(0);
+        creLog.setResolved(false);
+        creLog.setStatus(CreditLogStatus.PENDING);
+        creLog.setCreatedAt(Instant.now());
+
         try {
             statusCode = 400;
 
@@ -211,7 +229,7 @@ public class UttilityMethods {
 
     }
 
-    public BaseResponse debitCustomerWithType(DebitWalletCaller rq, String type, String countryCode) {
+    public BaseResponse debitCustomerWithTypeOld(DebitWalletCaller rq, String type, String countryCode) {
         BaseResponse baseResponse = new BaseResponse();
         int statusCode = 500;
         String statusMessage = "An error occured,please try again";
@@ -263,7 +281,107 @@ public class UttilityMethods {
 
     }
 
-    public BaseResponse creditCustomer(CreditWalletCaller rq) {
+    public BaseResponse debitCustomerWithType(DebitWalletCaller rq, String type, String countryCode) throws JsonProcessingException {
+        BaseResponse baseResponse = new BaseResponse();
+        int statusCode = 500;
+        String statusMessage = "An error occured,please try again";
+        CreateDebitLog creLog = new CreateDebitLog();
+        creLog.setPayloadType(type);
+        creLog.setRequestJson(objectMapper.writeValueAsString(rq));
+        creLog.setTransactionId(rq.getTransactionId());
+        creLog.setNarration(rq.getNarration());
+        creLog.setRetryCount(0);
+        creLog.setResolved(false);
+        creLog.setStatus(CreditLogStatus.PENDING);
+        creLog.setCreatedAt(Instant.now());
+
+        try {
+            statusCode = 400;
+
+            creLog = createDebitLogRepository.save(creLog);
+
+            BaseResponse response = restTemplate.postForObject("http://" + "utilities-service" + "/walletmgt/account/debit-Wallet-phone",
+                    rq, BaseResponse.class);
+            System.out.println("debitCustomer Response from core ::::::::::::::::  %S  " + new Gson().toJson(response));
+            int code = (response == null) ? -1 : response.getStatusCode();
+
+            if (code == 200) {
+                creLog.setStatus(CreditLogStatus.SUCCESS);
+                creLog.setResolved(true);
+
+            } else if (code >= 400 && code < 600) {
+                creLog.setStatus(CreditLogStatus.FAILED);
+                creLog.setResolved(false);
+
+            } else {
+                creLog.setStatus(CreditLogStatus.UNKNOWN);
+                creLog.setResolved(false);
+            }
+
+            createDebitLogRepository.save(creLog);
+            return response;
+
+        } catch (Exception ex) {
+            creLog.setStatus(isTimeout(ex) ? CreditLogStatus.UNKNOWN : CreditLogStatus.FAILED);
+            creLog.setResolved(false);
+            creLog.setRetryCount(creLog.getRetryCount() + 1);
+            createDebitLogRepository.save(creLog);
+
+            // your method signature doesn't declare Exception, so wrap it
+            throw new RuntimeException("debitWallet failed for txId=" + rq.getTransactionId(), ex);
+        }
+    }
+
+    public BaseResponse creditCustomer(CreditWalletCaller caller)
+            throws MalformedURLException, JsonProcessingException {
+
+        CreateCreditLog creLog = new CreateCreditLog();
+        creLog.setPayloadType("LocalTransfer");
+        creLog.setRequestJson(objectMapper.writeValueAsString(caller));
+        creLog.setTransactionId(caller.getTransactionId());
+        creLog.setNarration(caller.getNarration());
+        creLog.setRetryCount(0);
+        creLog.setResolved(false);
+        creLog.setStatus(CreditLogStatus.PENDING);
+        creLog.setCreatedAt(Instant.now());
+
+        try {
+
+            creLog = createCreditLogRepository.save(creLog);
+
+            BaseResponse response = restTemplate.postForObject("http://" + "utilities-service" + "/walletmgt/account/credit-Wallet-phone",
+                    caller, BaseResponse.class);
+
+            int code = (response == null) ? -1 : response.getStatusCode();
+
+            if (code == 200) {
+                creLog.setStatus(CreditLogStatus.SUCCESS);
+                creLog.setResolved(true);
+
+            } else if (code >= 400 && code < 600) {
+                creLog.setStatus(CreditLogStatus.FAILED);
+                creLog.setResolved(false);
+
+            } else {
+                creLog.setStatus(CreditLogStatus.UNKNOWN);
+                creLog.setResolved(false);
+            }
+
+            createCreditLogRepository.save(creLog);
+            return response;
+
+        } catch (Exception ex) {
+            creLog.setStatus(isTimeout(ex) ? CreditLogStatus.UNKNOWN : CreditLogStatus.FAILED);
+            creLog.setResolved(false);
+            creLog.setRetryCount(creLog.getRetryCount() + 1);
+            createCreditLogRepository.save(creLog);
+
+            // your method signature doesn't declare Exception, so wrap it
+            throw new RuntimeException("creditWallet failed for txId=" + caller.getTransactionId(), ex);
+        }
+    }
+
+    /*public BaseResponse creditCustomer(CreditWalletCaller rq) {
         BaseResponse baseResponse = new BaseResponse();
         int statusCode = 500;
         String statusMessage = "An error occured,please try again";
@@ -299,9 +417,9 @@ public class UttilityMethods {
 
         return baseResponse;
 
-    }
+    }*/
 
-    public BaseResponse creditCustomerWithType(CreditWalletCaller rq, String type) {
+ /*public BaseResponse creditCustomerWithType(CreditWalletCaller rq, String type) {
         BaseResponse baseResponse = new BaseResponse();
         int statusCode = 500;
         String statusMessage = "An error occured,please try again";
@@ -337,6 +455,93 @@ public class UttilityMethods {
 
         return baseResponse;
 
+    }*/
+    public BaseResponse creditCustomerWithType(CreditWalletCaller caller, String type)
+            throws MalformedURLException, JsonProcessingException {
+
+        CreateCreditLog creLog = new CreateCreditLog();
+        creLog.setPayloadType(type);
+        creLog.setRequestJson(objectMapper.writeValueAsString(caller));
+        creLog.setTransactionId(caller.getTransactionId());
+        creLog.setNarration(caller.getNarration());
+        creLog.setRetryCount(0);
+        creLog.setResolved(false);
+        creLog.setStatus(CreditLogStatus.PENDING);
+        creLog.setCreatedAt(Instant.now());
+
+        creLog = createCreditLogRepository.save(creLog);
+
+        try {
+
+            BaseResponse response = restTemplate.postForObject("http://" + "utilities-service" + "/walletmgt/account/credit-Wallet-phone",
+                    caller, BaseResponse.class);
+
+            int code = (response == null) ? -1 : response.getStatusCode();
+
+            if (code == 200) {
+                creLog.setStatus(CreditLogStatus.SUCCESS);
+                creLog.setResolved(true);
+
+            } else if (code >= 400 && code < 600) {
+                creLog.setStatus(CreditLogStatus.FAILED);
+                creLog.setResolved(false);
+
+            } else {
+                creLog.setStatus(CreditLogStatus.UNKNOWN);
+                creLog.setResolved(false);
+            }
+
+            createCreditLogRepository.save(creLog);
+            return response;
+
+        } catch (Exception ex) {
+            creLog.setStatus(isTimeout(ex) ? CreditLogStatus.UNKNOWN : CreditLogStatus.FAILED);
+            creLog.setResolved(false);
+            creLog.setRetryCount(creLog.getRetryCount() + 1);
+            createCreditLogRepository.save(creLog);
+
+            // your method signature doesn't declare Exception, so wrap it
+            throw new RuntimeException("creditWallet failed for txId=" + caller.getTransactionId(), ex);
+        }
+    }
+
+    private boolean isTimeout(Throwable ex) {
+        Throwable t = ex;
+
+        while (t != null) {
+
+            // Java 8 standard timeout types
+            if (t instanceof java.net.SocketTimeoutException
+                    || t instanceof java.util.concurrent.TimeoutException
+                    || t instanceof java.io.InterruptedIOException) { // common for OkHttp read timeouts
+                return true;
+            }
+
+            // Spring often wraps IO timeouts as ResourceAccessException (RestTemplate)
+            if (t instanceof org.springframework.web.client.ResourceAccessException) {
+                Throwable cause = t.getCause();
+                if (cause instanceof java.net.SocketTimeoutException
+                        || cause instanceof java.io.InterruptedIOException) {
+                    return true;
+                }
+            }
+
+            // Heuristic for common client libs (Feign/OkHttp/Netty/Apache HC)
+            String name = t.getClass().getName();
+            if (name != null) {
+                String lower = name.toLowerCase();
+                if (lower.contains("readtimeout")
+                        || lower.contains("connecttimeout")
+                        || lower.contains("timeout")
+                        || lower.contains("retryableexception")) {
+                    return true;
+                }
+            }
+
+            t = t.getCause();
+        }
+
+        return false;
     }
 
     public List<String> getNO_PERMITTED_TRASANCTIONList() {

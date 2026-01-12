@@ -1,6 +1,7 @@
 package com.finacial.wealth.backoffice.auth.entity;
 
 import jakarta.persistence.*;
+import java.time.Instant;
 import lombok.*;
 
 import java.time.LocalDateTime;
@@ -16,9 +17,7 @@ import java.util.Set;
 @Builder
 public class BoAdminUser {
 
-    public enum Status {
-        ACTIVE, SUSPENDED
-    }
+    public enum Status { ACTIVE, SUSPENDED }
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -41,7 +40,6 @@ public class BoAdminUser {
     private int failedAttempts;
 
     private LocalDateTime lockedUntil;
-
     private LocalDateTime lastLoginAt;
 
     @Column(nullable = false)
@@ -58,28 +56,25 @@ public class BoAdminUser {
 
     @Column(nullable = false)
     private LocalDateTime updatedAt;
-    
-    private String password;
-    private boolean enabled;
-    
-    private String mfaSecret;
 
     @Builder.Default
     @ManyToMany(fetch = FetchType.EAGER)
     @JoinTable(
-            name = "bo_admin_user_role",
-            joinColumns = @JoinColumn(name = "user_id"),
-            inverseJoinColumns = @JoinColumn(name = "role_id")
+        name = "bo_admin_user_role",
+        joinColumns = @JoinColumn(name = "user_id"),
+        inverseJoinColumns = @JoinColumn(name = "role_id")
     )
     private Set<BoAdminRole> roles = new HashSet<>();
+
+    @Transient private String password;
+    @Transient private boolean enabled;
+    @Transient private String mfaSecret;
 
     @PrePersist
     void prePersist() {
         createdAt = LocalDateTime.now();
         updatedAt = createdAt;
-        if (status == null) {
-            status = Status.ACTIVE;
-        }
+        if (status == null) status = Status.ACTIVE;
     }
 
     @PreUpdate
@@ -87,3 +82,4 @@ public class BoAdminUser {
         updatedAt = LocalDateTime.now();
     }
 }
+

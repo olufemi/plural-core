@@ -16,8 +16,10 @@ import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Base64;
 
+//@RestController
+//@RequestMapping("/bo/auth")
 @RestController
-@RequestMapping("/bo/auth")
+@RequestMapping({"/bo/auth", "/auth"})
 @RequiredArgsConstructor
 public class AuthController {
 
@@ -26,26 +28,31 @@ public class AuthController {
     private final TotpService totpService;
     private final BoAdminUserRepository userRepo;
     private final CryptoBox cryptoBox;
-    
-  private final BoMfaChallengeRepository mfaChallengeRepo;
 
- 
+    private final BoMfaChallengeRepository mfaChallengeRepo;
 
     @PostMapping("/login")
     public ResponseEntity<?> login(@RequestBody LoginRequest req) {
         BoAdminUser user = authService.validatePasswordOrThrow(req.getEmail(), req.getPassword());
 
-        if (!user.isMfaEnabled()) {
+        boolean mfaProperlyEnabled
+                = user.isMfaEnabled()
+                && user.getTotpSecretEnc() != null
+                && user.getTotpSecretIv() != null;
+
+        // If DB was toggled wrongly: enabled=true but secret missing → force setup
+        if (user.isMfaEnabled() && !mfaProperlyEnabled) {
+            return ResponseEntity.ok(new LoginStep1Response("MFA_SETUP_REQUIRED", null));
+        }
+
+        if (!mfaProperlyEnabled) {
             String access = jwtService.issueAccessToken(user);
             String refresh = authService.issueRefreshToken(user);
             return ResponseEntity.ok(new TokenResponse(access, refresh));
         }
 
-        // ✅ server-side challenge
-        String challengeId = authService.createMfaChallenge(user.getId()); // 5 mins expiry
+        String challengeId = authService.createMfaChallenge(user.getId());
         return ResponseEntity.ok(new LoginStep1Response("MFA_REQUIRED", challengeId));
-        
-        
     }
 
     //@PostMapping("/login")
@@ -75,7 +82,7 @@ public class AuthController {
         return ResponseEntity.ok(new TokenResponse(access, refresh));
     }
 
-   // @PostMapping("/mfa/verify")
+    // @PostMapping("/mfa/verify")
     public ResponseEntity<TokenResponse> verifyMfaOld(@RequestBody MfaVerifyRequest req) {
         String decoded = new String(Base64.getDecoder().decode(req.getMfaToken()), StandardCharsets.UTF_8);
         Long userId = Long.valueOf(decoded.split(":")[0]);

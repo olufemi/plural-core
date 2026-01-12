@@ -8,8 +8,19 @@ package com.finacial.wealth.backoffice.auth.dto;
  *
  * @author olufemioshin
  */
-public record MfaSetupResponse(
-        String qrDataUri,
-        String email,
-        String issuer
-) {}
+
+public class MfaSetupResponse {
+    private String qrDataUri;
+    private String email;
+    private String issuer;
+
+    public MfaSetupResponse(String qrDataUri, String email, String issuer) {
+        this.qrDataUri = qrDataUri;
+        this.email = email;
+        this.issuer = issuer;
+    }
+
+    public String getQrDataUri() { return qrDataUri; }
+    public String getEmail() { return email; }
+    public String getIssuer() { return issuer; }
+}

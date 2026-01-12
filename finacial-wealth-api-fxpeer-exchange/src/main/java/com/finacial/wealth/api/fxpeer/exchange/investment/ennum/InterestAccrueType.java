@@ -8,4 +8,9 @@ package com.finacial.wealth.api.fxpeer.exchange.investment.ennum;
  *
  * @author olufemioshin
  */
-public enum ScheduleMode { RELATIVE, FIXED, CAPITALIZATION }
+public enum InterestAccrueType {
+    DAILY,
+    WEEKLY,
+    QUARTERLY,
+    BIANNUALY
+}

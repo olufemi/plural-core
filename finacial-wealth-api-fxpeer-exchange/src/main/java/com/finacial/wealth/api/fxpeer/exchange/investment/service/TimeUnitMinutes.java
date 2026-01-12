@@ -10,6 +10,7 @@ import com.finacial.wealth.api.fxpeer.exchange.investment.ennum.ScheduleMode;
 import com.finacial.wealth.api.fxpeer.exchange.investment.record.UpdateProductScheduleRq;
 import com.finacial.wealth.api.fxpeer.exchange.investment.repo.InvestmentProductRepository;
 import jakarta.transaction.Transactional;
+import java.time.DayOfWeek;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -21,7 +22,7 @@ import java.time.ZoneId;
  * @author olufemioshin
  */
 public final class TimeUnitMinutes {
-    
+
     private final InvestmentProductRepository productRepo;
 
     public TimeUnitMinutes(InvestmentProductRepository productRepo) {
@@ -63,22 +64,70 @@ public final class TimeUnitMinutes {
         return subscribedAt.plus(Duration.ofMinutes(p.getSettlementDelayMinutes()));
     }
 
-    public static Instant computeMaturityAt(InvestmentProduct p, Instant settlementAt) {
+    public static Instant computeMaturityAt(
+            InvestmentProduct p,
+            Instant settlementAt
+    ) {
+        ZoneId zone = ZONE; // Africa/Lagos
+
+        // 1️⃣ FIXED maturity (absolute date)
         if (p.getScheduleMode() == ScheduleMode.FIXED
                 && p.getMaturityAt() != null) {
             return p.getMaturityAt();
         }
 
-        // RELATIVE: minutes base
-        Instant rawMaturity = settlementAt.plus(Duration.ofMinutes(p.getTenorMinutes()));
+        // 2️⃣ RELATIVE maturity (legacy / testing)
+        if (p.getScheduleMode() == ScheduleMode.RELATIVE
+                && p.getTenorMinutes() != null) {
 
-        if (!Boolean.TRUE.equals(p.getMaturityAtEndOfDay())) {
-            return rawMaturity; // exact minute maturity
+            Instant raw = settlementAt.plus(Duration.ofMinutes(p.getTenorMinutes()));
+
+            if (!Boolean.TRUE.equals(p.getMaturityAtEndOfDay())) {
+                return raw;
+            }
+
+            LocalDate d = raw.atZone(zone).toLocalDate();
+            return d.atTime(LocalTime.MAX).atZone(zone).toInstant();
         }
 
-        // If you still want "end of maturity day"
-        LocalDate maturityDate = rawMaturity.atZone(ZONE).toLocalDate();
-        return maturityDate.atTime(LocalTime.MAX).atZone(ZONE).toInstant();
+        // 3️⃣ CAPITALIZATION-based maturity (✅ new correct logic)
+        if (p.getScheduleMode() == ScheduleMode.CAPITALIZATION) {
+
+            LocalDate settleDate
+                    = settlementAt.atZone(zone).toLocalDate();
+
+            LocalDate maturityDate = switch (p.getInterestCapitalization()) {
+
+                case DAILY ->
+                    settleDate;
+
+                case WEEKLY ->
+                    settleDate.with(
+                    java.time.temporal.TemporalAdjusters
+                    .nextOrSame(DayOfWeek.SUNDAY)
+                    );
+
+                case MONTHLY ->
+                    settleDate.with(
+                    java.time.temporal.TemporalAdjusters
+                    .lastDayOfMonth()
+                    );
+
+                case QUARTERLY ->
+                    getQuarterEnd(settleDate);
+
+                case BIANNUALY ->
+                    getBiAnnualEnd(settleDate);
+            };
+
+            return maturityDate
+                    .atTime(LocalTime.MAX)
+                    .atZone(zone)
+                    .toInstant();
+        }
+
+        throw new IllegalStateException(
+                "Unable to compute maturity for product " + p.getProductCode());
     }
 
     @Transactional
@@ -97,5 +146,31 @@ public final class TimeUnitMinutes {
         }
 
         return productRepo.save(p);
+    }
+
+    private static LocalDate getQuarterEnd(LocalDate d) {
+        int y = d.getYear();
+        int m = d.getMonthValue();
+
+        if (m <= 3) {
+            return LocalDate.of(y, 3, 31);
+        }
+        if (m <= 6) {
+            return LocalDate.of(y, 6, 30);
+        }
+        if (m <= 9) {
+            return LocalDate.of(y, 9, 30);
+        }
+        return LocalDate.of(y, 12, 31);
+    }
+
+    private static LocalDate getBiAnnualEnd(LocalDate d) {
+        int y = d.getYear();
+        int m = d.getMonthValue();
+
+        if (m <= 6) {
+            return LocalDate.of(y, 6, 30);
+        }
+        return LocalDate.of(y, 12, 31);
     }
 }

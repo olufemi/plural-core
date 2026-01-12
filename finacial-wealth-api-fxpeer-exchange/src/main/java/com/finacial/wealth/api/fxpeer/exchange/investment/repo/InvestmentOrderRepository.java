@@ -6,6 +6,7 @@ package com.finacial.wealth.api.fxpeer.exchange.investment.repo;
 
 import com.finacial.wealth.api.fxpeer.exchange.investment.domain.InvestmentOrder;
 import com.finacial.wealth.api.fxpeer.exchange.investment.domain.InvestmentPosition;
+import com.finacial.wealth.api.fxpeer.exchange.investment.domain.InvestmentProduct;
 import com.finacial.wealth.api.fxpeer.exchange.investment.ennum.InvestmentOrderStatus;
 import com.finacial.wealth.api.fxpeer.exchange.offer.Offer;
 import org.springframework.data.repository.CrudRepository;
@@ -53,5 +54,10 @@ public interface InvestmentOrderRepository extends JpaRepository<InvestmentOrder
           and p.status in (com.finacial.wealth.api.fxpeer.exchange.investment.ennum.InvestmentOrderStatus.ACTIVE)
         """)
     List<InvestmentOrder> findActiveByEmailAddress(String emailAddress);
+
+    List<InvestmentOrder> findByProductAndStatus(
+            InvestmentProduct product,
+            InvestmentOrderStatus status
+    );
 
 }

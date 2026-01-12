@@ -4,6 +4,7 @@
  */
 package com.finacial.wealth.api.fxpeer.exchange.investment.domain;
 
+import com.finacial.wealth.api.fxpeer.exchange.investment.ennum.InterestCapitalization;
 import com.finacial.wealth.api.fxpeer.exchange.investment.ennum.InvestmentPositionStatus;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -16,6 +17,7 @@ import lombok.Data;
 import jakarta.persistence.*;
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
 
 /**
  *
@@ -44,14 +46,14 @@ public class InvestmentPosition {
     private BigDecimal units;            // units currently held
 
     @Column(nullable = false, precision = 19, scale = 2)
-    private BigDecimal investedAmount;   // original capital
+    private BigDecimal investedAmount;   // original capital // capital
 
     @Column(nullable = false, precision = 19, scale = 2)
-    private BigDecimal currentValue;     // capital + accrued interest
+    private BigDecimal currentValue;     // capital + accrued interest // investedAmount + accruedInterest
 
     @Column(nullable = false, precision = 19, scale = 2)
-    private BigDecimal accruedInterest;  // for display
-    private BigDecimal totalAccruedInterest;
+    private BigDecimal accruedInterest;  // for display // not yet capitalized
+    private BigDecimal totalAccruedInterest; //lifetime (optional audit)
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 32)
@@ -72,6 +74,14 @@ public class InvestmentPosition {
 
     @Column
     private Instant maturityAt;
+
+    @Column(name = "interest_start_date", nullable = false)
+    private LocalDate interestStartDate; //T+1 accrual start
+
+    @Enumerated(EnumType.STRING)
+    private InterestCapitalization interestCapitalization;
+    
+    private LocalDate lastCapitalizationDate;    // prevents double sweeps
 
     // getters/setters
 }

@@ -12,8 +12,10 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+//@RestController
+//@RequestMapping("/bo/auth/mfa")
 @RestController
-@RequestMapping("/bo/auth/mfa")
+@RequestMapping({"/bo/auth/mfa", "/auth/mfa"})
 @RequiredArgsConstructor
 public class MfaController {
 
@@ -25,7 +27,11 @@ public class MfaController {
     private String issuer;
 
     @PostMapping("/setup")
-    public ResponseEntity<MfaSetupResponse> setup(@RequestAttribute("boAdminUserId") Long adminUserId) {
+    public ResponseEntity<MfaSetupResponse> setup(
+            @RequestAttribute(value = "boAdminUserId", required = false) Long adminUserId
+    ) {
+        var a = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+        System.out.println("SETUP AUTH = " + a);
 
         BoAdminUser user = userRepo.findById(adminUserId)
                 .orElseThrow(() -> new IllegalArgumentException("User not found"));
@@ -41,11 +47,13 @@ public class MfaController {
         String qrDataUri = totpService.buildQrDataUri(user.getEmail(), issuer, secret);
 
         // ✅ Frontend displays QR + email label; app automatically uses it
+        // return ResponseEntity.ok(new MfaSetupResponse(qrDataUri, user.getEmail(), issuer));
         return ResponseEntity.ok(new MfaSetupResponse(qrDataUri, user.getEmail(), issuer));
+
     }
 
     //@PostMapping("/setup")
-    public ResponseEntity<MfaSetupResponse> setupOld(@RequestAttribute("boAdminUserId") Long adminUserId) {
+    /* public ResponseEntity<MfaSetupResponse> setupOld(@RequestAttribute("boAdminUserId") Long adminUserId) {
         BoAdminUser user = userRepo.findById(adminUserId)
                 .orElseThrow(() -> new IllegalArgumentException("User not found"));
 
@@ -58,9 +66,9 @@ public class MfaController {
         userRepo.save(user);
 
         String qrDataUri = totpService.buildQrDataUri(user.getEmail(), issuer, secret);
-        return ResponseEntity.ok(new MfaSetupResponse(qrDataUri, secret));
-    }
+        return ResponseEntity.ok(new MfaSetupResponse(qrDataUri, user.getEmail()));
 
+    }*/
     @PostMapping("/confirm")
     public ResponseEntity<Void> confirm(
             @RequestAttribute("boAdminUserId") Long adminUserId,
@@ -114,10 +122,7 @@ public class MfaController {
     public static class MfaSetupResponse {
 
         private String qrDataUri;
-        private String manualKey; // helpful fallback
-
-        private MfaSetupResponse(String qrDataUri, String email, String suer) {
-            throw new UnsupportedOperationException("Not supported yet."); // Generated from nbfs://nbhost/SystemFileSystem/Templates/Classes/Code/GeneratedMethodBody
-        }
+        private String email;
+        private String issuer;
     }
 }

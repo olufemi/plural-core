@@ -16,5 +16,6 @@ public enum InvestmentOrderStatus {
     FAILED,             // Failed (funds restored)
     CANCELLED,
     ACTIVE,
-    MATURED
+    MATURED,
+    LIQUIDATION_PROCESSING
 }

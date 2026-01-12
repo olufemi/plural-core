@@ -13,6 +13,8 @@ import java.math.BigDecimal;
 public record LiquidateInvestmentRequest(
        // Long positionId,
         BigDecimal liquidationAmount, // if null => full liquidation
-        String orderId
+        String orderId,
+        boolean fullLiquidation
+        
        
 ) {}

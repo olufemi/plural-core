@@ -4,6 +4,8 @@
  */
 package com.finacial.wealth.api.fxpeer.exchange.investment.service;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finacial.wealth.api.fxpeer.exchange.common.BusinessException;
 import com.finacial.wealth.api.fxpeer.exchange.common.NotFoundException;
 import com.finacial.wealth.api.fxpeer.exchange.domain.AddAccountDetails;
@@ -21,6 +23,8 @@ import com.finacial.wealth.api.fxpeer.exchange.inter.airtime.security.ProcessTrn
 import com.finacial.wealth.api.fxpeer.exchange.investment.domain.InvestmentOrder;
 import com.finacial.wealth.api.fxpeer.exchange.investment.domain.InvestmentPosition;
 import com.finacial.wealth.api.fxpeer.exchange.investment.domain.InvestmentProduct;
+import com.finacial.wealth.api.fxpeer.exchange.investment.ennum.InterestCapitalization;
+import static com.finacial.wealth.api.fxpeer.exchange.investment.ennum.InterestCapitalization.WEEKLY;
 import com.finacial.wealth.api.fxpeer.exchange.investment.ennum.InvestmentOrderStatus;
 import com.finacial.wealth.api.fxpeer.exchange.investment.ennum.InvestmentOrderType;
 import com.finacial.wealth.api.fxpeer.exchange.investment.ennum.InvestmentPositionStatus;
@@ -56,6 +60,9 @@ import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.LocalTime;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -71,6 +78,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
+import java.util.UUID;
 
 /**
  *
@@ -538,6 +546,7 @@ public class InvestmentOrderService {
         InvestmentOrder order = new InvestmentOrder();
         order.setOrderRef(rq.orderRef());
         order.setIdempotencyKey(rq.idempotencyKey());
+        order.setParentOrderRef(String.valueOf("ORID_")+GlobalMethods.generateTransactionId());
         order.setEmailAddress(rq.emailAddress());
         order.setWalletId(rq.walletId());
         order.setProduct(rq.product());
@@ -622,72 +631,99 @@ public class InvestmentOrderService {
      * wallet (confirm hold) - Creates/updates InvestmentPosition - Logs
      * activity
      */
-    //@Scheduled(cron = "0 55 23 * * *", zone = "Africa/Lagos")
     @Transactional
-    @Scheduled(cron = "${fx.investment.run.approve.subscription.cron}")
-    public void onSubscriptionSettled() {
-        System.out.println(" ****** Investment Checking and Processing OnSubscription to ACTIVATE  >>>>>>>>>>>>>   *********** ");
+    @Scheduled(cron = "${fx.investment.run.approve.subscription.cron}", zone = "Africa/Lagos")
+    public void approvePendingSubscriptions() {
 
-        List<InvestmentOrder> getOrderr = orderRepo.findAllByStatus(InvestmentOrderStatus.PENDING);
+        System.out.println("****** Investment Subscription Approval Job ******");
 
-        for (InvestmentOrder getRec : getOrderr) {
-            // Confirm wallet debit for amount + fees
-            BigDecimal grossDebit = getRec.getAmount().add(getRec.getFees());
-            //walletClient.confirmInvestmentDebit(order.getWalletId(), orderRef);
+        ZoneId zone = ZoneId.of("Africa/Lagos");
+        LocalDate today = LocalDate.now(zone);
+        LocalTime now = LocalTime.now(zone);
 
-            // Create or update position
-            var existingPositionOpt = positionRepo.findActiveByEmailAddressAndProductAndOrderRef(getRec.getEmailAddress(), getRec.getProduct().getId(), getRec.getOrderRef());
+        // 1) Load active products
+        List<InvestmentProduct> products = productRepo.findByActiveTrue();
 
-            InvestmentPosition position = existingPositionOpt.orElseGet(() -> {
-                InvestmentPosition p = new InvestmentPosition();
-                p.setEmailAddress(getRec.getEmailAddress());
-                p.setWalletId(getRec.getWalletId());
-                p.setProduct(getRec.getProduct());
-                p.setUnits(BigDecimal.ZERO);
-                p.setInvestedAmount(BigDecimal.ZERO);
-                p.setCurrentValue(BigDecimal.ZERO);
-                p.setAccruedInterest(BigDecimal.ZERO);
-                p.setStatus(InvestmentPositionStatus.ACTIVE);
-                p.setCreatedAt(Instant.now());
-                p.setUpdatedAt(Instant.now());
-                p.setOrderRef(getOrderr.get(0).getOrderRef());
-                p.setProductName(getOrderr.get(0).getProduct().getName());
-                return p;
-            });
+        for (InvestmentProduct product : products) {
 
-            position.setUnits(getRec.getUnits());
-            position.setInvestedAmount(getRec.getAmount());
-            position.setCurrentValue(getRec.getAmount());
+            LocalTime cutoff = product.getSubscriptionCutOffTime();
+            /*if (cutoff == null || now.isBefore(cutoff)) {
+                //
+                continue; // not yet time to approve this product
+            }*/
 
-            position.setUpdatedAt(Instant.now());
-            position.setAccruedInterest(BigDecimal.ZERO);
+            // 2) Fetch ONLY pending orders for THIS product
+            List<InvestmentOrder> pendingOrders
+                    = orderRepo.findByProductAndStatus(product, InvestmentOrderStatus.PENDING);
 
-            Instant subscribedAt = Instant.now();
-            Instant settlementAt = TimeUnitMinutes.computeSettlementAt(getRec.getProduct(), subscribedAt);
-            Instant maturityAt = TimeUnitMinutes.computeMaturityAt(getRec.getProduct(), settlementAt);
+            for (InvestmentOrder order : pendingOrders) {
 
-            position.setSettlementAt(settlementAt);
-            position.setEmailAddress(getRec.getEmailAddress());
-            position.setMaturityAt(maturityAt);
-            position.setStatus(InvestmentPositionStatus.ACTIVE);
-            position.setOrderRef(getRec.getOrderRef());
-            position.setProductName(getRec.getProduct().getName());
-            positionRepo.save(position);
+                // 3) Idempotency guard
+                if (order.getStatus() != InvestmentOrderStatus.PENDING) {
+                    continue;
+                }
 
-            getRec.setPosition(position);
-            getRec.setStatus(InvestmentOrderStatus.ACTIVE);
-            getRec.setUpdatedAt(Instant.now());
-            orderRepo.save(getRec);
+                BigDecimal grossDebit = order.getAmount().add(order.getFees());
 
-            // ✅ create day-0 history snapshot
-            investmentHistoryService.createInitialHistory(position, getRec.getEmailAddress(), getRec.getProduct().getMaturityAt(), getRec.getOrderRef());
+                // 4) Create or load position (1 position per order)
+                InvestmentPosition position = positionRepo
+                        .findByOrderRef(order.getOrderRef())
+                        .orElseGet(() -> {
+                            InvestmentPosition p = new InvestmentPosition();
+                            p.setEmailAddress(order.getEmailAddress());
+                            p.setWalletId(order.getWalletId());
+                            p.setProduct(product);
+                            p.setUnits(BigDecimal.ZERO);
+                            p.setInvestedAmount(BigDecimal.ZERO);
+                            p.setCurrentValue(BigDecimal.ZERO);
+                            p.setAccruedInterest(BigDecimal.ZERO);
+                            p.setStatus(InvestmentPositionStatus.ACTIVE);
+                            p.setCreatedAt(Instant.now());
+                            return p;
+                        });
 
-            // Activity + notification
-            activityService.logInvestmentSubscription(getRec, position, grossDebit);
+                // 5) Populate position
+                position.setUnits(order.getUnits());
+                position.setInvestedAmount(order.getAmount());
+                position.setCurrentValue(order.getAmount());
+                position.setAccruedInterest(BigDecimal.ZERO);
+                position.setOrderRef(order.getOrderRef());
+                position.setProductName(product.getName());
+                position.setUpdatedAt(Instant.now());
 
-            // optional: emit event for realtime UI updates
+                Instant subscribedAt = Instant.now();
+                Instant settlementAt = TimeUnitMinutes.computeSettlementAt(product, subscribedAt);
+                Instant maturityAt = TimeUnitMinutes.computeMaturityAt(product, settlementAt);
+
+                position.setSettlementAt(settlementAt);
+                position.setMaturityAt(maturityAt);
+
+                LocalDate subscribedDate = LocalDate.now(zone);
+
+// Always start accrual next day (for DAILY accrual products)
+                LocalDate startDate = subscribedDate.plusDays(1);
+                position.setInterestStartDate(startDate);
+
+                positionRepo.save(position);
+
+                // 6) Activate order
+                order.setPosition(position);
+                order.setStatus(InvestmentOrderStatus.ACTIVE);
+                order.setUpdatedAt(Instant.now());
+                orderRepo.save(order);
+
+                // 7) Create day-0 history (idempotent)
+                investmentHistoryService.createInitialHistory(
+                        position,
+                        order.getEmailAddress(),
+                        maturityAt,
+                        order.getOrderRef()
+                );
+
+                // 8) Activity + notification
+                activityService.logInvestmentSubscription(order, position, grossDebit);
+            }
         }
-
     }
 
     private BigDecimal computeSubscriptionFees(InvestmentProduct product, BigDecimal amount) {
@@ -703,6 +739,81 @@ public class InvestmentOrderService {
             return BigDecimal.ONE;
         }
         return amount.divide(product.getUnitPrice(), 8, RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal computeEntireMarketValuesLiquidationFee(
+            InvestmentProduct product,
+            BigDecimal marketValue
+    ) {
+        if (marketValue == null || marketValue.compareTo(BigDecimal.ZERO) <= 0) {
+            return BigDecimal.ZERO;
+        }
+
+        InterestCapitalization cap
+                = product.getInterestCapitalization() != null
+                ? product.getInterestCapitalization()
+                : InterestCapitalization.DAILY;
+
+        BigDecimal percent = getFeePercentFromMeta(product, cap);
+        BigDecimal minFee = getMinFeeFromMeta(product);
+
+        BigDecimal fee = marketValue
+                .multiply(percent)
+                .divide(BigDecimal.valueOf(100), 8, RoundingMode.HALF_UP)
+                .setScale(2, RoundingMode.HALF_UP);
+
+        return fee.max(minFee);
+    }
+
+    private BigDecimal getFeePercentFromMeta(
+            InvestmentProduct product,
+            InterestCapitalization cap
+    ) {
+        try {
+            if (product.getMetaJson() == null) {
+                return defaultPercent(cap);
+            }
+
+            JsonNode root = new ObjectMapper().readTree(product.getMetaJson());
+            JsonNode fees = root.path("liquidationFees");
+            JsonNode val = fees.path(cap.name());
+
+            if (val.isMissingNode()) {
+                return defaultPercent(cap);
+            }
+            return new BigDecimal(val.asText());
+        } catch (Exception e) {
+            return defaultPercent(cap);
+        }
+    }
+
+    private BigDecimal getMinFeeFromMeta(InvestmentProduct product) {
+        try {
+            if (product.getMetaJson() == null) {
+                return BigDecimal.ZERO;
+            }
+            JsonNode root = new ObjectMapper().readTree(product.getMetaJson());
+            return root.has("minLiquidationFee")
+                    ? new BigDecimal(root.get("minLiquidationFee").asText())
+                    : BigDecimal.ZERO;
+        } catch (Exception e) {
+            return BigDecimal.ZERO;
+        }
+    }
+
+    private BigDecimal defaultPercent(InterestCapitalization cap) {
+        return switch (cap) {
+            case DAILY ->
+                new BigDecimal("1.50");
+            case WEEKLY ->
+                new BigDecimal("1.20");
+            case MONTHLY ->
+                new BigDecimal("1.20");
+            case QUARTERLY ->
+                new BigDecimal("0.75");
+            case BIANNUALY ->
+                new BigDecimal("0.50");
+        };
     }
 
     private BigDecimal computeLiquidationFees(InvestmentProduct product, BigDecimal liquidationAmount) {
@@ -744,203 +855,152 @@ public class InvestmentOrderService {
         return BigDecimal.ZERO;
     }
 
+    @Transactional
     public BaseResponse requestLiquidation(
             LiquidateInvestmentRequest rq, String auth) {
+
         BaseResponse res = new BaseResponse();
-        try {
-            String emailAddress = utilService.getClaimFromJwt(auth, "emailAddress");
-            var order = orderRepo.findByOrderRefAndEmailAddress(rq.orderId(), emailAddress)
-                    .orElseThrow(() -> new NotFoundException("Investment position not found"));
 
-            if (order.getStatus() != InvestmentOrderStatus.ACTIVE // && position.getStatus() != InvestmentPositionStatus.PARTIALLY_LIQUIDATED
-                    ) {
-                throw new BusinessException("Order is not eligible for liquidation.");
-            }
+        String emailAddress = utilService.getClaimFromJwt(auth, "emailAddress");
 
-            // Idempotency
-            /*orderRepo.findByOrderRef(rq.orderId()).ifPresent(o -> {
-            throw new BusinessException(
-                    "This order was just submitted. Check Activity for the status.");
-        });*/
-            Optional<InvestmentPosition> position = positionRepo.findByOrderRef(order.getOrderRef());
+        InvestmentOrder subscriptionOrder
+                = orderRepo.findByOrderRefAndEmailAddress(rq.orderId(), emailAddress)
+                        .orElseThrow(() -> new NotFoundException("Investment position not found"));
 
-            /*BigDecimal currentValue = position.getCurrentValue();
-        BigDecimal liquidationAmount = Optional.ofNullable(rq.liquidationAmount()).orElse(currentValue);*/
-            BigDecimal liquidationAmount = order.getAmountBalance();
-            if (liquidationAmount.compareTo(position.get().getCurrentValue()) > 0) {
-                throw new BusinessException("Liquidation amount cannot exceed current position value.");
-            }
-
-            if (liquidationAmount.compareTo(BigDecimal.ZERO) <= 0) {
-                throw new BusinessException("Liquidation amount must be greater than 0.");
-            }
-
-            // Fees + tax at execution
-            BigDecimal fees = computeLiquidationFees(position.get().getProduct(), liquidationAmount);
-            BigDecimal tax = computeTax(position.get().getProduct(), liquidationAmount);
-            BigDecimal netAmount = liquidationAmount.subtract(fees).subtract(tax);
-
-            if (netAmount.compareTo(BigDecimal.ZERO) <= 0) {
-                throw new BusinessException("Net amount after fees and tax is not positive.");
-            }
-
-            //String orderRef = "LIQ-" + UUID.randomUUID().toString().replace("-", "").substring(0, 12).toUpperCase();
-            InvestmentOrder orderUp = orderRepo.findByOrderRefDataUpdate(emailAddress);
-            // order.setOrderRef(orderRef);
-            //order.setIdempotencyKey(rq.idempotencyKey());
-            // order.setEmailAddress(emailAddress);
-            // order.setWalletId(position.getWalletId());
-            //order.setProduct(position.getProduct());
-            orderUp.setPosition(position.get());
-            orderUp.setType(InvestmentOrderType.LIQUIDATION);
-            //orderUp.setStatus(InvestmentOrderStatus.SENT_TO_PARTNER);
-            orderUp.setFees(fees);
-            orderUp.setTax(tax);
-            orderUp.setNetAmount(netAmount);
-            orderUp.setAmountBalance(liquidationAmount.subtract(netAmount));
-            orderUp.setCreatedAt(Instant.now());
-            orderUp.setUpdatedAt(Instant.now());
-            orderRepo.save(orderUp);
-
-            // Call partner for liquidation (no wallet hold needed; credit occurs on settlement):
-            /*var partnerResponse = partnerClient.liquidate(
-                    position.getProduct().getPartnerProductCode(),
-                    liquidationAmount,
-                    userId,
-                    orderRef
-            );*/
- /*order.setStatus(InvestmentOrderStatus.SENT_TO_PARTNER);
-            order.setPartnerOrderId("");
-            order.setUpdatedAt(Instant.now());
-            orderRepo.save(order);*/
-            onLiquidationSettled(rq.orderId());
-
-            /* if (partnerResponse.settled()) {
-                onLiquidationSettled(orderRef, partnerResponse);
-            }*/
- /*return new InvestmentOrderResponse(
-                    rq.orderId(),
-                    position.get().getProduct().getName(),
-                    liquidationAmount,
-                    fees,
-                    netAmount,
-                    order.getStatus()
-            );*/
-            Map mp = new HashMap();
-            mp.put("orderId", rq.orderId());
-            mp.put("productName", position.get().getProduct().getName());
-            mp.put("liquidationAmount", liquidationAmount);
-            mp.put("fees", fees);
-            mp.put("netAmount", netAmount);
-            mp.put("status", order.getStatus());
-            res.setDescription("Liquidation was Successful.");
-            res.setStatusCode(200);
-
-        } catch (Exception ex) {
-            //order.setStatus(InvestmentOrderStatus.FAILED);
-            //order.setFailureReason("Partner liquidation error: " + ex.getMessage());
-            //order.setUpdatedAt(Instant.now());
-            //orderRepo.save(order);
-            throw new BusinessException("We couldn’t process your request. Please try again shortly.");
+        if (subscriptionOrder.getStatus() != InvestmentOrderStatus.ACTIVE) {
+            throw new BusinessException("Order is not eligible for liquidation.");
         }
+
+        InvestmentPosition position
+                = positionRepo.findByOrderRef(subscriptionOrder.getOrderRef())
+                        .orElseThrow(() -> new BusinessException("Position not found"));
+
+        boolean fullLiquidation = rq.fullLiquidation();
+
+        BigDecimal liquidationBaseAmount;
+        if (fullLiquidation) {
+            // full market value
+            liquidationBaseAmount = position.getCurrentValue();
+        } else {
+            // partial liquidation – CAPITAL ONLY
+            liquidationBaseAmount = rq.liquidationAmount();
+            if (liquidationBaseAmount.compareTo(position.getInvestedAmount()) > 0) {
+                throw new BusinessException("Amount exceeds available capital.");
+            }
+        }
+
+        BigDecimal fees = computeLiquidationFees(
+                position.getProduct(), liquidationBaseAmount);
+
+        BigDecimal tax = computeTax(subscriptionOrder.getProduct(), liquidationBaseAmount);
+        BigDecimal netAmount = liquidationBaseAmount.subtract(fees).subtract(tax);
+
+        if (netAmount.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new BusinessException("Net amount after charges is not positive.");
+        }
+
+        // create liquidation order (ASYNC)
+        InvestmentOrder liqOrder = new InvestmentOrder();
+        liqOrder.setParentOrderRef(subscriptionOrder.getOrderRef());
+        liqOrder.setOrderRef(generateOrderRef("LIQ-"));
+        liqOrder.setEmailAddress(emailAddress);
+        liqOrder.setWalletId(position.getWalletId());
+        liqOrder.setProduct(position.getProduct());
+        liqOrder.setPosition(position);
+        liqOrder.setType(InvestmentOrderType.LIQUIDATION);
+        liqOrder.setStatus(InvestmentOrderStatus.LIQUIDATION_PROCESSING);
+        liqOrder.setAmount(liquidationBaseAmount);
+        liqOrder.setFees(fees);
+        liqOrder.setTax(tax);
+        liqOrder.setNetAmount(netAmount);
+        liqOrder.setCreatedAt(Instant.now());
+
+        orderRepo.save(liqOrder);
+
+        //activityService.logLiquidationProcessing(position, netAmount);
+        res.setStatusCode(202);
+        res.setDescription(
+                "Your liquidation request is processing. This may take some time.");
 
         return res;
     }
 
-    public BaseResponse onLiquidationSettled(String orderRef) {
+    private String generateOrderRef(String prefix) {
+        return prefix + "-"
+                + String.valueOf(GlobalMethods.generateTransactionId())
+                        .toString()
+                        .replace("-", "")
+                        .substring(0, 12)
+                        .toUpperCase();
+    }
+
+    @Transactional
+    public BaseResponse onLiquidationSettled(String liquidationOrderRef) {
+
         BaseResponse res = new BaseResponse();
-        var order = orderRepo.findByOrderRef(orderRef)
-                .orElseThrow(() -> new NotFoundException("Liquidation order not found"));
+
+        InvestmentOrder order
+                = orderRepo.findByOrderRef(liquidationOrderRef)
+                        .orElseThrow(() -> new NotFoundException("Liquidation order not found"));
 
         if (order.getStatus() == InvestmentOrderStatus.SETTLED) {
-            res.setStatusCode(400);
-            return res; // already processed
-        }
-
-        var position = order.getPosition();
-        if (position == null) {
-            throw new IllegalStateException("Liquidation order has no linked position.");
-        }
-
-        BigDecimal liquidationAmount = order.getNetAmount();       // amount cashed out
-        BigDecimal currentValue = position.getCurrentValue();    // full position value before liquidation
-        BigDecimal units = position.getUnits();                  // full units before liquidation
-
-        // ===============  FULL LIQUIDATION ==================
-        if (liquidationAmount.compareTo(currentValue) >= 0) {
-            BaseResponse procCredit = processCredit(orderRef, order.getEmailAddress());
-
-            if (procCredit.getStatusCode() != 200) {
-                res.setStatusCode(400);
-                res.setDescription(procCredit.getDescription());
-                return res;
-            }
-
-            position.setUnits(BigDecimal.ZERO);
-            position.setCurrentValue(BigDecimal.ZERO);
-            position.setStatus(InvestmentPositionStatus.FULLY_LIQUIDATED);
-            position.setUpdatedAt(Instant.now());
-            positionRepo.save(position);
-
-            // Credit wallet
-            /* walletClient.creditInvestmentLiquidation(
-                    order.getWalletId(),
-                    order.getOrderRef(),
-                    order.getNetAmount()
-            );*/
-            order.setAmountBalance(BigDecimal.ZERO);
-            order.setStatus(InvestmentOrderStatus.SETTLED);
-            //order.setStatus(InvestmentOrderStatus.SETTLED);
-            order.setUpdatedAt(Instant.now());
-            orderRepo.save(order);
-
-            activityService.logInvestmentLiquidation(order, position);
-
-        }
-
-        // ===============  PARTIAL LIQUIDATION ==================
-        // 1. remaining portfolio value
-        BigDecimal remainingValue = currentValue.subtract(liquidationAmount);
-
-        // 2. proportional units to keep (units × remainingValue/currentValue)
-        BigDecimal remainingUnits = units.multiply(
-                remainingValue.divide(currentValue, 8, RoundingMode.HALF_UP)
-        );
-
-        // update position
-        position.setUnits(remainingUnits);
-        position.setCurrentValue(remainingValue);
-        position.setStatus(InvestmentPositionStatus.PARTIALLY_LIQUIDATED);
-        position.setUpdatedAt(Instant.now());
-        positionRepo.save(position);
-
-        BaseResponse procCredit = processCredit(orderRef, order.getEmailAddress());
-
-        if (procCredit.getStatusCode() != 200) {
-            res.setStatusCode(400);
-            res.setDescription(procCredit.getDescription());
+            res.setStatusCode(200);
             return res;
         }
 
-        // credit wallet
-        /*walletClient.creditInvestmentLiquidation(
-                order.getWalletId(),
-                order.getOrderRef(),
-                order.getNetAmount()
-        );*/
-        // update order
-        order.setAmountBalance(order.getAmountBalance().subtract(liquidationAmount));
-        //order.setStatus(InvestmentOrderStatus.SETTLED);
+        InvestmentPosition position = order.getPosition();
+        BigDecimal liquidationAmount = order.getAmount(); // base amount removed
+
+        boolean fullLiquidation
+                = liquidationAmount.compareTo(position.getCurrentValue()) >= 0;
+
+        // 1️⃣ Credit wallet FIRST (external dependency)
+        BaseResponse credit = processCredit(order.getOrderRef(), order.getEmailAddress());
+        if (credit.getStatusCode() != 200) {
+            throw new BusinessException("Wallet credit failed");
+        }
+
+        // 2️⃣ Apply liquidation to position
+        if (fullLiquidation) {
+
+            position.setInvestedAmount(BigDecimal.ZERO);
+            position.setAccruedInterest(BigDecimal.ZERO);
+            position.setTotalAccruedInterest(position.getTotalAccruedInterest());
+            position.setCurrentValue(BigDecimal.ZERO);
+            position.setUnits(BigDecimal.ZERO);
+            position.setStatus(InvestmentPositionStatus.FULLY_LIQUIDATED);
+
+        } else {
+            // PARTIAL – CAPITAL ONLY
+            position.setInvestedAmount(
+                    position.getInvestedAmount().subtract(liquidationAmount)
+            );
+
+            position.setCurrentValue(
+                    position.getInvestedAmount()
+                            .add(position.getAccruedInterest())
+            );
+
+            position.setStatus(InvestmentPositionStatus.PARTIALLY_LIQUIDATED);
+        }
+
+        position.setUpdatedAt(Instant.now());
+        positionRepo.save(position);
+
+        // 3️⃣ Close order
+        order.setStatus(InvestmentOrderStatus.SETTLED);
         order.setUpdatedAt(Instant.now());
         orderRepo.save(order);
 
         activityService.logInvestmentLiquidation(order, position);
+
         res.setStatusCode(200);
-        res.setDescription("Sucess");
+        res.setDescription("Liquidation completed successfully.");
         return res;
     }
 
     public BaseResponse processCredit(String orderId, String emailAddress) {
+
         int statusCode = 500;
         final BaseResponse res = new BaseResponse();
 
@@ -948,63 +1008,72 @@ public class InvestmentOrderService {
             statusCode = 400;
 
             CreditWalletCaller rqC = new CreditWalletCaller();
-            var order = orderRepo.findByOrderRefAndEmailAddress(orderId, emailAddress)
-                    .orElseThrow(() -> new NotFoundException("Investment position not found"));
 
-            if (order.getProduct().getCurrency().equals("CAD")) {
-                Optional<RegWalletInfo> getRec = regWalletInfoRepository.findByEmail(emailAddress);
+            InvestmentOrder order = orderRepo
+                    .findByOrderRefAndEmailAddress(orderId, emailAddress)
+                    .orElseThrow(() -> new NotFoundException("Liquidation order not found"));
 
-                rqC.setPhoneNumber(getRec.get().getPhoneNumber());
+            // 🔒 SAFETY GUARD
+            if (order.getType() != InvestmentOrderType.LIQUIDATION) {
+                throw new IllegalStateException("Attempt to credit non-liquidation order");
+            }
 
+            // ---------------- Wallet selection ----------------
+            if ("CAD".equals(order.getProduct().getCurrency())) {
+                RegWalletInfo wallet
+                        = regWalletInfoRepository.findByEmail(emailAddress)
+                                .orElseThrow(() -> new BusinessException("Wallet not found"));
+                rqC.setPhoneNumber(wallet.getPhoneNumber());
             } else {
-                List<AddAccountDetails> getSellerAcct = addAccountDetailsRepo.findByEmailAddressrData(emailAddress);
-                rqC.setPhoneNumber(getSellerAcct.get(0).getAccountNumber());
-                Optional<RegWalletInfo> getRec = regWalletInfoRepository.findByEmail(emailAddress);
-
-            }
-
-            rqC.setAuth("Liquidation");
-            rqC.setFees("00");
-            rqC.setFinalCHarges(order.getNetAmount().toString());
-            rqC.setNarration(order.getProduct().getCurrency() + "_Reversal");
-            rqC.setTransAmount(order.getNetAmount().toString());
-            rqC.setTransactionId(orderId);
-
-            System.out.println(" creditSellerAcct for Reversal REQ  ::::::::::::::::  %S  " + new Gson().toJson(rqC));
-
-            BaseResponse creditSellerAcct = transactionServiceProxies.creditCustomerWithType(rqC, "CUSTOMER", "");
-
-            System.out.println(" creditSellerAcct Response from core ::::::::::::::::  %S  " + new Gson().toJson(creditSellerAcct));
-            if (creditSellerAcct.getStatusCode() == 200) {
-
-                // Credit BAAS NGN_GL
-                CreditWalletCaller GLCredit = new CreditWalletCaller();
-                GLCredit.setAuth("Receiver");
-                GLCredit.setFees("0.00");
-                GLCredit.setFinalCHarges(rqC.getFinalCHarges());
-                GLCredit.setNarration(rqC.getNarration());
-                String GGL_ACCOUNT = null;
-
-                List<AppConfig> getAppConf = appConfigRepo.findByConfigName(order.getProduct().getCurrency());
-
-                for (AppConfig getConfDe : getAppConf) {
-                    if (getConfDe.getConfigName().equals(order.getProduct().getCurrency())) {
-                        GGL_ACCOUNT = getConfDe.getConfigValue();
-
-                    }
+                List<AddAccountDetails> wallets
+                        = addAccountDetailsRepo.findByEmailAddressrData(emailAddress);
+                if (wallets.isEmpty()) {
+                    throw new BusinessException("No wallet account found");
                 }
-                //GLCredit.setPhoneNumber(utilService.decryptData(utilService.getSETTING_KEY_WALLET_SYSTEM_SYSTEM_GG_CAD()));
-                GLCredit.setPhoneNumber(utilService.decryptData(GGL_ACCOUNT));
-                GLCredit.setTransAmount(rqC.getFinalCHarges());
-                GLCredit.setTransactionId(rqC.getTransactionId());
-
-                System.out.println(" creditAcct_GL seller for Reversal REQ  ::::::::::::::::  %S  " + new Gson().toJson(GLCredit));
-
-                BaseResponse creditAcct_GL = transactionServiceProxies.creditCustomerWithType(GLCredit, order.getProduct().getCurrency(), "");
-
-                System.out.println(" credit GL for seller for Reversal Response from core ::::::::::::::::  %S  " + new Gson().toJson(creditAcct_GL));
-
+                rqC.setPhoneNumber(wallets.get(0).getAccountNumber());
             }
+
+            // ---------------- Credit payload ----------------
+            rqC.setAuth("Liquidation");
+            rqC.setFees("0.00");
+            rqC.setFinalCHarges(order.getNetAmount().toPlainString());
+            rqC.setNarration(order.getProduct().getCurrency() + "_INVESTMENT_LIQUIDATION");
+            rqC.setTransAmount(order.getNetAmount().toPlainString());
+            rqC.setTransactionId(order.getOrderRef());
+
+            System.out.println("Credit liquidation REQ :: " + new Gson().toJson(rqC));
+
+            BaseResponse creditCustomer
+                    = transactionServiceProxies.creditCustomerWithType(
+                            rqC, "CUSTOMER", "");
+
+            System.out.println("Credit liquidation RESP :: " + new Gson().toJson(creditCustomer));
+
+            if (creditCustomer.getStatusCode() != 200) {
+                throw new BusinessException("Customer wallet credit failed");
+            }
+
+            // ---------------- GL credit ----------------
+            String glAccount = appConfigRepo
+                    .findByConfigName(order.getProduct().getCurrency())
+                    .stream()
+                    .findFirst()
+                    .map(AppConfig::getConfigValue)
+                    .orElseThrow(() -> new BusinessException("GL account not configured"));
+
+            CreditWalletCaller gl = new CreditWalletCaller();
+            gl.setAuth("Receiver");
+            gl.setFees("0.00");
+            gl.setFinalCHarges(order.getNetAmount().toPlainString());
+            gl.setNarration(rqC.getNarration());
+            gl.setPhoneNumber(utilService.decryptData(glAccount));
+            gl.setTransAmount(order.getNetAmount().toPlainString());
+            gl.setTransactionId(order.getOrderRef());
+
+            System.out.println("GL credit REQ :: " + new Gson().toJson(gl));
+
+            transactionServiceProxies.creditCustomerWithType(
+                    gl, order.getProduct().getCurrency(), "");
 
             res.setStatusCode(200);
 
@@ -1014,7 +1083,6 @@ public class InvestmentOrderService {
         }
 
         return res;
-
     }
 
 }

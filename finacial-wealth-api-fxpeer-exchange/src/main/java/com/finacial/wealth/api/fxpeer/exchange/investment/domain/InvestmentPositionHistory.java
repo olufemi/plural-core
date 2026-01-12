@@ -73,13 +73,21 @@ public class InvestmentPositionHistory {
 
     @Column(nullable = true)
     private Instant maturityDate;
-    
+
     @Column(nullable = true)
     private Instant activeDate;
-    
+
     private String emailAddress;
-    
+
     private String investmentId;
-     private String productName;
-   
+    private String productName;
+    @Column(name = "daily_interest", precision = 19, scale = 2)
+    private BigDecimal dailyInterest;
+
+    @Column(name = "total_interest", precision = 19, scale = 2)
+    private BigDecimal totalInterest;
+    
+     @Column(name = "accrued_interest", precision = 19, scale = 2)
+    private BigDecimal accruedInterest;
+
 }

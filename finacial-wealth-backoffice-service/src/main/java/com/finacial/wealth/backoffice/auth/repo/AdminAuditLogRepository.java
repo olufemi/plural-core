@@ -8,13 +8,10 @@ package com.finacial.wealth.backoffice.auth.repo;
  *
  * @author olufemioshin
  */
-
-import com.finacial.wealth.backoffice.auth.entity.BoAdminRole;
+import com.finacial.wealth.backoffice.audit.entity.AdminAuditLog;
+import org.springframework.data.domain.*;
 import org.springframework.data.jpa.repository.JpaRepository;
 
-import java.util.Optional;
-
-public interface BoAdminRoleRepository extends JpaRepository<BoAdminRole, Long> {
-    Optional<BoAdminRole> findByName(String name);
-    
+public interface AdminAuditLogRepository extends JpaRepository<AdminAuditLog, Long> {
+    Page<AdminAuditLog> findByActorAdminId(Long actorAdminId, Pageable pageable);
 }

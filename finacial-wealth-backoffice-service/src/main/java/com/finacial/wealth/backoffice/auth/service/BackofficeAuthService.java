@@ -221,6 +221,10 @@ if failure: attempts++ and throw 401; if exceeded, mark used=true or lock
         BoAdminUser user = userRepo.findById(c.getUserId())
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
+        if (user.getTotpSecretEnc() == null || user.getTotpSecretIv() == null) {
+            throw new IllegalStateException("MFA secret not configured");
+        }
+
         if (!user.isMfaEnabled() || user.getMfaSecret() == null || user.getMfaSecret().trim().isEmpty()) {
             throw new RuntimeException("MFA not configured");
         }

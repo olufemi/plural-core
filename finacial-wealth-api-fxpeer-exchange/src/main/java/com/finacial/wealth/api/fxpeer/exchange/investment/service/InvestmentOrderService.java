@@ -29,9 +29,11 @@ import com.finacial.wealth.api.fxpeer.exchange.investment.ennum.InvestmentOrderS
 import com.finacial.wealth.api.fxpeer.exchange.investment.ennum.InvestmentOrderType;
 import com.finacial.wealth.api.fxpeer.exchange.investment.ennum.InvestmentPositionStatus;
 import com.finacial.wealth.api.fxpeer.exchange.investment.ennum.InvestmentType;
+import com.finacial.wealth.api.fxpeer.exchange.investment.ennum.LiquidationApprovalStatus;
 import com.finacial.wealth.api.fxpeer.exchange.investment.interfface.WalletClient;
 import com.finacial.wealth.api.fxpeer.exchange.investment.record.CreateInvestmentSubscriptionRequest;
 import com.finacial.wealth.api.fxpeer.exchange.investment.record.CreateSubscriptionReq;
+import com.finacial.wealth.api.fxpeer.exchange.investment.record.InvestmentOrderPojo;
 import com.finacial.wealth.api.fxpeer.exchange.investment.record.InvestmentOrderResponse;
 import com.finacial.wealth.api.fxpeer.exchange.investment.record.InvestmentProductRecord;
 import com.finacial.wealth.api.fxpeer.exchange.investment.record.LiquidateInvestmentRequest;
@@ -171,7 +173,7 @@ public class InvestmentOrderService {
 
             List<Object> mapAll = new ArrayList<Object>();
             for (InvestmentProduct getKul : productRepo.findAll()) {
-                if (getKul.getType().equals(InvestmentType.MONEY_MARKET)) {
+                if (getKul.getEnableProduct().equals("1")) {
 
                     InvestmentProductRecord getK = new InvestmentProductRecord();
                     getK.setActive(getKul.isActive());
@@ -546,7 +548,7 @@ public class InvestmentOrderService {
         InvestmentOrder order = new InvestmentOrder();
         order.setOrderRef(rq.orderRef());
         order.setIdempotencyKey(rq.idempotencyKey());
-        order.setParentOrderRef(String.valueOf("ORID_")+GlobalMethods.generateTransactionId());
+        order.setParentOrderRef(String.valueOf("ORID_") + GlobalMethods.generateTransactionId());
         order.setEmailAddress(rq.emailAddress());
         order.setWalletId(rq.walletId());
         order.setProduct(rq.product());
@@ -676,6 +678,7 @@ public class InvestmentOrderService {
                             p.setUnits(BigDecimal.ZERO);
                             p.setInvestedAmount(BigDecimal.ZERO);
                             p.setCurrentValue(BigDecimal.ZERO);
+                            p.setTotalAccruedInterest(BigDecimal.ZERO);
                             p.setAccruedInterest(BigDecimal.ZERO);
                             p.setStatus(InvestmentPositionStatus.ACTIVE);
                             p.setCreatedAt(Instant.now());
@@ -687,6 +690,7 @@ public class InvestmentOrderService {
                 position.setInvestedAmount(order.getAmount());
                 position.setCurrentValue(order.getAmount());
                 position.setAccruedInterest(BigDecimal.ZERO);
+                position.setTotalAccruedInterest(BigDecimal.ZERO);
                 position.setOrderRef(order.getOrderRef());
                 position.setProductName(product.getName());
                 position.setUpdatedAt(Instant.now());
@@ -739,30 +743,6 @@ public class InvestmentOrderService {
             return BigDecimal.ONE;
         }
         return amount.divide(product.getUnitPrice(), 8, RoundingMode.HALF_UP);
-    }
-
-    private BigDecimal computeEntireMarketValuesLiquidationFee(
-            InvestmentProduct product,
-            BigDecimal marketValue
-    ) {
-        if (marketValue == null || marketValue.compareTo(BigDecimal.ZERO) <= 0) {
-            return BigDecimal.ZERO;
-        }
-
-        InterestCapitalization cap
-                = product.getInterestCapitalization() != null
-                ? product.getInterestCapitalization()
-                : InterestCapitalization.DAILY;
-
-        BigDecimal percent = getFeePercentFromMeta(product, cap);
-        BigDecimal minFee = getMinFeeFromMeta(product);
-
-        BigDecimal fee = marketValue
-                .multiply(percent)
-                .divide(BigDecimal.valueOf(100), 8, RoundingMode.HALF_UP)
-                .setScale(2, RoundingMode.HALF_UP);
-
-        return fee.max(minFee);
     }
 
     private BigDecimal getFeePercentFromMeta(
@@ -855,76 +835,6 @@ public class InvestmentOrderService {
         return BigDecimal.ZERO;
     }
 
-    @Transactional
-    public BaseResponse requestLiquidation(
-            LiquidateInvestmentRequest rq, String auth) {
-
-        BaseResponse res = new BaseResponse();
-
-        String emailAddress = utilService.getClaimFromJwt(auth, "emailAddress");
-
-        InvestmentOrder subscriptionOrder
-                = orderRepo.findByOrderRefAndEmailAddress(rq.orderId(), emailAddress)
-                        .orElseThrow(() -> new NotFoundException("Investment position not found"));
-
-        if (subscriptionOrder.getStatus() != InvestmentOrderStatus.ACTIVE) {
-            throw new BusinessException("Order is not eligible for liquidation.");
-        }
-
-        InvestmentPosition position
-                = positionRepo.findByOrderRef(subscriptionOrder.getOrderRef())
-                        .orElseThrow(() -> new BusinessException("Position not found"));
-
-        boolean fullLiquidation = rq.fullLiquidation();
-
-        BigDecimal liquidationBaseAmount;
-        if (fullLiquidation) {
-            // full market value
-            liquidationBaseAmount = position.getCurrentValue();
-        } else {
-            // partial liquidation – CAPITAL ONLY
-            liquidationBaseAmount = rq.liquidationAmount();
-            if (liquidationBaseAmount.compareTo(position.getInvestedAmount()) > 0) {
-                throw new BusinessException("Amount exceeds available capital.");
-            }
-        }
-
-        BigDecimal fees = computeLiquidationFees(
-                position.getProduct(), liquidationBaseAmount);
-
-        BigDecimal tax = computeTax(subscriptionOrder.getProduct(), liquidationBaseAmount);
-        BigDecimal netAmount = liquidationBaseAmount.subtract(fees).subtract(tax);
-
-        if (netAmount.compareTo(BigDecimal.ZERO) <= 0) {
-            throw new BusinessException("Net amount after charges is not positive.");
-        }
-
-        // create liquidation order (ASYNC)
-        InvestmentOrder liqOrder = new InvestmentOrder();
-        liqOrder.setParentOrderRef(subscriptionOrder.getOrderRef());
-        liqOrder.setOrderRef(generateOrderRef("LIQ-"));
-        liqOrder.setEmailAddress(emailAddress);
-        liqOrder.setWalletId(position.getWalletId());
-        liqOrder.setProduct(position.getProduct());
-        liqOrder.setPosition(position);
-        liqOrder.setType(InvestmentOrderType.LIQUIDATION);
-        liqOrder.setStatus(InvestmentOrderStatus.LIQUIDATION_PROCESSING);
-        liqOrder.setAmount(liquidationBaseAmount);
-        liqOrder.setFees(fees);
-        liqOrder.setTax(tax);
-        liqOrder.setNetAmount(netAmount);
-        liqOrder.setCreatedAt(Instant.now());
-
-        orderRepo.save(liqOrder);
-
-        //activityService.logLiquidationProcessing(position, netAmount);
-        res.setStatusCode(202);
-        res.setDescription(
-                "Your liquidation request is processing. This may take some time.");
-
-        return res;
-    }
-
     private String generateOrderRef(String prefix) {
         return prefix + "-"
                 + String.valueOf(GlobalMethods.generateTransactionId())
@@ -934,68 +844,187 @@ public class InvestmentOrderService {
                         .toUpperCase();
     }
 
+    private BigDecimal computeEntireMarketValuesLiquidationFee(
+            InvestmentProduct product,
+            BigDecimal marketValue
+    ) {
+        if (marketValue == null || marketValue.compareTo(BigDecimal.ZERO) <= 0) {
+            return BigDecimal.ZERO;
+        }
+
+        InterestCapitalization cap
+                = product.getInterestCapitalization() != null
+                ? product.getInterestCapitalization()
+                : InterestCapitalization.DAILY;
+
+        BigDecimal percent = getFeePercentFromMeta(product, cap);
+        BigDecimal minFee = getMinFeeFromMeta(product);
+
+        BigDecimal fee = marketValue
+                .multiply(percent)
+                .divide(BigDecimal.valueOf(100), 8, RoundingMode.HALF_UP)
+                .setScale(2, RoundingMode.HALF_UP);
+
+        return fee.max(minFee);
+    }
+
+    @Transactional
+    public BaseResponse requestLiquidation(
+            LiquidateInvestmentRequest rq, String auth) {
+
+        BaseResponse res = new BaseResponse();
+        String description = "Something went wrong";
+        int statusCode = 500;
+
+        try {
+
+            statusCode = 400;
+
+            String emailAddress = utilService.getClaimFromJwt(auth, "emailAddress");
+
+            InvestmentOrder subscriptionOrder
+                    = orderRepo.findByOrderRefAndEmailAddress(rq.orderId(), emailAddress)
+                            .orElseThrow(() -> new NotFoundException("Investment position not found"));
+
+            if (subscriptionOrder.getStatus() != InvestmentOrderStatus.ACTIVE) {
+                throw new BusinessException("Order is not eligible for liquidation.");
+            }
+
+            InvestmentPosition position
+                    = positionRepo.findByOrderRef(subscriptionOrder.getOrderRef())
+                            .orElseThrow(() -> new BusinessException("Position not found"));
+
+            boolean fullLiquidation = rq.fullLiquidation();
+
+            BigDecimal liquidationBaseAmount;
+            if (fullLiquidation) {
+                // full market value
+                liquidationBaseAmount = position.getCurrentValue();
+            } else {
+                // partial liquidation – CAPITAL ONLY
+                liquidationBaseAmount = rq.liquidationAmount();
+                if (liquidationBaseAmount.compareTo(position.getInvestedAmount()) > 0) {
+                    throw new BusinessException("Amount exceeds available capital.");
+                }
+            }
+
+            BigDecimal fees = computeEntireMarketValuesLiquidationFee(
+                    position.getProduct(), liquidationBaseAmount);
+
+            BigDecimal tax = computeTax(subscriptionOrder.getProduct(), liquidationBaseAmount);
+            BigDecimal netAmount = liquidationBaseAmount.subtract(fees).subtract(tax);
+
+            if (netAmount.compareTo(BigDecimal.ZERO) <= 0) {
+                throw new BusinessException("Net amount after charges is not positive.");
+            }
+
+            // create liquidation order (ASYNC)
+            InvestmentOrder liqOrder = new InvestmentOrder();
+            liqOrder.setParentOrderRef(subscriptionOrder.getOrderRef());
+            liqOrder.setOrderRef(generateOrderRef("LIQ-"));
+            liqOrder.setEmailAddress(emailAddress);
+            liqOrder.setWalletId(position.getWalletId());
+            liqOrder.setProduct(position.getProduct());
+            liqOrder.setPosition(position);
+            liqOrder.setType(InvestmentOrderType.LIQUIDATION);
+            liqOrder.setStatus(InvestmentOrderStatus.LIQUIDATION_PROCESSING);
+            liqOrder.setAmount(liquidationBaseAmount);
+            liqOrder.setFees(fees);
+            liqOrder.setTax(tax);
+            liqOrder.setNetAmount(netAmount);
+            liqOrder.setCreatedAt(Instant.now());
+
+            orderRepo.save(liqOrder);
+
+            //activityService.logLiquidationProcessing(position, netAmount);
+            res.setStatusCode(202);
+            res.setDescription(
+                    "Your liquidation request is processing. This may take some time.");
+        } catch (Exception ex) {
+
+            ex.printStackTrace();
+            res.setStatusCode(statusCode);
+            res.setDescription(
+                    description);
+        }
+        return res;
+    }
+
     @Transactional
     public BaseResponse onLiquidationSettled(String liquidationOrderRef) {
 
         BaseResponse res = new BaseResponse();
+        String description = "Something went wrong";
+        int statusCode = 500;
 
-        InvestmentOrder order
-                = orderRepo.findByOrderRef(liquidationOrderRef)
-                        .orElseThrow(() -> new NotFoundException("Liquidation order not found"));
+        try {
+            statusCode = 400;
+            InvestmentOrder order
+                    = orderRepo.findByOrderRef(liquidationOrderRef)
+                            .orElseThrow(() -> new NotFoundException("Liquidation order not found"));
 
-        if (order.getStatus() == InvestmentOrderStatus.SETTLED) {
+            if (order.getStatus() != InvestmentOrderStatus.LIQUIDATION_PROCESSING) {
+                res.setStatusCode(statusCode);
+                res.setDescription("Liquidation is not in a processable state: " + order.getStatus());
+                return res;
+            }
+
+            InvestmentPosition position = order.getPosition();
+            BigDecimal liquidationAmount = order.getAmount(); // base amount removed
+
+            boolean fullLiquidation
+                    = liquidationAmount.compareTo(position.getCurrentValue()) >= 0;
+
+            // 1️⃣ Credit wallet FIRST (external dependency)
+            BaseResponse credit = processCredit(order.getOrderRef(), order.getEmailAddress());
+            if (credit.getStatusCode() != 200) {
+                throw new BusinessException("Wallet credit failed");
+            }
+
+            // 2️⃣ Apply liquidation to position
+            if (fullLiquidation) {
+
+                position.setInvestedAmount(BigDecimal.ZERO);
+                position.setAccruedInterest(BigDecimal.ZERO);
+                position.setTotalAccruedInterest(position.getTotalAccruedInterest());
+                position.setCurrentValue(BigDecimal.ZERO);
+                position.setUnits(BigDecimal.ZERO);
+                position.setStatus(InvestmentPositionStatus.FULLY_LIQUIDATED);
+
+            } else {
+                // PARTIAL – CAPITAL ONLY
+                position.setInvestedAmount(
+                        position.getInvestedAmount().subtract(liquidationAmount)
+                );
+
+                position.setCurrentValue(
+                        position.getInvestedAmount()
+                                .add(position.getAccruedInterest())
+                );
+
+                position.setStatus(InvestmentPositionStatus.PARTIALLY_LIQUIDATED);
+            }
+
+            position.setUpdatedAt(Instant.now());
+            positionRepo.save(position);
+
+            // 3️⃣ Close order
+            order.setStatus(InvestmentOrderStatus.SETTLED);
+            order.setUpdatedAt(Instant.now());
+
+            orderRepo.save(order);
+
+            activityService.logInvestmentLiquidation(order, position);
+
             res.setStatusCode(200);
-            return res;
+            res.setDescription("Liquidation completed successfully.");
+        } catch (Exception ex) {
+
+            ex.printStackTrace();
+            res.setStatusCode(statusCode);
+            res.setDescription(
+                    description);
         }
-
-        InvestmentPosition position = order.getPosition();
-        BigDecimal liquidationAmount = order.getAmount(); // base amount removed
-
-        boolean fullLiquidation
-                = liquidationAmount.compareTo(position.getCurrentValue()) >= 0;
-
-        // 1️⃣ Credit wallet FIRST (external dependency)
-        BaseResponse credit = processCredit(order.getOrderRef(), order.getEmailAddress());
-        if (credit.getStatusCode() != 200) {
-            throw new BusinessException("Wallet credit failed");
-        }
-
-        // 2️⃣ Apply liquidation to position
-        if (fullLiquidation) {
-
-            position.setInvestedAmount(BigDecimal.ZERO);
-            position.setAccruedInterest(BigDecimal.ZERO);
-            position.setTotalAccruedInterest(position.getTotalAccruedInterest());
-            position.setCurrentValue(BigDecimal.ZERO);
-            position.setUnits(BigDecimal.ZERO);
-            position.setStatus(InvestmentPositionStatus.FULLY_LIQUIDATED);
-
-        } else {
-            // PARTIAL – CAPITAL ONLY
-            position.setInvestedAmount(
-                    position.getInvestedAmount().subtract(liquidationAmount)
-            );
-
-            position.setCurrentValue(
-                    position.getInvestedAmount()
-                            .add(position.getAccruedInterest())
-            );
-
-            position.setStatus(InvestmentPositionStatus.PARTIALLY_LIQUIDATED);
-        }
-
-        position.setUpdatedAt(Instant.now());
-        positionRepo.save(position);
-
-        // 3️⃣ Close order
-        order.setStatus(InvestmentOrderStatus.SETTLED);
-        order.setUpdatedAt(Instant.now());
-        orderRepo.save(order);
-
-        activityService.logInvestmentLiquidation(order, position);
-
-        res.setStatusCode(200);
-        res.setDescription("Liquidation completed successfully.");
         return res;
     }
 

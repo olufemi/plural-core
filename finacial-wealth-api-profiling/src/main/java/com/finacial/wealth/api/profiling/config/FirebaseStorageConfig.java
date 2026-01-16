@@ -11,30 +11,53 @@ package com.finacial.wealth.api.profiling.config;
 import com.google.auth.oauth2.GoogleCredentials;
 import com.google.cloud.storage.Storage;
 import com.google.cloud.storage.StorageOptions;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 import java.io.FileInputStream;
+import java.io.InputStream;
 
 @Configuration
 public class FirebaseStorageConfig {
 
-    @Value("${fcm.service.account.file}")
+    private static final Logger log = LoggerFactory.getLogger(FirebaseStorageConfig.class);
+
+    @Value("${fcm.service.account.file:}")
     private String serviceAccountPath;
 
-    @Value("${fcm.project.id")
+    @Value("${fcm.project.id:}")
     private String projectId;
 
     @Bean
+    @ConditionalOnProperty(name = "firebase.storage.enabled", havingValue = "true")
     public Storage firebaseStorage() throws Exception {
-        FileInputStream in = new FileInputStream(serviceAccountPath);
-        GoogleCredentials creds = GoogleCredentials.fromStream(in);
 
-        return StorageOptions.newBuilder()
-                .setProjectId(projectId)
-                .setCredentials(creds)
-                .build()
-                .getService();
+        GoogleCredentials credentials;
+
+        if (serviceAccountPath != null && !serviceAccountPath.trim().isEmpty()) {
+            log.info("Initializing Firebase Storage using service account file");
+
+            try (InputStream inputStream
+                    = new FileInputStream(serviceAccountPath.trim())) {
+                credentials = GoogleCredentials.fromStream(inputStream);
+            }
+
+        } else {
+            log.info("Initializing Firebase Storage using Application Default Credentials");
+            credentials = GoogleCredentials.getApplicationDefault();
+        }
+
+        StorageOptions.Builder builder = StorageOptions.newBuilder()
+                .setCredentials(credentials);
+
+        if (projectId != null && !projectId.trim().isEmpty()) {
+            builder.setProjectId(projectId.trim());
+        }
+
+        return builder.build().getService();
     }
 }

@@ -39,6 +39,12 @@ public class CreateQuote {
     @JsonProperty("quote_type")
     private String quoteType;
 
+    @JsonProperty("origin_reference")
+    private String originReference;
+
+    @JsonProperty("on_behalf_of")
+    private String onBehalfOf;
+
     public CreateQuote() {
     }
 

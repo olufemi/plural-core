@@ -6,6 +6,7 @@ package com.finacial.wealth.api.fxpeer.exchange.investment.domain;
 
 import com.finacial.wealth.api.fxpeer.exchange.investment.ennum.InvestmentOrderStatus;
 import com.finacial.wealth.api.fxpeer.exchange.investment.ennum.InvestmentOrderType;
+import com.finacial.wealth.api.fxpeer.exchange.investment.ennum.LiquidationApprovalStatus;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
@@ -37,8 +38,8 @@ public class InvestmentOrder {
 
     @Column(nullable = false, length = 64, unique = true)
     private String orderRef;     // public ref for UI & receipts
-    
-     @Column(nullable = false, length = 64, unique = true)
+
+    @Column(nullable = false, length = 64, unique = true)
     private String parentOrderRef;     // public ref for UI & receipts
 
     @Column(nullable = false, length = 64)

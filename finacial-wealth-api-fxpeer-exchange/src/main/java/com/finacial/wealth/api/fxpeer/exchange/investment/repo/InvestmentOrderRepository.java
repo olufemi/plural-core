@@ -60,4 +60,14 @@ public interface InvestmentOrderRepository extends JpaRepository<InvestmentOrder
             InvestmentOrderStatus status
     );
 
+    List<InvestmentOrder> findByEmailAddressAndStatusOrderByUpdatedAtDesc(String emailAddress,
+            InvestmentOrderStatus status);
+
+    // Optional: if you want all customers (admin)
+    List<InvestmentOrder> findByStatusOrderByUpdatedAtDesc(InvestmentOrderStatus status);
+
+    // Optional: filter by multiple statuses
+    List<InvestmentOrder> findByEmailAddressAndStatusInOrderByUpdatedAtDesc(String emailAddress,
+            List<InvestmentOrderStatus> statuses);
+
 }

@@ -77,6 +77,8 @@ public class InvestmentProduct {
     @Column(length = 10000)
     private String metaJson;             // configuration/eligibility rules
 
+    private String enableProduct = "0";
+
     private BigDecimal percentageCurrValue;
     //private BigDecimal accruedInterest; 
 

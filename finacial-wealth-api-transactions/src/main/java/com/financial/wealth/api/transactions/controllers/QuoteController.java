@@ -84,8 +84,8 @@ public class QuoteController {
         BaseResponse baseResponse = quoteService.acceptQuote(rq, auth);
         return new ResponseEntity<>(baseResponse, HttpStatus.OK);
     }
-    
-     @PostMapping("/create-quote-withdrawal")
+
+    @PostMapping("/create-quote-withdrawal")
     public ResponseEntity<BaseResponse> createQuoteWithdrawal(@RequestHeader(value = "authorization", required = true) String auth,
             @RequestBody @Valid CreateQuoteWithdrawalFE rq) throws Exception {
 

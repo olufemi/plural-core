@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
@@ -9,88 +11,284 @@
         <version>0.0.1-SNAPSHOT</version>
         <relativePath>../</relativePath>
     </parent>
+
     <groupId>com.finacial.wealth</groupId>
     <artifactId>finacial-wealth-api-profiling</artifactId>
     <version>0.0.1-SNAPSHOT</version>
     <name>finacial-wealth-api-profiling</name>
     <description>A Financial and Wealth Service System ::: Profiling</description>
+
     <properties>
         <java.version>1.8</java.version>
-        <spring-boot-admin.version>2.3.0</spring-boot-admin.version>
-        <!--mysql.version>5.1.49</mysql.version-->
-        <cxf.version>3.2.1</cxf.version>
-        <oracle.version>11.2.0.3</oracle.version>
-        <validation-api.version>2.0.1.Final</validation-api.version>
-    </properties>
-    <dependencies>
-        <!-- Firebase Admin SDK (includes GCS client under the hood) -->
-        <dependency>
-            <groupId>com.google.firebase</groupId>
-            <artifactId>firebase-admin</artifactId>
-            <version>9.7.0</version>
-        </dependency>
 
+        <spring-boot-admin.version>2.3.0</spring-boot-admin.version>
+        <validation-api.version>2.0.1.Final</validation-api.version>
+
+        <!-- Optional: keep versions centralized -->
+        <springfox.version>2.5.0</springfox.version>
+        <jjwt.version>0.10.7</jjwt.version>
+        <lombok.version>1.18.32</lombok.version>
+
+        <!-- Google / Firebase -->
+        <firebase-admin.version>9.7.0</firebase-admin.version>
+        <google-cloud-storage.version>2.34.0</google-cloud-storage.version>
+
+        <!-- Others -->
+        <pdfbox.version>2.0.1</pdfbox.version>
+        <pdfbox-tools.version>2.0.0</pdfbox-tools.version>
+        <joda-time.version>2.10.5</joda-time.version>
+        <commons-lang3.version>3.9</commons-lang3.version>
+        <commons-lang.version>2.6</commons-lang.version>
+    </properties>
+
+    <dependencies>
+
+        <!-- =========================
+             Spring Boot / Cloud
+        ========================== -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>
         </dependency>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-data-jpa</artifactId>
-        </dependency>
-   
-        <dependency>
-            <groupId>org.springframework.cloud</groupId>
-            <artifactId>spring-cloud-starter-netflix-eureka-client</artifactId>
-        </dependency>
+
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
         </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-jpa</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-netflix-eureka-client</artifactId>
+        </dependency>
+
         <dependency>
             <groupId>org.springframework.cloud</groupId>
             <artifactId>spring-cloud-starter-openfeign</artifactId>
             <version>2.2.2.RELEASE</version>
         </dependency>
+
         <dependency>
             <groupId>de.codecentric</groupId>
             <artifactId>spring-boot-admin-starter-server</artifactId>
         </dependency>
+
+
+        <!-- =========================
+             Firebase / Google Cloud Storage
+             - keep ONLY ONE firebase-admin dependency
+             - exclude old JSON Storage API to avoid google-api-client conflicts
+        ========================== -->
+        <dependency>
+            <groupId>com.google.firebase</groupId>
+            <artifactId>firebase-admin</artifactId>
+            <version>${firebase-admin.version}</version>
+            <exclusions>
+                <!-- Old Storage JSON API (v1) that often conflicts with newer google-api-client -->
+                <exclusion>
+                    <groupId>com.google.apis</groupId>
+                    <artifactId>google-api-services-storage</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>com.google.api-client</groupId>
+                    <artifactId>google-api-client</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+
+        <!-- Use modern GCS client (recommended) -->
+        <dependency>
+            <groupId>com.google.cloud</groupId>
+            <artifactId>google-cloud-storage</artifactId>
+            <version>${google-cloud-storage.version}</version>
+        </dependency>
+
+
+        <!-- =========================
+             Security / JWT
+        ========================== -->
         <dependency>
             <groupId>io.jsonwebtoken</groupId>
             <artifactId>jjwt-api</artifactId>
-            <version>0.10.7</version>
+            <version>${jjwt.version}</version>
         </dependency>
+
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-impl</artifactId>
+            <version>${jjwt.version}</version>
+            <scope>runtime</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-jackson</artifactId>
+            <version>${jjwt.version}</version>
+            <scope>runtime</scope>
+        </dependency>
+
+
+        <!-- =========================
+             Persistence / Audit
+        ========================== -->
         <dependency>
             <groupId>org.hibernate</groupId>
             <artifactId>hibernate-envers</artifactId>
         </dependency>
+
         <dependency>
-            <groupId>io.jsonwebtoken</groupId>
-            <artifactId>jjwt-impl</artifactId>
-            <version>0.10.7</version>
-            <scope>runtime</scope>
+            <groupId>javax.validation</groupId>
+            <artifactId>validation-api</artifactId>
+            <version>${validation-api.version}</version>
         </dependency>
+
+
+        <!-- =========================
+             Swagger (Spring Boot 2.2 + Java 8 compatible)
+        ========================== -->
         <dependency>
-            <groupId>io.jsonwebtoken</groupId>
-            <artifactId>jjwt-jackson</artifactId>
-            <version>0.10.7</version>
-            <scope>runtime</scope>
+            <groupId>io.springfox</groupId>
+            <artifactId>springfox-swagger2</artifactId>
+            <version>${springfox.version}</version>
         </dependency>
+
+        <dependency>
+            <groupId>io.springfox</groupId>
+            <artifactId>springfox-swagger-ui</artifactId>
+            <version>${springfox.version}</version>
+        </dependency>
+
+
+        <!-- =========================
+             Utilities / Misc
+        ========================== -->
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
-            <version>1.18.32</version> <!-- or latest stable -->
+            <version>${lombok.version}</version>
             <scope>provided</scope>
         </dependency>
-        
+
+        <dependency>
+            <groupId>io.vavr</groupId>
+            <artifactId>vavr</artifactId>
+            <version>0.10.0</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.data</groupId>
+            <artifactId>spring-data-redis</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>redis.clients</groupId>
+            <artifactId>jedis</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>com.google.code.gson</groupId>
+            <artifactId>gson</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>com.github.ben-manes.caffeine</groupId>
+            <artifactId>caffeine</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.pdfbox</groupId>
+            <artifactId>pdfbox</artifactId>
+            <version>${pdfbox.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.pdfbox</groupId>
+            <artifactId>pdfbox-tools</artifactId>
+            <version>${pdfbox-tools.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>joda-time</groupId>
+            <artifactId>joda-time</artifactId>
+            <version>${joda-time.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-lang3</artifactId>
+            <version>${commons-lang3.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>commons-lang</groupId>
+            <artifactId>commons-lang</artifactId>
+            <version>${commons-lang.version}</version>
+        </dependency>
+
+        <!-- Kept as-is from your list (older libs) -->
+        <dependency>
+            <groupId>com.mashape.unirest</groupId>
+            <artifactId>unirest-java</artifactId>
+            <version>1.4.5</version>
+        </dependency>
+
+        <dependency>
+            <groupId>com.googlecode.owasp-java-html-sanitizer</groupId>
+            <artifactId>owasp-java-html-sanitizer</artifactId>
+            <version>20150501.1</version>
+        </dependency>
+
         <dependency>
             <groupId>com.github.mvallim</groupId>
             <artifactId>emv-qrcode</artifactId>
             <version>0.1.1</version>
-            <type>jar</type>
         </dependency>
-     
+
+        <dependency>
+            <groupId>io.nayuki</groupId>
+            <artifactId>qrcodegen</artifactId>
+            <version>1.6.0</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.xhtmlrenderer</groupId>
+            <artifactId>flying-saucer-pdf</artifactId>
+            <version>9.1.4</version>
+        </dependency>
+
+        <dependency>
+            <groupId>com.google.zxing</groupId>
+            <artifactId>javase</artifactId>
+            <version>3.2.1</version>
+        </dependency>
+
+        <dependency>
+            <groupId>commons-validator</groupId>
+            <artifactId>commons-validator</artifactId>
+            <version>1.6</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.modelmapper</groupId>
+            <artifactId>modelmapper</artifactId>
+            <version>3.1.0</version>
+        </dependency>
+
+        <!-- This one is very old + not needed if you're using Spring Cloud OpenFeign -->
+        <!-- If you don't directly use com.netflix.feign.* classes, remove it -->
+        <dependency>
+            <groupId>com.netflix.feign</groupId>
+            <artifactId>feign-core</artifactId>
+            <version>8.18.0</version>
+        </dependency>
+
+        <!-- =========================
+             Tests
+        ========================== -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
@@ -102,166 +300,19 @@
                 </exclusion>
             </exclusions>
         </dependency>
-     
-     
-        <dependency>
-            <groupId>io.springfox</groupId>
-            <artifactId>springfox-swagger2</artifactId>
-            <version>2.5.0</version>
-        </dependency>
-        <!-- Swagger UI -->
-        <dependency>
-            <groupId>io.springfox</groupId>
-            <artifactId>springfox-swagger-ui</artifactId>
-            <version>2.5.0</version>
-        </dependency>
-        <dependency>
-            <groupId>javax.validation</groupId>
-            <artifactId>validation-api</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>io.vavr</groupId>
-            <artifactId>vavr</artifactId>
-            <version>0.10.0</version>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.data</groupId>
-            <artifactId>spring-data-redis</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>redis.clients</groupId>
-            <artifactId>jedis</artifactId>
-            <type>jar</type>
-        </dependency>
-        <dependency>
-            <groupId>com.google.code.gson</groupId>
-            <artifactId>gson</artifactId>
-        </dependency>
-      
-        <dependency>
-            <groupId>com.github.ben-manes.caffeine</groupId>
-            <artifactId>caffeine</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>io.nayuki</groupId>
-            <artifactId>qrcodegen</artifactId>
-            <version>1.6.0</version>
-        </dependency>
-      
-        <dependency>
-            <groupId>org.xhtmlrenderer</groupId>
-            <artifactId>flying-saucer-pdf</artifactId>
-            <version>9.1.4</version>
-            <type>jar</type>
-        </dependency>
-        <dependency>
-            <groupId>com.google.zxing</groupId>
-            <artifactId>javase</artifactId>
-            <version>3.2.1</version>
-        </dependency>
-        <dependency>
-            <groupId>org.apache.commons</groupId>
-            <artifactId>commons-lang3</artifactId>
-            <version>3.9</version>
-        </dependency>
-       
-        <dependency>
-            <groupId>com.sipios</groupId>
-            <artifactId>spring-search</artifactId>
-            <version>0.2.4</version>
-            <type>jar</type>
-        </dependency>
-        <!-- https://mvnrepository.com/artifact/com.mashape.unirest/unirest-java -->
-        <dependency>
-            <groupId>com.mashape.unirest</groupId>
-            <artifactId>unirest-java</artifactId>
-            <version>1.4.5</version>
-        </dependency>
-       
-        <dependency>
-            <groupId>commons-lang</groupId>
-            <artifactId>commons-lang</artifactId>
-            <version>2.6</version>
-            <type>jar</type>
-        </dependency>
-       
-        <dependency>
-            <groupId>com.googlecode.owasp-java-html-sanitizer</groupId>
-            <artifactId>owasp-java-html-sanitizer</artifactId>
-            <version>20150501.1</version>
-            <type>jar</type>
-        </dependency>
-        
-        <!-- https://mvnrepository.com/artifact/net.sf.j8583/j8583 -->
-      
-        <!-- https://mvnrepository.com/artifact/io.reactivex.rxjava2/rxjava -->
-        <dependency>
-            <groupId>org.apache.pdfbox</groupId>
-            <artifactId>pdfbox</artifactId>
-            <version>2.0.1</version>
-            <type>jar</type>
-        </dependency>
-        <dependency>
-            <groupId>org.apache.pdfbox</groupId>
-            <artifactId>pdfbox-tools</artifactId>
-            <version>2.0.0</version>
-            <type>jar</type>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.cloud</groupId>
-            <artifactId>spring-cloud-netflix-eureka-client</artifactId>
-            <version>2.2.0.RELEASE</version>
-            <type>jar</type>
-        </dependency>
-        <dependency>
-            <groupId>com.sun.mail</groupId>
-            <artifactId>jakarta.mail</artifactId>
-            <version>1.6.5</version>
-            <type>jar</type>
-        </dependency>
-        <dependency>
-            <groupId>joda-time</groupId>
-            <artifactId>joda-time</artifactId>
-            <version>2.10.5</version>
-            <type>jar</type>
-        </dependency>
-        <dependency>
-            <groupId>commons-validator</groupId>
-            <artifactId>commons-validator</artifactId>
-            <version>1.6</version>
-            <type>jar</type>
-        </dependency>
-        <dependency>
-            <groupId>org.modelmapper</groupId>
-            <artifactId>modelmapper</artifactId>
-            <version>3.1.0</version>
-            <type>jar</type>
-        </dependency>
-        <!--dependency>
-            <groupId>org.flywaydb</groupId>
-            <artifactId>flyway-core</artifactId>
-            <version>8.5.13</version>
-        </dependency-->
-        <dependency>
-            <groupId>com.google.auth</groupId>
-            <artifactId>google-auth-library-oauth2-http</artifactId>
-            <version>1.35.0</version>
-            <type>jar</type>
-        </dependency>
-        <dependency>
-            <groupId>com.netflix.feign</groupId>
-            <artifactId>feign-core</artifactId>
-            <version>8.18.0</version>
-            <type>jar</type>
-        </dependency>
+
     </dependencies>
+
+    <!-- =========================
+         DB per Profile
+    ========================== -->
     <profiles>
         <profile>
             <id>local</id>
             <activation>
                 <activeByDefault>true</activeByDefault>
             </activation>
-            <properties>     
+            <properties>
                 <spring.profiles.active>local</spring.profiles.active>
             </properties>
             <dependencies>
@@ -272,12 +323,10 @@
                 </dependency>
             </dependencies>
         </profile>
+
         <profile>
             <id>dev</id>
-            <activation>
-                <activeByDefault>true</activeByDefault>
-            </activation>
-            <properties>     
+            <properties>
                 <spring.profiles.active>dev</spring.profiles.active>
             </properties>
             <dependencies>
@@ -286,15 +335,12 @@
                     <artifactId>mysql-connector-java</artifactId>
                     <version>8.0.25</version>
                 </dependency>
-              
             </dependencies>
         </profile>
+
         <profile>
             <id>prod</id>
-            <activation>
-                <activeByDefault>true</activeByDefault>
-            </activation>
-            <properties>     
+            <properties>
                 <spring.profiles.active>prod</spring.profiles.active>
             </properties>
             <dependencies>
@@ -303,15 +349,12 @@
                     <artifactId>mysql-connector-java</artifactId>
                     <version>8.0.25</version>
                 </dependency>
-              
             </dependencies>
         </profile>
+
         <profile>
             <id>pilot</id>
-            <activation>
-                <activeByDefault>true</activeByDefault>
-            </activation>
-            <properties>     
+            <properties>
                 <spring.profiles.active>pilot</spring.profiles.active>
             </properties>
             <dependencies>
@@ -320,15 +363,12 @@
                     <artifactId>mysql-connector-java</artifactId>
                     <version>8.0.25</version>
                 </dependency>
-              
             </dependencies>
         </profile>
+
         <profile>
             <id>staging</id>
-            <activation>
-                <activeByDefault>true</activeByDefault>
-            </activation>
-            <properties>     
+            <properties>
                 <spring.profiles.active>staging</spring.profiles.active>
             </properties>
             <dependencies>
@@ -337,7 +377,6 @@
                     <artifactId>mysql-connector-java</artifactId>
                     <version>8.0.25</version>
                 </dependency>
-              
             </dependencies>
         </profile>
     </profiles>
@@ -351,22 +390,20 @@
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
-            
         </dependencies>
     </dependencyManagement>
-   
 
-  
-    
     <build>
         <finalName>${project.artifactId}-7002</finalName>
+
         <plugins>
-          
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
             </plugin>
-            <!--plugin>
+
+            <!-- Optional: keep compiler explicit -->
+            <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>3.8.1</version>
@@ -374,14 +411,9 @@
                     <source>1.8</source>
                     <target>1.8</target>
                     <encoding>UTF-8</encoding>
-                    <compilerArgs>
-                        <arg>-Xlint:deprecation</arg>
-                        <arg>-Xlint:unchecked</arg>
-                    </compilerArgs>
                 </configuration>
-            </plugin-->
+            </plugin>
         </plugins>
     </build>
-
 
 </project>

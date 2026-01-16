@@ -4,13 +4,16 @@
  */
 package com.finacial.wealth.api.fxpeer.exchange.controllers;
 
+import com.finacial.wealth.api.fxpeer.exchange.investment.ennum.InvestmentOrderStatus;
 import com.finacial.wealth.api.fxpeer.exchange.model.ApiResponseModel;
 import com.finacial.wealth.api.fxpeer.exchange.model.BaseResponse;
 
 import com.finacial.wealth.api.fxpeer.exchange.investment.record.CreateSubscriptionReq;
 import com.finacial.wealth.api.fxpeer.exchange.investment.record.LiquidateInvestmentRequest;
+import com.finacial.wealth.api.fxpeer.exchange.investment.service.InvestmentOrderQueryService;
 import com.finacial.wealth.api.fxpeer.exchange.investment.service.InvestmentOrderService;
 import com.finacial.wealth.api.fxpeer.exchange.investment.service.InvestmentValuationScheduler;
+import com.finacial.wealth.api.fxpeer.exchange.investment.service.LiquidationActionService;
 import com.finacial.wealth.api.fxpeer.exchange.model.GetProducts;
 
 import jakarta.validation.Valid;
@@ -19,6 +22,7 @@ import java.io.IOException;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -36,12 +40,43 @@ public class InvestmentServicesController {
 
     private final InvestmentOrderService investmentOrderService;
     private final InvestmentValuationScheduler investmentValuationScheduler;
+    private final LiquidationActionService liquidationActionService;
+
+    private final InvestmentOrderQueryService queryService;
 
     public InvestmentServicesController(InvestmentOrderService investmentOrderService,
-            InvestmentValuationScheduler investmentValuationScheduler) {
+            InvestmentValuationScheduler investmentValuationScheduler,
+            InvestmentOrderQueryService queryService,
+            LiquidationActionService liquidationActionService) {
         this.investmentOrderService = investmentOrderService;
         this.investmentValuationScheduler = investmentValuationScheduler;
+        this.queryService = queryService;
+        this.liquidationActionService = liquidationActionService;
 
+    }
+
+    @GetMapping("/orders/liquidation-settled")
+    public ResponseEntity<ApiResponseModel> getAllSettled(@RequestHeader("Authorization") String auth) {
+        return queryService.getOrdersByStatusForCustomer(auth, InvestmentOrderStatus.SETTLED);
+    }
+
+    @GetMapping("/orders/liquidation-processing")
+    public ResponseEntity<ApiResponseModel> getAllLiquidationProcessing(@RequestHeader("Authorization") String auth) {
+        return queryService.getOrdersByStatusForCustomer(auth, InvestmentOrderStatus.LIQUIDATION_PROCESSING);
+    }
+
+    @PostMapping("/orders/liquidation/{orderRef}/approve")
+    public ResponseEntity<BaseResponse> approve(@RequestHeader("Authorization") String auth,
+            @PathVariable("orderRef") String orderRef) {
+        BaseResponse res = liquidationActionService.approveLiquidation(auth, orderRef);
+        return ResponseEntity.ok(res); // keep your current convention
+    }
+
+    @PostMapping("/orders/liquidation/{orderRef}/cancel")
+    public ResponseEntity<BaseResponse> cancel(@RequestHeader("Authorization") String auth,
+            @PathVariable("orderRef") String orderRef) {
+        BaseResponse res = liquidationActionService.cancelLiquidation(auth, orderRef);
+        return ResponseEntity.ok(res);
     }
 
     @GetMapping(

@@ -78,64 +78,6 @@ public class InvestmentValuationScheduler {
     // run every day by 23:55 WAT
     //@Scheduled(cron = "0 55 23 * * *", zone = "Africa/Lagos")
     @jakarta.transaction.Transactional
-    //@Scheduled(cron = "${fx.investment.run.valuations.snap.shots.cron}")
-    public void snapshotDailyValuationsOldd() {
-
-        System.out.println(" ****** Investment Checking and Processing SnapshotDailyValuations  >>>>>>>>>>>>>   *********** ");
-
-        LocalDate today = LocalDate.now();
-
-        var positions = positionRepo.findAllActivePositions();
-
-        for (InvestmentPosition pos : positions) {
-
-            // skip if already written today
-            if (historyRepo.findByPositionIdAndValuationDate(pos.getId(), today).isPresent()) {
-                continue;
-            }
-
-            // Pull today's NAV/valuation from partner
-            /*PartnerValuationResponse val = partnerClient.getValuation(
-                    pos.getProduct().getPartnerProductCode(),
-                    pos.getUnits(),
-                    pos.getEmailAddress()
-            );*/
-            // update position live values
-            BigDecimal getCurrValuePerc = pos.getProduct().getPercentageCurrValue() == null ? BigDecimal.ZERO : pos.getProduct().getPercentageCurrValue();
-            // BigDecimal getAccruedInterest = pos.getProduct().getAccruedInterest() == null ? BigDecimal.ZERO : pos.getProduct().getAccruedInterest();
-            BigDecimal getTodaysValue = pos.getInvestedAmount().add(getCurrValuePerc.multiply(pos.getInvestedAmount()));
-            BigDecimal cuurentAccruedInterest = pos.getAccruedInterest();
-            BigDecimal newAccruedInterest = getCurrValuePerc.multiply(pos.getInvestedAmount());
-            pos.setTotalAccruedInterest(cuurentAccruedInterest.add(newAccruedInterest));
-            pos.setCurrentValue(getTodaysValue.add(pos.getTotalAccruedInterest()));
-            pos.setAccruedInterest(newAccruedInterest);
-
-            pos.setUpdatedAt(Instant.now());
-            positionRepo.save(pos);
-
-            // record daily history
-            InvestmentPositionHistory hist = new InvestmentPositionHistory();
-            hist.setPosition(pos);
-            hist.setValuationDate(today);
-            hist.setPrice(pos.getProduct().getUnitPrice());
-            hist.setInvestmentAmount(pos.getAccruedInterest());
-            hist.setUnits(pos.getUnits());
-            hist.setSubscriptionAmount(pos.getInvestedAmount());
-            hist.setMarketValue(pos.getCurrentValue());
-            hist.setGainLoss(pos.getCurrentValue().subtract(pos.getInvestedAmount()));
-            hist.setCreatedAt(Instant.now());
-            hist.setMaturityDate(pos.getMaturityAt());
-            hist.setActiveDate(pos.getSettlementAt());
-            hist.setEmailAddress(pos.getEmailAddress());
-            hist.setInvestmentAmount(pos.getInvestedAmount());
-            hist.setInvestmentId(pos.getOrderRef());
-            hist.setProductName(pos.getProductName());
-
-            historyRepo.save(hist);
-        }
-    }
-
-    @jakarta.transaction.Transactional
     @Scheduled(cron = "${fx.investment.run.valuations.snap.shots.cron}", zone = "Africa/Lagos")
     public void snapshotDailyValuations() {
 
@@ -198,6 +140,8 @@ public class InvestmentValuationScheduler {
             hist.setGainLoss(pos.getCurrentValue().subtract(invested));
             hist.setDailyInterest(todaysAccruedInterest);
             hist.setTotalInterest(pos.getTotalAccruedInterest());
+            hist.setInvestmentAmount(invested);
+         
 
             // If you want "interest earned today" in history, keep this line:
             hist.setAccruedInterest(todaysAccruedInterest); // <-- add this field if you have it

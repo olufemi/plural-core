@@ -192,6 +192,8 @@ public class CreateQuoteClient {
             cQuote.setSourceCurrency(sourceCurrency);
             cQuote.setTargetCurrency(targetCurrency);
             cQuote.setTz(timeZone);
+            cQuote.setOriginReference(String.valueOf(GlobalMethods.generateTransactionId()));
+            cQuote.setOnBehalfOf(String.valueOf(GlobalMethods.generateTransactionId()));
             String bodyJson = mapper.writeValueAsString(cQuote);
 
             Map<String, String> sig = HmacSigner.makeSignature(hmacSecret, bodyJson);
@@ -513,6 +515,10 @@ public class CreateQuoteClient {
             cQuote.setSourceCurrency(sourceCurrency);
             cQuote.setTargetCurrency(targetCurrency);
             cQuote.setTz(timeZone);
+            cQuote.setOriginReference(String.valueOf(GlobalMethods.generateTransactionId()));
+            cQuote.setOnBehalfOf(String.valueOf(GlobalMethods.generateTransactionId()));
+            //origin_reference
+            //on_behalf_of - Customer ID (must belong to your business)
             String bodyJson = mapper.writeValueAsString(cQuote);
 
             Map<String, String> sig = HmacSigner.makeSignature(hmacSecret, bodyJson);

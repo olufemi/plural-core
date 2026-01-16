@@ -24,7 +24,7 @@ import javax.servlet.http.HttpServletRequest;
 @RequestMapping("/walletmgt/storage")
 public class StorageController {
 
-    private final FirebaseStorageService storageService;
+     private final FirebaseStorageService storageService;
 
     public StorageController(FirebaseStorageService storageService) {
         this.storageService = storageService;

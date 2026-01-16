@@ -12,6 +12,6 @@ public enum InvestmentType {
     MUTUAL_FUND,
     BOND,
     MONEY_MARKET,
-    ETF,
+    ETF,CROWD_FUNDING,
     OTHER
 }

@@ -1,4 +1,4 @@
-package com.finacial.wealth.backoffice.bo;
+package com.finacial.wealth.backoffice.controller;
 
 import com.finacial.wealth.backoffice.audit.AuditAspect.Audited;
 import com.finacial.wealth.backoffice.integrations.fxpeer.FxPeerExchangeClient;

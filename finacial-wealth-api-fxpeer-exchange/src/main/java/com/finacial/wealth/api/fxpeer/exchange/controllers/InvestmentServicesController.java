@@ -9,15 +9,20 @@ import com.finacial.wealth.api.fxpeer.exchange.model.ApiResponseModel;
 import com.finacial.wealth.api.fxpeer.exchange.model.BaseResponse;
 
 import com.finacial.wealth.api.fxpeer.exchange.investment.record.CreateSubscriptionReq;
+import com.finacial.wealth.api.fxpeer.exchange.investment.record.InvestmentProductUpsertRequest;
+import com.finacial.wealth.api.fxpeer.exchange.investment.record.InvestmentTopupRequestCaller;
 import com.finacial.wealth.api.fxpeer.exchange.investment.record.LiquidateInvestmentRequest;
+import com.finacial.wealth.api.fxpeer.exchange.investment.record.LiquidationApprovalRequest;
 import com.finacial.wealth.api.fxpeer.exchange.investment.service.InvestmentOrderQueryService;
 import com.finacial.wealth.api.fxpeer.exchange.investment.service.InvestmentOrderService;
+import com.finacial.wealth.api.fxpeer.exchange.investment.service.InvestmentProductService;
 import com.finacial.wealth.api.fxpeer.exchange.investment.service.InvestmentValuationScheduler;
 import com.finacial.wealth.api.fxpeer.exchange.investment.service.LiquidationActionService;
 import com.finacial.wealth.api.fxpeer.exchange.model.GetProducts;
 
 import jakarta.validation.Valid;
 import java.io.IOException;
+import java.util.Map;
 
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -25,6 +30,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -41,42 +47,69 @@ public class InvestmentServicesController {
     private final InvestmentOrderService investmentOrderService;
     private final InvestmentValuationScheduler investmentValuationScheduler;
     private final LiquidationActionService liquidationActionService;
+    private final InvestmentProductService productService;
 
     private final InvestmentOrderQueryService queryService;
 
     public InvestmentServicesController(InvestmentOrderService investmentOrderService,
             InvestmentValuationScheduler investmentValuationScheduler,
             InvestmentOrderQueryService queryService,
-            LiquidationActionService liquidationActionService) {
+            LiquidationActionService liquidationActionService,
+            InvestmentProductService productService) {
         this.investmentOrderService = investmentOrderService;
         this.investmentValuationScheduler = investmentValuationScheduler;
         this.queryService = queryService;
         this.liquidationActionService = liquidationActionService;
+        this.productService = productService;
 
     }
 
-    @GetMapping("/orders/liquidation-settled")
-    public ResponseEntity<ApiResponseModel> getAllSettled(@RequestHeader("Authorization") String auth) {
-        return queryService.getOrdersByStatusForCustomer(auth, InvestmentOrderStatus.SETTLED);
+    @PostMapping("/create-product")
+    public Map<String, Object> create(@RequestBody InvestmentProductUpsertRequest req) {
+        return productService.create(req);
     }
 
-    @GetMapping("/orders/liquidation-processing")
-    public ResponseEntity<ApiResponseModel> getAllLiquidationProcessing(@RequestHeader("Authorization") String auth) {
-        return queryService.getOrdersByStatusForCustomer(auth, InvestmentOrderStatus.LIQUIDATION_PROCESSING);
+    @PutMapping("/update-product/{productCode}")
+    public Map<String, Object> update(
+            @PathVariable String productCode,
+            @RequestBody InvestmentProductUpsertRequest req
+    ) {
+        req.setProductCode(productCode); // path wins
+        return productService.update(req);
     }
 
-    @PostMapping("/orders/liquidation/{orderRef}/approve")
-    public ResponseEntity<BaseResponse> approve(@RequestHeader("Authorization") String auth,
-            @PathVariable("orderRef") String orderRef) {
-        BaseResponse res = liquidationActionService.approveLiquidation(auth, orderRef);
-        return ResponseEntity.ok(res); // keep your current convention
+    @GetMapping("/orders/all-liquidation-settled")
+    public ResponseEntity<ApiResponseModel> getAllSettled( //   @RequestHeader("Authorization") String auth
+            ) {
+        return queryService.getOrdersByStatusForCustomer(InvestmentOrderStatus.SETTLED);
     }
 
-    @PostMapping("/orders/liquidation/{orderRef}/cancel")
-    public ResponseEntity<BaseResponse> cancel(@RequestHeader("Authorization") String auth,
-            @PathVariable("orderRef") String orderRef) {
-        BaseResponse res = liquidationActionService.cancelLiquidation(auth, orderRef);
-        return ResponseEntity.ok(res);
+    @GetMapping("/orders/all-liquidation-processing")
+    public ResponseEntity<ApiResponseModel> getAllLiquidationProcessing( //  @RequestHeader("Authorization") String auth
+            ) {
+        return queryService.getOrdersByStatusForCustomer(InvestmentOrderStatus.LIQUIDATION_PROCESSING);
+    }
+
+    @PostMapping("/orders/liquidation/approve")
+    public ResponseEntity<BaseResponse> approveLiquidation(
+            @RequestBody LiquidationApprovalRequest request
+    ) {
+        return ResponseEntity.ok(
+                liquidationActionService.approveLiquidation(
+                        request.getOrderRef()
+                )
+        );
+    }
+
+    @PostMapping("/orders/liquidation/cancel")
+    public ResponseEntity<BaseResponse> cancelLiquidation(
+            @RequestBody LiquidationApprovalRequest request
+    ) {
+        return ResponseEntity.ok(
+                liquidationActionService.cancelLiquidation(
+                        request.getOrderRef()
+                )
+        );
     }
 
     @GetMapping(
@@ -132,6 +165,18 @@ public class InvestmentServicesController {
     @GetMapping(path = "/__ping", produces = MediaType.TEXT_PLAIN_VALUE)
     public String ping() {
         return "investments:ok";
+    }
+
+    @PostMapping(
+            path = "/request-top-up",
+            consumes = MediaType.APPLICATION_JSON_VALUE,
+            produces = MediaType.APPLICATION_JSON_VALUE
+    )
+    public BaseResponse reqLiquidation(
+            @RequestHeader(name = "authorization", required = true) String auth,
+            @RequestBody @Valid InvestmentTopupRequestCaller rq
+    ) throws IOException {
+        return investmentOrderService.createTopUpCaller(rq, auth);
     }
 
 }

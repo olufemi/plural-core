@@ -4,18 +4,17 @@
  */
 package com.finacial.wealth.api.fxpeer.exchange.investment.record;
 
-import java.math.BigDecimal;
+import jakarta.validation.constraints.NotBlank;
+import lombok.Data;
 
 /**
  *
  * @author olufemioshin
  */
-public record LiquidateInvestmentRequest(
-       // Long positionId,
-        BigDecimal liquidationAmount, // if null => full liquidation
-        String orderId,
-        String pin,
-        boolean fullLiquidation
-        
-       
-) {}
+@Data
+public class LiquidationApprovalRequest {
+    
+
+    @NotBlank
+    private String orderRef;
+}

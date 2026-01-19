@@ -10,12 +10,8 @@ import java.math.BigDecimal;
  *
  * @author olufemioshin
  */
-public record LiquidateInvestmentRequest(
-       // Long positionId,
-        BigDecimal liquidationAmount, // if null => full liquidation
-        String orderId,
-        String pin,
-        boolean fullLiquidation
-        
-       
+public record InvestmentTopupRequest(
+        String orderRef,          // existing investment position/order ref
+        BigDecimal amount,        // topup amount
+        String idempotencyKey     // from client
 ) {}

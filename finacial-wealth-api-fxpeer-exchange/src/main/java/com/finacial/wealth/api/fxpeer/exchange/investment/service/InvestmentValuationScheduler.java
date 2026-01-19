@@ -17,6 +17,7 @@ import com.finacial.wealth.api.fxpeer.exchange.investment.repo.InvestmentPositio
 import com.finacial.wealth.api.fxpeer.exchange.investment.repo.InvestmentPositionRepository;
 import com.finacial.wealth.api.fxpeer.exchange.model.ApiResponseModel;
 import com.finacial.wealth.api.fxpeer.exchange.util.UttilityMethods;
+import com.google.gson.Gson;
 import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -141,7 +142,6 @@ public class InvestmentValuationScheduler {
             hist.setDailyInterest(todaysAccruedInterest);
             hist.setTotalInterest(pos.getTotalAccruedInterest());
             hist.setInvestmentAmount(invested);
-         
 
             // If you want "interest earned today" in history, keep this line:
             hist.setAccruedInterest(todaysAccruedInterest); // <-- add this field if you have it
@@ -456,6 +456,8 @@ public class InvestmentValuationScheduler {
             responseModel.setDescription(statusMessage);
             responseModel.setData(Collections.emptyList());
         }
+
+       // System.out.println(" getHistory rq ::::::::::::::::  %S  " + new Gson().toJson(responseModel));
 
         return ResponseEntity.ok(responseModel);
     }

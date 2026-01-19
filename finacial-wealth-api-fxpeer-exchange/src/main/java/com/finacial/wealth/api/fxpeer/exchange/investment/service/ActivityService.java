@@ -31,6 +31,16 @@ public class ActivityService {
         // TODO: integrate with your existing Activity/Notification module
         System.out.println("[Activity] Liquidation SUCCESS: " + order.getOrderRef());
     }
+    
+     public void logInvestmentTopup(InvestmentOrder order,
+            InvestmentPosition position) {
+
+        // TODO: integrate with your existing Activity/Notification module
+        System.out.println("[Activity] Liquidation SUCCESS: " + order.getOrderRef());
+    }
+    
+   
+      
 
     public void logInterestCapitalization(
             InvestmentPosition position, BigDecimal accrued, LocalDate today) {

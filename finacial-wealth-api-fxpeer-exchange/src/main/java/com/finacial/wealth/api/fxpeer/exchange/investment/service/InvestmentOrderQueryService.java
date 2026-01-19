@@ -38,7 +38,7 @@ public class InvestmentOrderQueryService {
     }
 
     @Transactional(readOnly = true)
-    public ResponseEntity<ApiResponseModel> getOrdersByStatusForCustomer(String auth, InvestmentOrderStatus status) {
+    public ResponseEntity<ApiResponseModel> getOrdersByStatusForCustomer(InvestmentOrderStatus status) {
         ApiResponseModel res = new ApiResponseModel();
         int statusCode = 500;
         String statusMessage = "Something went wrong!";
@@ -46,7 +46,7 @@ public class InvestmentOrderQueryService {
         try {
             statusCode = 400;
 
-            if (auth == null || auth.trim().isEmpty()) {
+            /*if (auth == null || auth.trim().isEmpty()) {
                 res.setStatusCode(statusCode);
                 res.setDescription("Missing Authorization header");
                 res.setData(Collections.emptyList());
@@ -59,10 +59,10 @@ public class InvestmentOrderQueryService {
                 res.setDescription("Invalid token: emailAddress claim missing");
                 res.setData(Collections.emptyList());
                 return ResponseEntity.ok(res);
-            }
+            }*/
 
             List<InvestmentOrder> orders
-                    = orderRepo.findByEmailAddressAndStatusOrderByUpdatedAtDesc(email, status);
+                    = orderRepo.findByStatusOrderByUpdatedAtDesc(status);
 
             if (orders.size() <= 0) {
                 res.setStatusCode(statusCode);

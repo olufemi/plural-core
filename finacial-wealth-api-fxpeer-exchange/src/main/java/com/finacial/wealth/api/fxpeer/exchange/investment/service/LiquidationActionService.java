@@ -38,7 +38,7 @@ public class LiquidationActionService {
     }
 
     @Transactional
-    public BaseResponse approveLiquidation(String auth, String liquidationOrderRef) {
+    public BaseResponse approveLiquidation( String liquidationOrderRef) {
 
         BaseResponse res = new BaseResponse();
         int statusCode = 500;
@@ -47,18 +47,20 @@ public class LiquidationActionService {
         try {
             statusCode = 400;
 
-            String email = utilService.getClaimFromJwt(auth, "emailAddress");
+           /* String email = utilService.getClaimFromJwt(auth, "emailAddress");
             if (email == null || email.trim().isEmpty()) {
                 res.setStatusCode(statusCode);
                 res.setDescription("Invalid token: emailAddress claim missing");
                 return res;
-            }
+            }*/
 
             InvestmentOrder order = orderRepo.findByOrderRef(liquidationOrderRef)
                     .orElseThrow(() -> new NotFoundException("Liquidation order not found"));
 
             // Ownership check
-            if (order.getEmailAddress() == null || !order.getEmailAddress().equalsIgnoreCase(email)) {
+            if (order.getEmailAddress() == null 
+                   // || !order.getEmailAddress().equalsIgnoreCase(email)
+                    ) {
                 res.setStatusCode(403);
                 res.setDescription("You are not allowed to approve this liquidation.");
                 return res;
@@ -83,7 +85,7 @@ public class LiquidationActionService {
     }
 
     @Transactional
-    public BaseResponse cancelLiquidation(String auth, String liquidationOrderRef) {
+    public BaseResponse cancelLiquidation(String liquidationOrderRef) {
 
         BaseResponse res = new BaseResponse();
         int statusCode = 500;
@@ -92,18 +94,20 @@ public class LiquidationActionService {
         try {
             statusCode = 400;
 
-            String email = utilService.getClaimFromJwt(auth, "emailAddress");
+            /*String email = utilService.getClaimFromJwt(auth, "emailAddress");
             if (email == null || email.trim().isEmpty()) {
                 res.setStatusCode(statusCode);
                 res.setDescription("Invalid token: emailAddress claim missing");
                 return res;
-            }
+            }*/
 
             InvestmentOrder order = orderRepo.findByOrderRef(liquidationOrderRef)
                     .orElseThrow(() -> new NotFoundException("Liquidation order not found"));
 
             // Ownership check
-            if (order.getEmailAddress() == null || !order.getEmailAddress().equalsIgnoreCase(email)) {
+            if (order.getEmailAddress() == null 
+                    //|| !order.getEmailAddress().equalsIgnoreCase(email)
+                    ) {
                 res.setStatusCode(403);
                 res.setDescription("You are not allowed to cancel this liquidation.");
                 return res;

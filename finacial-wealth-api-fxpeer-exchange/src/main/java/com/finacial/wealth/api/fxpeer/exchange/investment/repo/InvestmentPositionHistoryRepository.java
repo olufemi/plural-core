@@ -38,5 +38,7 @@ public interface InvestmentPositionHistoryRepository
            order by h.valuationDate desc
            """)
     List<InvestmentPositionHistory> findHistoryByEmailAddress(@Param("email") String email);
+    
+    
 
 }

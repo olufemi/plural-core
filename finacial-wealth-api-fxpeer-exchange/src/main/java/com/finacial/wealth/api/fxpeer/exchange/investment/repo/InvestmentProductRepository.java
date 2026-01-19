@@ -30,6 +30,12 @@ public interface InvestmentProductRepository extends JpaRepository<InvestmentPro
           and (:type is null or p.type = :type)
         """)
     List<InvestmentProduct> findActiveByCurrencyAndType(String currency, InvestmentType type);
+
+    List<InvestmentProduct> findByActiveTrue();
+
+    Optional<InvestmentProduct> findByProductCode(String productCode);
+
+    boolean existsByProductCode(String productCode);
     
-     List<InvestmentProduct> findByActiveTrue();
+    List<InvestmentProduct> findByActiveTrueOrderByNameAsc();
 }

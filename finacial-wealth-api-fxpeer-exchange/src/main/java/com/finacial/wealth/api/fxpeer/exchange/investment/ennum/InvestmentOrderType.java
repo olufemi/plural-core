@@ -9,6 +9,7 @@ package com.finacial.wealth.api.fxpeer.exchange.investment.ennum;
  * @author olufemioshin
  */
 public enum InvestmentOrderType {
-    SUBSCRIPTION,   // Buy investment
-    LIQUIDATION     // Sell/withdraw
+    SUBSCRIPTION, // Buy investment
+    LIQUIDATION,//Sell/withdraw
+    TOPUP// 
 }

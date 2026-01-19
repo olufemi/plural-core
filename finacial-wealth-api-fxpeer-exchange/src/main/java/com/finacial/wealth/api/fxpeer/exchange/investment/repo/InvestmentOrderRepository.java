@@ -70,4 +70,6 @@ public interface InvestmentOrderRepository extends JpaRepository<InvestmentOrder
     List<InvestmentOrder> findByEmailAddressAndStatusInOrderByUpdatedAtDesc(String emailAddress,
             List<InvestmentOrderStatus> statuses);
 
+    Optional<InvestmentOrder> findByIdempotencyKeyAndEmailAddress(String key, String email);
+
 }

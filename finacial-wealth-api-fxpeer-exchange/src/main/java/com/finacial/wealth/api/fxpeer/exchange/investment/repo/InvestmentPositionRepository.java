@@ -53,5 +53,7 @@ public interface InvestmentPositionRepository extends JpaRepository<InvestmentPo
     List<InvestmentPosition> findAllActivePositions();
 
     Optional<InvestmentPosition> findByOrderRef(String orderRef);
+    
+   
 
 }

@@ -78,6 +78,8 @@ public class InvestmentPositionHistory {
     private Instant activeDate;
 
     private String emailAddress;
+    
+    private BigDecimal minimumAmount;
 
     private String investmentId;
     private String productName;

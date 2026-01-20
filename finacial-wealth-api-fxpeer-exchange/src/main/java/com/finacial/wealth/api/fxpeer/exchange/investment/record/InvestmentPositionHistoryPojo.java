@@ -41,7 +41,7 @@ public class InvestmentPositionHistoryPojo {
 
     private LocalDate activeDate;
    
-
+    private BigDecimal minimumAmount;
     private String emailAddress;
     private String status;
     private String currency;

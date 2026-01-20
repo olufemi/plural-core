@@ -101,6 +101,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Collections;
 import java.util.Optional;
+import java.util.function.Consumer;
 
 /**
  *
@@ -1261,9 +1262,10 @@ public class InvestmentOrderService {
             mp.put("units", units);
             mp.put("emailAddress", email);
             mp.put("productId", rq.getProductId());
-            mp.put("currentValue", (String) makeSub.getData().get("currentValue"));
+            // String currentValueStr = ((BigDecimal) makeSub.get("currentValue")).toPlainString();
 
-            resp.setDescription("Subscription was successful");
+            // mp.put("currentValue", currentValueStr);
+            resp.setDescription("Topup was successful");
             resp.setStatusCode(200);
             resp.setData(mp);
 
@@ -1301,6 +1303,7 @@ public class InvestmentOrderService {
             BigDecimal topupAmount = rq.amount();
 
             // A) True idempotency (works forever)
+            // NOT orderRef
             if (guardRepo.findByIdempotencyKey(idemKey).isPresent()) {
                 resp.setStatusCode(200);
                 resp.setDescription("This top up was already submitted. Check Activity for status.");
@@ -1310,8 +1313,9 @@ public class InvestmentOrderService {
             // B) 2-minute cooldown (blocks rapid repeats even with new keys)
             Instant since = Instant.now().minus(Duration.ofMinutes(2));
             boolean hasRecent = !guardRepo.findRecent(email, orderRef, "TOPUP", since).isEmpty();
+
             if (hasRecent) {
-                resp.setStatusCode(failCode);
+                resp.setStatusCode(400);
                 resp.setDescription("A top up was just submitted. Please wait 2 minutes and try again.");
                 return resp;
             }
@@ -1413,7 +1417,12 @@ public class InvestmentOrderService {
             orderRepo.save(order);
 
             // 8) History + activity (recommended)
-            recordTopupEvent(pos, topupAmount, LocalDate.now(ZoneId.of("Africa/Lagos")), orderRef);
+            LocalDate today = LocalDate.now(ZoneId.of("Africa/Lagos"));
+            // recordTopupEvent(pos, topupAmount, LocalDate.now(ZoneId.of("Africa/Lagos")), orderRef);
+            upsertHistoryForToday(pos, today, h -> {
+                // optional: if you have a field to track topup amount, set it here.
+                // otherwise do nothing; the "snapshot" will reflect updated capital anyway.
+            });
             activityService.logInvestmentTopup(order, pos);
 
 //            return new InvestmentTopupResponse(
@@ -1453,18 +1462,66 @@ public class InvestmentOrderService {
     }
 
     @Transactional
+    public void upsertHistoryForToday(InvestmentPosition pos, LocalDate today, Consumer<InvestmentPositionHistory> mutator) {
+
+        InvestmentPositionHistory hist = historyRepo
+                .findByPositionIdAndValuationDate(pos.getId(), today)
+                .orElseGet(() -> {
+                    InvestmentPositionHistory h = new InvestmentPositionHistory();
+                    h.setPosition(pos);
+                    h.setValuationDate(today);
+                    h.setCreatedAt(Instant.now());
+                    h.setEmailAddress(pos.getEmailAddress());
+                    h.setInvestmentId(pos.getOrderRef());
+                    h.setProductName(pos.getProductName());
+                    h.setActiveDate(pos.getSettlementAt());
+                    h.setMaturityDate(pos.getMaturityAt());
+                    return h;
+                });
+
+        // apply updates based on the caller (snapshot/topup/subscription/etc)
+        mutator.accept(hist);
+
+        // always keep these consistent
+        hist.setUnits(nz(pos.getUnits()));
+        hist.setSubscriptionAmount(nz(pos.getInvestedAmount()));     // capital
+        hist.setInvestmentAmount(nz(pos.getInvestedAmount()));       // NOT NULL
+        hist.setTotalInterest(nz(pos.getTotalAccruedInterest()));
+        hist.setDailyInterest(nz(pos.getAccruedInterest()));
+        hist.setAccruedInterest(nz(pos.getAccruedInterest()));
+        hist.setMarketValue(nz(pos.getCurrentValue()));
+        hist.setGainLoss(nz(pos.getCurrentValue()).subtract(nz(pos.getInvestedAmount())));
+        hist.setPrice(pos.getProduct() != null ? pos.getProduct().getUnitPrice() : null);
+
+        historyRepo.save(hist);
+    }
+
+    @Transactional
     public void recordTopupEvent(InvestmentPosition pos, BigDecimal topupAmount, LocalDate date, String ref) {
 
         InvestmentPositionHistory hist = new InvestmentPositionHistory();
         hist.setPosition(pos);
         hist.setValuationDate(date);
-        hist.setUnits(pos.getUnits());
-        hist.setSubscriptionAmount(pos.getInvestedAmount()); // capital after topup
-        hist.setMarketValue(pos.getCurrentValue());
-        hist.setGainLoss(pos.getCurrentValue().subtract(pos.getInvestedAmount()));
+
+        hist.setPrice(pos.getProduct().getUnitPrice());
+        hist.setUnits(nz(pos.getUnits()));
+
+        hist.setSubscriptionAmount(nz(pos.getInvestedAmount()));       // capital
+        hist.setInvestmentAmount(nz(pos.getInvestedAmount()));         // capital (NOT NULL)
+
+        hist.setDailyInterest(nz(pos.getAccruedInterest()));           // today’s interest
+        hist.setAccruedInterest(nz(pos.getAccruedInterest()));         // if you keep both, make them same
+        hist.setTotalInterest(nz(pos.getTotalAccruedInterest()));      // cumulative interest
+
+        hist.setMarketValue(nz(pos.getCurrentValue()));                // capital + totalInterest
+        hist.setGainLoss(nz(pos.getCurrentValue()).subtract(nz(pos.getInvestedAmount())));
+
         hist.setCreatedAt(Instant.now());
+        hist.setActiveDate(pos.getSettlementAt());
+        hist.setMaturityDate(pos.getMaturityAt());
+
         hist.setEmailAddress(pos.getEmailAddress());
-        hist.setInvestmentId(ref);
+        hist.setInvestmentId(pos.getOrderRef());
         hist.setProductName(pos.getProductName());
 
         // optional: store topup amount in metaJson if you have it

@@ -142,6 +142,7 @@ public class InvestmentValuationScheduler {
             hist.setDailyInterest(todaysAccruedInterest);
             hist.setTotalInterest(pos.getTotalAccruedInterest());
             hist.setInvestmentAmount(invested);
+            hist.setMinimumAmount(pos.getProduct().getMinimumInvestmentAmount());
 
             // If you want "interest earned today" in history, keep this line:
             hist.setAccruedInterest(todaysAccruedInterest); // <-- add this field if you have it
@@ -457,8 +458,7 @@ public class InvestmentValuationScheduler {
             responseModel.setData(Collections.emptyList());
         }
 
-       // System.out.println(" getHistory rq ::::::::::::::::  %S  " + new Gson().toJson(responseModel));
-
+        // System.out.println(" getHistory rq ::::::::::::::::  %S  " + new Gson().toJson(responseModel));
         return ResponseEntity.ok(responseModel);
     }
 
@@ -488,6 +488,7 @@ public class InvestmentValuationScheduler {
         dto.setValuationDate(h.getValuationDate());
         dto.setInvestmentId(h.getInvestmentId());
         dto.setProductName(h.getProductName());
+        dto.setMinimumAmount(h.getMinimumAmount() == null ? h.getPosition().getProduct().getMinimumInvestmentAmount() : h.getMinimumAmount());
 
         return dto;
     }

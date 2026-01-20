@@ -8,10 +8,8 @@ package com.finacial.wealth.api.profiling.storage.firebase;
  *
  * @author olufemioshin
  */
-
 import com.google.api.gax.paging.Page;
 import com.google.cloud.storage.*;
-
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.ByteArrayResource;
@@ -39,6 +37,41 @@ public class FirebaseStorageService {
 
     public FirebaseStorageService(Storage storage) {
         this.storage = storage;
+    }
+
+    // --- NEW: check object exists ---
+    public boolean exists(String objectName) {
+        if (objectName == null || objectName.trim().isEmpty()) {
+            return false;
+        }
+        Blob b = storage.get(BlobId.of(bucketName, objectName.trim()));
+        return b != null && !b.isDirectory();
+    }
+
+    // --- NEW: sign url on demand ---
+    public String signUrl(String objectName) {
+        if (objectName == null || objectName.trim().isEmpty()) {
+            return null;
+        }
+        try {
+            URL url = storage.signUrl(
+                    BlobInfo.newBuilder(BlobId.of(bucketName, objectName.trim())).build(),
+                    signedUrlMinutes,
+                    TimeUnit.MINUTES,
+                    Storage.SignUrlOption.withV4Signature()
+            );
+            return url.toString();
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    // --- NEW: delete by objectName ---
+    public boolean deleteObject(String objectName) {
+        if (objectName == null || objectName.trim().isEmpty()) {
+            return false;
+        }
+        return storage.delete(BlobId.of(bucketName, objectName.trim()));
     }
 
     public BaseResponseFireBase uploadSlide(MultipartFile file) {
@@ -115,13 +148,16 @@ public class FirebaseStorageService {
             );
 
             for (Blob b : blobs.iterateAll()) {
-                if (b == null || b.isDirectory()) continue;
+                if (b == null || b.isDirectory()) {
+                    continue;
+                }
                 items.add(buildFileItem(b));
             }
 
             // newest first
             Collections.sort(items, new Comparator<FileItem>() {
-                @Override public int compare(FileItem a, FileItem b) {
+                @Override
+                public int compare(FileItem a, FileItem b) {
                     Long x = a.getUpdatedAtMs() == null ? 0L : a.getUpdatedAtMs();
                     Long y = b.getUpdatedAtMs() == null ? 0L : b.getUpdatedAtMs();
                     return y.compareTo(x);
@@ -144,7 +180,9 @@ public class FirebaseStorageService {
             String objectName = normalizeSlideObjectName(fileNameOrObjectName);
             boolean deleted = storage.delete(BlobId.of(bucketName, objectName));
 
-            if (!deleted) return BaseResponseFireBase.fail(404, "Not found: " + objectName);
+            if (!deleted) {
+                return BaseResponseFireBase.fail(404, "Not found: " + objectName);
+            }
             return BaseResponseFireBase.ok("Deleted", objectName);
 
         } catch (Exception e) {
@@ -158,8 +196,12 @@ public class FirebaseStorageService {
 
             Page<Blob> blobs = storage.list(bucketName, Storage.BlobListOption.prefix(SLIDES_DIR));
             for (Blob b : blobs.iterateAll()) {
-                if (b == null || b.isDirectory()) continue;
-                if (storage.delete(b.getBlobId())) count++;
+                if (b == null || b.isDirectory()) {
+                    continue;
+                }
+                if (storage.delete(b.getBlobId())) {
+                    count++;
+                }
             }
 
             return BaseResponseFireBase.ok("Deleted all slides", count);
@@ -181,7 +223,6 @@ public class FirebaseStorageService {
     }
 
     // ---------------- helpers ----------------
-
     private FileItem buildFileItem(Blob b) {
         FileItem i = new FileItem();
         i.setName(b.getName());
@@ -207,7 +248,9 @@ public class FirebaseStorageService {
 
     private String normalizeSlideObjectName(String fileNameOrObjectName) {
         String s = fileNameOrObjectName.trim();
-        if (s.startsWith(SLIDES_DIR)) return s;
+        if (s.startsWith(SLIDES_DIR)) {
+            return s;
+        }
         return SLIDES_DIR + s;
     }
 
@@ -217,27 +260,44 @@ public class FirebaseStorageService {
     }
 
     private String safeName(String name) {
-        if (name == null) return "file";
+        if (name == null) {
+            return "file";
+        }
         // very simple sanitization
         return name.replace("\\", "_").replace("/", "_").replace("..", "_").trim();
     }
 
     private String guessContentType(String provided, String filename) {
-        if (provided != null && !provided.trim().isEmpty()) return provided;
+        if (provided != null && !provided.trim().isEmpty()) {
+            return provided;
+        }
         String f = (filename == null ? "" : filename.toLowerCase());
-        if (f.endsWith(".pptx")) return "application/vnd.openxmlformats-officedocument.presentationml.presentation";
-        if (f.endsWith(".ppt")) return "application/vnd.ms-powerpoint";
-        if (f.endsWith(".pdf")) return "application/pdf";
+        if (f.endsWith(".pptx")) {
+            return "application/vnd.openxmlformats-officedocument.presentationml.presentation";
+        }
+        if (f.endsWith(".ppt")) {
+            return "application/vnd.ms-powerpoint";
+        }
+        if (f.endsWith(".pdf")) {
+            return "application/pdf";
+        }
         return "application/octet-stream";
     }
 
     private String contentTypeToExt(String contentType) {
-        if (contentType == null) return ".png";
+        if (contentType == null) {
+            return ".png";
+        }
         String c = contentType.toLowerCase();
-        if (c.contains("jpeg") || c.contains("jpg")) return ".jpg";
-        if (c.contains("png")) return ".png";
-        if (c.contains("webp")) return ".webp";
+        if (c.contains("jpeg") || c.contains("jpg")) {
+            return ".jpg";
+        }
+        if (c.contains("png")) {
+            return ".png";
+        }
+        if (c.contains("webp")) {
+            return ".webp";
+        }
         return ".bin";
     }
 }
-

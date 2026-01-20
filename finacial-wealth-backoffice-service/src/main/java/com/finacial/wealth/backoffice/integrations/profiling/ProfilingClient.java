@@ -1,11 +1,16 @@
 package com.finacial.wealth.backoffice.integrations.profiling;
 
+import com.finacial.wealth.backoffice.config.FeignConfig;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
 
-@FeignClient(name = "profiling-service", configuration = com.finacial.wealth.backoffice.config.FeignConfig.class)
+@FeignClient(
+    name = "profiling-service",
+    contextId = "profilingClient",
+    configuration = FeignConfig.class
+)
 public interface ProfilingClient {
 
   @GetMapping("/api/profiling/customers")

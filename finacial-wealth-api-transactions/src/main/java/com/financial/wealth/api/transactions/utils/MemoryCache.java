@@ -5,7 +5,6 @@
  */
 package com.financial.wealth.api.transactions.utils;
 
-
 import com.financial.wealth.api.transactions.domain.AppConfig;
 import com.financial.wealth.api.transactions.repo.AppConfigRepo;
 import java.util.HashMap;
@@ -44,17 +43,55 @@ public class MemoryCache {
         logger.info("###      Setting up the CACHE INSTANCE     #####");
         logger.info("#############################################");
 
-        //application settings
         List<AppConfig> appSettings = loadApplicationSettings();
         settingsCache = new ConcurrentHashMap<>();
-        appSettings.stream().map((appConfigSetting) -> {
-            settingsCache.put(appConfigSetting.getConfigName(), appConfigSetting.getConfigValue());
-            return appConfigSetting;
-        }).forEachOrdered((appConfigSetting) -> {
-            logger.info(String.format("%s=>%s", appConfigSetting.getConfigName(), appConfigSetting.getConfigValue()));
-        });
-        logger.info("Done loading settings");
 
+        appSettings.forEach(appConfigSetting -> {
+            settingsCache.put(
+                    appConfigSetting.getConfigName(),
+                    appConfigSetting.getConfigValue()
+            );
+
+            logger.info("{}=>{}",
+                    appConfigSetting.getConfigName(),
+                    mask(appConfigSetting.getConfigName(),
+                            appConfigSetting.getConfigValue()));
+        });
+
+        logger.info("Done loading settings");
+    }
+
+    private String mask(String key, String value) {
+        if (value == null) {
+            return null;
+        }
+
+        String k = key.toLowerCase();
+
+        // hard secrets
+        if (k.contains("password")
+                || k.contains("secret")
+                || k.contains("token")
+                || k.contains("clearance")
+                || k.contains("privatekey")
+                || k.contains("apikey")) {
+            return "****";
+        }
+
+        // email masking
+        if (k.contains("email")) {
+            int at = value.indexOf("@");
+            return at > 1 ? value.substring(0, 1) + "****" + value.substring(at) : "****";
+        }
+
+        // phone masking
+        if (k.contains("phone") || k.contains("msisdn")) {
+            return value.length() > 4
+                    ? "****" + value.substring(value.length() - 4)
+                    : "****";
+        }
+
+        return value;
     }
 
     private List<AppConfig> loadApplicationSettings() {

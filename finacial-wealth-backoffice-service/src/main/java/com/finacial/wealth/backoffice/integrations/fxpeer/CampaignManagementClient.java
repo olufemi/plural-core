@@ -15,8 +15,9 @@ import org.springframework.web.bind.annotation.*;
 import java.util.Map;
 
 @FeignClient(
-        name = "profiling-service",
-        configuration = com.finacial.wealth.backoffice.config.FeignConfig.class
+    name = "profiling-service",
+    contextId = "campaignManagementClient",
+    configuration = com.finacial.wealth.backoffice.config.FeignConfig.class
 )
 public interface CampaignManagementClient {
 

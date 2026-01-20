@@ -26,10 +26,10 @@ public class FirebaseStorageConfig {
 
     private static final Logger log = LoggerFactory.getLogger(FirebaseStorageConfig.class);
 
-    @Value("${fcm.service.account.file:}")
+    @Value("${fcm.service.account.file.plural:}")
     private String serviceAccountPath;
 
-    @Value("${fcm.project.id:}")
+    @Value("${fcm.project.id.plural:}")
     private String projectId;
 
     @Bean

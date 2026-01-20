@@ -26,7 +26,7 @@ public class FirebaseStorageService {
 
     private final Storage storage;
 
-    @Value("${firebase.bucket}")
+    @Value("${fcm.project.bucket.plural}")
     private String bucketName;
 
     @Value("${firebase.signed-url-minutes:60}")

@@ -31,7 +31,6 @@
 
         <!-- Google / Firebase -->
         <firebase-admin.version>9.7.0</firebase-admin.version>
-        <google-cloud-storage.version>2.34.0</google-cloud-storage.version>
 
         <!-- Others -->
         <pdfbox.version>2.0.1</pdfbox.version>
@@ -41,11 +40,33 @@
         <commons-lang.version>2.6</commons-lang.version>
     </properties>
 
+    <!-- ✅ SINGLE dependencyManagement block -->
+    <dependencyManagement>
+        <dependencies>
+
+            <dependency>
+                <groupId>de.codecentric</groupId>
+                <artifactId>spring-boot-admin-dependencies</artifactId>
+                <version>${spring-boot-admin.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+
+            <!-- ✅ Align all Google Cloud libs (fixes com/google/cloud/Binding issue) -->
+            <dependency>
+                <groupId>com.google.cloud</groupId>
+                <artifactId>libraries-bom</artifactId>
+                <version>26.51.0</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+
+        </dependencies>
+    </dependencyManagement>
+
     <dependencies>
 
-        <!-- =========================
-             Spring Boot / Cloud
-        ========================== -->
+        <!-- Spring Boot -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>
@@ -66,6 +87,7 @@
             <artifactId>spring-cloud-starter-netflix-eureka-client</artifactId>
         </dependency>
 
+        <!-- NOTE: You pinned this; leaving as-is since you already run it -->
         <dependency>
             <groupId>org.springframework.cloud</groupId>
             <artifactId>spring-cloud-starter-openfeign</artifactId>
@@ -77,18 +99,12 @@
             <artifactId>spring-boot-admin-starter-server</artifactId>
         </dependency>
 
-
-        <!-- =========================
-             Firebase / Google Cloud Storage
-             - keep ONLY ONE firebase-admin dependency
-             - exclude old JSON Storage API to avoid google-api-client conflicts
-        ========================== -->
+        <!-- Firebase Admin -->
         <dependency>
             <groupId>com.google.firebase</groupId>
             <artifactId>firebase-admin</artifactId>
             <version>${firebase-admin.version}</version>
             <exclusions>
-                <!-- Old Storage JSON API (v1) that often conflicts with newer google-api-client -->
                 <exclusion>
                     <groupId>com.google.apis</groupId>
                     <artifactId>google-api-services-storage</artifactId>
@@ -100,17 +116,20 @@
             </exclusions>
         </dependency>
 
-        <!-- Use modern GCS client (recommended) -->
+        <!-- ✅ Google Cloud Storage client (NO version; BOM controls it) -->
         <dependency>
             <groupId>com.google.cloud</groupId>
             <artifactId>google-cloud-storage</artifactId>
-            <version>${google-cloud-storage.version}</version>
+        </dependency>
+        
+        <dependency>
+            <groupId>com.google.auth</groupId>
+            <artifactId>google-auth-library-oauth2-http</artifactId>
+            <version>1.35.0</version>
+            <type>jar</type>
         </dependency>
 
-
-        <!-- =========================
-             Security / JWT
-        ========================== -->
+        <!-- Security / JWT -->
         <dependency>
             <groupId>io.jsonwebtoken</groupId>
             <artifactId>jjwt-api</artifactId>
@@ -131,10 +150,7 @@
             <scope>runtime</scope>
         </dependency>
 
-
-        <!-- =========================
-             Persistence / Audit
-        ========================== -->
+        <!-- Envers -->
         <dependency>
             <groupId>org.hibernate</groupId>
             <artifactId>hibernate-envers</artifactId>
@@ -146,10 +162,7 @@
             <version>${validation-api.version}</version>
         </dependency>
 
-
-        <!-- =========================
-             Swagger (Spring Boot 2.2 + Java 8 compatible)
-        ========================== -->
+        <!-- Swagger -->
         <dependency>
             <groupId>io.springfox</groupId>
             <artifactId>springfox-swagger2</artifactId>
@@ -162,10 +175,7 @@
             <version>${springfox.version}</version>
         </dependency>
 
-
-        <!-- =========================
-             Utilities / Misc
-        ========================== -->
+        <!-- Utilities -->
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
@@ -229,7 +239,6 @@
             <version>${commons-lang.version}</version>
         </dependency>
 
-        <!-- Kept as-is from your list (older libs) -->
         <dependency>
             <groupId>com.mashape.unirest</groupId>
             <artifactId>unirest-java</artifactId>
@@ -278,17 +287,14 @@
             <version>3.1.0</version>
         </dependency>
 
-        <!-- This one is very old + not needed if you're using Spring Cloud OpenFeign -->
-        <!-- If you don't directly use com.netflix.feign.* classes, remove it -->
+        <!-- Strongly recommended: remove this if you are NOT directly using com.netflix.feign.* classes -->
         <dependency>
             <groupId>com.netflix.feign</groupId>
             <artifactId>feign-core</artifactId>
             <version>8.18.0</version>
         </dependency>
 
-        <!-- =========================
-             Tests
-        ========================== -->
+        <!-- Tests -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
@@ -303,9 +309,7 @@
 
     </dependencies>
 
-    <!-- =========================
-         DB per Profile
-    ========================== -->
+    <!-- DB per Profile -->
     <profiles>
         <profile>
             <id>local</id>
@@ -381,18 +385,6 @@
         </profile>
     </profiles>
 
-    <dependencyManagement>
-        <dependencies>
-            <dependency>
-                <groupId>de.codecentric</groupId>
-                <artifactId>spring-boot-admin-dependencies</artifactId>
-                <version>${spring-boot-admin.version}</version>
-                <type>pom</type>
-                <scope>import</scope>
-            </dependency>
-        </dependencies>
-    </dependencyManagement>
-
     <build>
         <finalName>${project.artifactId}-7002</finalName>
 
@@ -402,7 +394,6 @@
                 <artifactId>spring-boot-maven-plugin</artifactId>
             </plugin>
 
-            <!-- Optional: keep compiler explicit -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>

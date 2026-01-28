@@ -128,7 +128,7 @@ public class InvestmentValuationScheduler {
             pos.setCurrentValue(invested.add(totalAccrued));   // capital + cumulative interest
             pos.setUpdatedAt(Instant.now());
             positionRepo.save(pos);
-
+//So your Gain/Lost = Your Current Value - Invested amount amount -> which technically equal to your Total Interest for today.
             // 5) Record daily history snapshot
             InvestmentPositionHistory hist = new InvestmentPositionHistory();
             hist.setPosition(pos);

@@ -44,6 +44,12 @@ public abstract class BaseTransactionLimitConfig {
     @Column(name = "DAILY_LIMIT")
     private String dailyLimit;
 
+    @Column(name = "WEEKLY_LIMIT")
+    private String weeklyLimit;
+
+    @Column(name = "MONTHLY_LIMIT")
+    private String monthlyLimit;
+
     @Column(name = "SINGLE_TRANSACTION_LIMIT")
     private String singleTransactionLimit;
 

@@ -8,12 +8,13 @@ package com.finacial.wealth.backoffice.integrations.profiling;
  *
  * @author olufemioshin
  */
+import com.finacial.wealth.backoffice.campaign.model.ApproveCampaignRequest;
+import com.finacial.wealth.backoffice.campaign.model.CreateCampaignRequest;
+import com.finacial.wealth.backoffice.campaign.model.UpdateCampaignRequest;
 import com.finacial.wealth.backoffice.integrations.fxpeer.CampaignManagementClient;
 import com.finacial.wealth.backoffice.model.ApiResponseModel;
+import com.google.gson.Gson;
 import org.springframework.stereotype.Service;
-
-import java.util.HashMap;
-import java.util.Map;
 
 @Service
 public class CampaignManagementService {
@@ -24,17 +25,23 @@ public class CampaignManagementService {
         this.client = client;
     }
 
-    public ApiResponseModel createCampaign(Map<String, Object> payload) {
+    public ApiResponseModel createCampaign(CreateCampaignRequest payload) {
+         System.out.println("createCampaign payload ::::: %S " + new
+        Gson().toJson(payload));
         return client.createCampaign(payload);
     }
 
-    public ApiResponseModel updateCampaign(Long id, Map<String, Object> payload) {
+    public ApiResponseModel updateCampaign(Long id, UpdateCampaignRequest payload) {
         return client.updateCampaign(id, payload);
     }
 
     public ApiResponseModel approveCampaign(Long id, String note) {
-        Map<String, Object> req = new HashMap<String, Object>();
-        req.put("note", note);
+        ApproveCampaignRequest req = new ApproveCampaignRequest();
+        req.setNote(note);
+        return client.approveCampaign(id, req);
+    }
+
+    public ApiResponseModel approveCampaign(Long id, ApproveCampaignRequest req) {
         return client.approveCampaign(id, req);
     }
 
@@ -66,4 +73,3 @@ public class CampaignManagementService {
         return client.getActiveCampaign();
     }
 }
-

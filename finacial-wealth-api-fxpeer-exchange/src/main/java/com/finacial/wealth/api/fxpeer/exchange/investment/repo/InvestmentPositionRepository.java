@@ -54,6 +54,7 @@ public interface InvestmentPositionRepository extends JpaRepository<InvestmentPo
 
     Optional<InvestmentPosition> findByOrderRef(String orderRef);
     
-   
+    @Query("SELECT u FROM InvestmentPosition u where u.orderRef = :orderRef")
+    InvestmentPosition findByOrderRefUpdate(@Param("orderRef") String orderRef);
 
 }

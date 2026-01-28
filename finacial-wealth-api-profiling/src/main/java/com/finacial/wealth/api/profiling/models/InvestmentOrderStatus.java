@@ -9,12 +9,13 @@ package com.finacial.wealth.api.profiling.models;
  * @author olufemioshin
  */
 public enum InvestmentOrderStatus {
-    PENDING,            // Just created, pre-hold
-    HOLD_PLACED,        // Wallet hold successful
-    SENT_TO_PARTNER,    // Sent to partner, awaiting callback/confirmation
-    SETTLED,            // Completed successfully
-    FAILED,             // Failed (funds restored)
+    PENDING, // Just created, pre-hold
+    HOLD_PLACED, // Wallet hold successful
+    SENT_TO_PARTNER, // Sent to partner, awaiting callback/confirmation
+    SETTLED, // Completed successfully
+    FAILED, // Failed (funds restored)
     CANCELLED,
     ACTIVE,
-    MATURED
+    MATURED,
+    LIQUIDATION_PROCESSING
 }

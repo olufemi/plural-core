@@ -4,6 +4,9 @@
  */
 package com.finacial.wealth.backoffice.controller;
 
+import com.finacial.wealth.backoffice.campaign.model.ApproveCampaignRequest;
+import com.finacial.wealth.backoffice.campaign.model.CreateCampaignRequest;
+import com.finacial.wealth.backoffice.campaign.model.UpdateCampaignRequest;
 import com.finacial.wealth.backoffice.integrations.profiling.CampaignManagementService;
 import com.finacial.wealth.backoffice.model.ApiResponseModel;
 import java.util.Map;
@@ -21,7 +24,7 @@ import org.springframework.web.bind.annotation.RestController;
  * @author olufemioshin
  */
 @RestController
-@RequestMapping("/bo/campaigns")
+@RequestMapping("/backoffice/campaigns")
 public class CampaignManagementController {
 
     private final CampaignManagementService service;
@@ -30,21 +33,19 @@ public class CampaignManagementController {
         this.service = service;
     }
 
-    @PostMapping
-    public ApiResponseModel create(@RequestBody Map<String, Object> payload) {
-        return service.createCampaign(payload);
+    @PostMapping("/create")
+    public ApiResponseModel create(@RequestBody CreateCampaignRequest req) {
+        return service.createCampaign(req);
     }
 
     @PutMapping("/{id}")
-    public ApiResponseModel update(@PathVariable Long id,
-            @RequestBody Map<String, Object> payload) {
-        return service.updateCampaign(id, payload);
+    public ApiResponseModel update(@PathVariable Long id, @RequestBody UpdateCampaignRequest req) {
+        return service.updateCampaign(id, req);
     }
 
     @PostMapping("/{id}/approve")
-    public ApiResponseModel approve(@PathVariable Long id,
-            @RequestParam(required = false) String note) {
-        return service.approveCampaign(id, note);
+    public ApiResponseModel approve(@PathVariable Long id, @RequestBody ApproveCampaignRequest req) {
+        return service.approveCampaign(id, req);
     }
 
     @PostMapping("/{id}/stop")

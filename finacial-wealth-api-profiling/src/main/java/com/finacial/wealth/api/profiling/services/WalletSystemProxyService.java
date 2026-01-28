@@ -7,7 +7,10 @@ import com.finacial.wealth.api.profiling.client.model.CreateUserRequest;
 import com.finacial.wealth.api.profiling.client.model.WalletSystemResponse;
 import com.finacial.wealth.api.profiling.client.model.WalletUserRequest;
 import com.finacial.wealth.api.profiling.domain.AppConfig;
+import com.finacial.wealth.api.profiling.limits.GetLedgerSummaryCallerReq;
+import com.finacial.wealth.api.profiling.limits.LedgerSummaryRequest;
 import com.finacial.wealth.api.profiling.models.GetAcctBalWallet;
+
 import com.finacial.wealth.api.profiling.repo.AppConfigRepo;
 import com.finacial.wealth.api.profiling.response.BaseResponse;
 import com.finacial.wealth.api.profiling.utils.DecodedJWTToken;
@@ -38,6 +41,7 @@ import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.util.UriComponentsBuilder;
+import com.finacial.wealth.api.profiling.limits.LedgerSummaryResponse;
 
 /**
  *
@@ -413,6 +417,93 @@ public class WalletSystemProxyService {
             responseModel.setStatusCode(statusCode);
             return responseModel;
         }
+    }
+
+    public com.finacial.wealth.api.profiling.limits.LedgerSummaryResponse getLedgerSummaryCaller(LedgerSummaryRequest request) {
+        LedgerSummaryResponse responseModel = new LedgerSummaryResponse();
+        String statusMessage = "An error occurred, please try again";
+        int statusCode = 500;
+
+        try {
+            //DecodedJWTToken getDecoded = DecodedJWTToken.getDecoded(auth);
+            //  String phoneNumber = getDecoded.phoneNumber;
+            statusCode = 400;
+
+            // DecodedJWTToken getDecoded = DecodedJWTToken.getDecoded(auth);
+            AuthUserRequest authUserRequest = new AuthUserRequest();
+            authUserRequest.setEmailAddress(utilMethod.getWALLET_SYSTEM_EMAIL());
+            authUserRequest.setPassword(decryptData(utilMethod.getWALLET_SYSTEM_PASSWORD()));
+
+            ResponseEntity<WalletSystemResponse> walletSystemResponse = authenticateUser(authUserRequest);
+            String token = null;
+            String productCode = null;
+
+            if (walletSystemResponse != null && walletSystemResponse.hasBody()) {
+
+                WalletSystemResponse userStatus = walletSystemResponse.getBody();
+                log.info("userStatus :: {}", userStatus);
+                if (userStatus.getStatusCode() != 200) {
+
+                    // responseModel.setDescription("Wallet Info:, " + userStatus.getDescription());
+                    // responseModel.setStatusCode(userStatus.getStatusCode());
+                    return responseModel;
+                }
+
+                log.info("authenticateUser response ::::: {} ", userStatus);
+
+                token = userStatus.getData().getIdToken();
+                productCode = userStatus.getData().getProductCode();
+
+            }
+            
+            request.setProductCode(productCode);
+
+            LedgerSummaryResponse walletInfo = getLedgerSummary(request, token);
+
+            log.info("Ledger Summary Info Info :: {}", walletInfo);
+            return walletInfo;
+        } catch (Exception e) {
+            // responseModel.setDescription(statusMessage);
+            //  responseModel.setStatusCode(statusCode);
+            return responseModel;
+        }
+    }
+
+    public LedgerSummaryResponse getLedgerSummary(LedgerSummaryRequest request, String token) {
+        LedgerSummaryResponse response = new LedgerSummaryResponse();
+        String statusMessage = "An error occurred, please try again";
+        int statusCode = 500;
+        try {
+            String baseUrl = utilMethod.getWALLET_SYSTEM_BASE_URL();
+
+            // 🔹 Prepare headers (forward exactly what came in)
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            headers.add("authorization", token);
+            headers.add("channel", "Api");
+
+            HttpEntity<LedgerSummaryRequest> entity
+                    = new HttpEntity<LedgerSummaryRequest>(request, headers);
+
+            RestTemplate restTemplate = new RestTemplate();
+
+            String url = baseUrl + "LEDGER_SUMMARY_PATH";
+
+            // 🔹 Forward call to Ledger service
+            return restTemplate.postForObject(
+                    url,
+                    entity,
+                    LedgerSummaryResponse.class
+            );
+
+        } catch (Exception ex) {
+            ex.printStackTrace();
+            //response.setStatusCode(statusCode);
+            //response.setDescription(statusMessage);
+        }
+        log.info("getWalletInfo response :: {}", response);
+        return response;
+
     }
 
 }

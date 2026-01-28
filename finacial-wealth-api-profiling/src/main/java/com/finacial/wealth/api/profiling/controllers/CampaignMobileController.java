@@ -24,7 +24,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/campaigns")
+@RequestMapping("/walletmgt/campaigns")
 public class CampaignMobileController {
 
     private final CampaignRepository campaignRepo;

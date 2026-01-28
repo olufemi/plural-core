@@ -13,12 +13,12 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class BoGroupSavingsController {
 
-  private final TransactionsClient transactionsClient;
+    private final TransactionsClient transactionsClient;
 
-  @PostMapping("/delete")
-  @PreAuthorize("hasAnyRole('SUPER_ADMIN','ADMIN')")
-  @Audited(action = "DELETE_GROUP_SAVING", entityType = "GROUP_SAVINGS")
-  public Map<String, Object> deleteGroupSaving(@RequestBody Map<String, Object> request) {
-    return transactionsClient.deleteGroupSaving(request);
-  }
+    @PostMapping("/delete")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','ADMIN')")
+    @Audited(action = "DELETE_GROUP_SAVING", entityType = "GROUP_SAVINGS")
+    public Map<String, Object> deleteGroupSaving(@RequestBody Map<String, Object> request) {
+        return transactionsClient.deleteGroupSaving(request);
+    }
 }

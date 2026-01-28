@@ -3401,6 +3401,7 @@ public class WalletServices {
 
         try {
             DecodedJWTToken decoded = DecodedJWTToken.getDecoded(auth);
+            
 
             // ===================== 1) MAIN CUSTOMER ==========================
             List<RegWalletInfo> list = regWalletInfoRepo.findByPhoneNumberData(decoded.phoneNumber);

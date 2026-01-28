@@ -102,6 +102,7 @@ import java.time.Instant;
 import java.util.Collections;
 import java.util.Optional;
 import java.util.function.Consumer;
+import org.springframework.data.repository.query.Param;
 
 /**
  *
@@ -878,10 +879,12 @@ public class InvestmentOrderService {
                 return res;
             }
 
+            String idemKey = "ORID_:" + subscriptionOrder.getOrderRef() + ":" + rq.liquidationAmount() + ":" + fullLiquidation;
+
             // create liquidation order (ASYNC)
             InvestmentOrder liqOrder = new InvestmentOrder();
             liqOrder.setParentOrderRef(subscriptionOrder.getOrderRef());
-            liqOrder.setOrderRef(generateOrderRef("LIQ-"));
+            liqOrder.setOrderRef(generateOrderRef("ORID_"));
             liqOrder.setEmailAddress(emailAddress);
             liqOrder.setWalletId(position.getWalletId());
             liqOrder.setProduct(position.getProduct());
@@ -894,10 +897,12 @@ public class InvestmentOrderService {
             liqOrder.setNetAmount(netAmount);
             liqOrder.setCreatedAt(Instant.now());
             liqOrder.setAmountBalance(netAmount);
+            liqOrder.setIdempotencyKey(idemKey);
+            liqOrder.setUpdatedAt(Instant.now());
 
             orderRepo.save(liqOrder);
 
-            res.setStatusCode(202);
+            res.setStatusCode(200);
             res.setDescription("Your liquidation request is processing. This may take some time.");
             res.setData(Collections.singletonMap("liquidationOrderRef", liqOrder.getOrderRef()));
             return res;
@@ -996,6 +1001,8 @@ public class InvestmentOrderService {
                 position.setCurrentValue(BigDecimal.ZERO);
                 position.setUnits(BigDecimal.ZERO);
                 position.setStatus(InvestmentPositionStatus.FULLY_LIQUIDATED);
+                // 3️⃣ Close order
+                order.setStatus(InvestmentOrderStatus.SETTLED);
             } else {
                 // PARTIAL – CAPITAL ONLY
                 BigDecimal investedAmount = position.getInvestedAmount() == null ? BigDecimal.ZERO : position.getInvestedAmount();
@@ -1009,6 +1016,9 @@ public class InvestmentOrderService {
                     return res;
                 }
 
+                // 3️⃣ Close order
+                order.setStatus(InvestmentOrderStatus.ACTIVE);
+
                 position.setInvestedAmount(newInvested);
                 position.setCurrentValue(newInvested.add(accruedInterest));
                 position.setStatus(InvestmentPositionStatus.PARTIALLY_LIQUIDATED);
@@ -1017,8 +1027,6 @@ public class InvestmentOrderService {
             position.setUpdatedAt(Instant.now());
             positionRepo.save(position);
 
-            // 3️⃣ Close order
-            order.setStatus(InvestmentOrderStatus.SETTLED);
             order.setUpdatedAt(Instant.now());
             orderRepo.save(order);
 
@@ -1255,6 +1263,14 @@ public class InvestmentOrderService {
                     );
 
             BaseResponse makeSub = topupInvestment(cIn, auth);
+            System.out.println("[makeSub response ::::::::::::::: " + makeSub);
+
+            if (makeSub.getStatusCode() != 200) {
+                resp.setStatusCode(makeSub.getStatusCode());
+                resp.setDescription(makeSub.getDescription());
+                return resp;
+            }
+
             Map mp = new HashMap();
             mp.put("processId", processId);
             mp.put("grossDebit", grossDebit);
@@ -1304,14 +1320,13 @@ public class InvestmentOrderService {
 
             // A) True idempotency (works forever)
             // NOT orderRef
-            if (guardRepo.findByIdempotencyKey(idemKey).isPresent()) {
-                resp.setStatusCode(200);
+            /*if (guardRepo.findByIdempotencyKey(idemKey).isPresent()) {
+                resp.setStatusCode(400);
                 resp.setDescription("This top up was already submitted. Check Activity for status.");
                 return resp;
-            }
-
+            }*/
             // B) 2-minute cooldown (blocks rapid repeats even with new keys)
-            Instant since = Instant.now().minus(Duration.ofMinutes(2));
+            /*Instant since = Instant.now().minus(Duration.ofMinutes(2));
             boolean hasRecent = !guardRepo.findRecent(email, orderRef, "TOPUP", since).isEmpty();
 
             if (hasRecent) {
@@ -1327,8 +1342,7 @@ public class InvestmentOrderService {
             g.setRequestType("TOPUP");
             g.setIdempotencyKey(idemKey);
             g.setCreatedAt(Instant.now());
-            guardRepo.save(g);
-
+            guardRepo.save(g);*/
             // 1) Idempotency: if same request repeats, do NOT debit again
             // ✅ 1) Idempotency (no lambda return issues)
             /*Optional<InvestmentOrder> existingOpt = orderRepo.findByIdempotencyKey(idemKey);
@@ -1348,6 +1362,17 @@ public class InvestmentOrderService {
                 // Key collision for another order/user
                 throw new BusinessException("Duplicate request detected. Please retry.");
             }*/
+            Instant since = Instant.now().minus(Duration.ofMinutes(2));
+            boolean hasRecent
+                    = !orderRepo
+                            .findRecent(email, orderRef, List.of(InvestmentOrderType.TOPUP), since)
+                            .isEmpty();
+
+            if (hasRecent) {
+                resp.setStatusCode(400);
+                resp.setDescription("A top up was just submitted. Please wait 2 minutes and try again.");
+                return resp;
+            }
             // ✅ 2) Load EXISTING subscription order (update this row, no new order)
             InvestmentOrder order = orderRepo.findByOrderRefAndEmailAddress(orderRef, email)
                     .orElseThrow(() -> new NotFoundException("Investment order not found"));
@@ -1392,29 +1417,37 @@ public class InvestmentOrderService {
             throw new BusinessException("Service is currently unavailable. Please try again shortly.");
         }*/
             // 6) Update POSITION capital
-            BigDecimal newCapital = nz(pos.getInvestedAmount()).add(topupAmount);
-            pos.setInvestedAmount(newCapital);
-            pos.setCurrentValue(newCapital.add(nz(pos.getTotalAccruedInterest())));
-            pos.setUpdatedAt(Instant.now());
-            positionRepo.save(pos);
+            InvestmentPosition updatePos = positionRepo.findByOrderRefUpdate(rq.orderRef());
+            BigDecimal newCapital = nz(updatePos.getInvestedAmount()).add(topupAmount);
+
+            updatePos.setInvestedAmount(newCapital);
+            updatePos.setCurrentValue(newCapital.add(nz(updatePos.getTotalAccruedInterest())));
+            updatePos.setUpdatedAt(Instant.now());
+            System.out.println("updating postion ::::::::::::::: :::::::::::::::  " + updatePos);
+
+            positionRepo.save(updatePos);
+
+            InvestmentOrder orderUpdate = orderRepo.findByOrderRefAndEmailAddressUpdate(orderRef, email);
 
             // 7) Update EXISTING ORDER (NO NEW ROW)
-            order.setPosition(pos); // keep link correct
-            order.setAmount(nz(order.getAmount()).add(topupAmount));
+            orderUpdate.setPosition(pos); // keep link correct
+            orderUpdate.setAmount(nz(orderUpdate.getAmount()).add(topupAmount));
 
             // amountBalance represents "investment balance/capital" on the order
-            order.setAmountBalance(nz(order.getAmountBalance()).add(topupAmount));
+            orderUpdate.setAmountBalance(nz(orderUpdate.getAmountBalance()).add(topupAmount));
 
             // netAmount: if you use it as "total net debited so far", update it too.
             // If you use it as "net amount for THIS transaction", then DO NOT add.
-            order.setNetAmount(nz(order.getNetAmount()).add(topupAmount));
+            orderUpdate.setNetAmount(nz(orderUpdate.getNetAmount()).add(topupAmount));
 
             // Must be unique per request. Since we're reusing the same row,
             // this will overwrite the previous idempotency key (that's OK, but only last key is retained).
-            order.setIdempotencyKey(idemKey);
+            orderUpdate.setIdempotencyKey(idemKey);
 
-            order.setUpdatedAt(Instant.now());
-            orderRepo.save(order);
+            orderUpdate.setUpdatedAt(Instant.now());
+            System.out.println("updating order ::::::::::::::: :::::::::::::::  " + orderUpdate);
+
+            orderRepo.save(orderUpdate);
 
             // 8) History + activity (recommended)
             LocalDate today = LocalDate.now(ZoneId.of("Africa/Lagos"));
@@ -1423,7 +1456,7 @@ public class InvestmentOrderService {
                 // optional: if you have a field to track topup amount, set it here.
                 // otherwise do nothing; the "snapshot" will reflect updated capital anyway.
             });
-            activityService.logInvestmentTopup(order, pos);
+            activityService.logInvestmentTopup(orderUpdate, pos);
 
 //            return new InvestmentTopupResponse(
 //                    order.getOrderRef(),

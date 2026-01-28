@@ -1,7 +1,9 @@
 package com.finacial.wealth.backoffice.auth.controller;
 
 import com.finacial.wealth.backoffice.auth.dto.*;
+import com.finacial.wealth.backoffice.auth.entity.BoAdminRole;
 import com.finacial.wealth.backoffice.auth.entity.BoAdminUser;
+import com.finacial.wealth.backoffice.auth.repo.BoAdminRoleRepository;
 import com.finacial.wealth.backoffice.auth.repo.BoAdminUserRepository;
 import com.finacial.wealth.backoffice.auth.repo.BoMfaChallengeRepository;
 import com.finacial.wealth.backoffice.auth.service.BackofficeAuthService;
@@ -15,6 +17,7 @@ import org.springframework.web.bind.annotation.*;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Base64;
+import java.util.Optional;
 
 //@RestController
 //@RequestMapping("/bo/auth")
@@ -28,6 +31,7 @@ public class AuthController {
     private final TotpService totpService;
     private final BoAdminUserRepository userRepo;
     private final CryptoBox cryptoBox;
+    private final BoAdminRoleRepository roleRepo;
 
     private final BoMfaChallengeRepository mfaChallengeRepo;
 
@@ -48,7 +52,12 @@ public class AuthController {
         if (!mfaProperlyEnabled) {
             String access = jwtService.issueAccessToken(user);
             String refresh = authService.issueRefreshToken(user);
-            return ResponseEntity.ok(new TokenResponse(access, refresh));
+            String email = user.getEmail();
+            String fullName = user.getFullName();
+            Optional<BoAdminRole> getRoleName = roleRepo.findById(user.getId());
+
+            String userRoleName = getRoleName.get().getName();
+            return ResponseEntity.ok(new TokenResponse(access, refresh, email, fullName, userRoleName));
         }
 
         String challengeId = authService.createMfaChallenge(user.getId());
@@ -62,7 +71,7 @@ public class AuthController {
         if (!user.isMfaEnabled()) {
             String access = jwtService.issueAccessToken(user);
             String refresh = authService.issueRefreshToken(user);
-            return ResponseEntity.ok(new TokenResponse(access, refresh));
+            //return ResponseEntity.ok(new TokenResponse(access, refresh));
         }
 
         String mfaToken = Base64.getEncoder().encodeToString(
@@ -78,8 +87,13 @@ public class AuthController {
 
         String access = jwtService.issueAccessToken(user);
         String refresh = authService.issueRefreshToken(user);
+        String email = user.getEmail();
+        String fullName = user.getFullName();
+        Optional<BoAdminRole> getRoleName = roleRepo.findById(user.getId());
 
-        return ResponseEntity.ok(new TokenResponse(access, refresh));
+        String userRoleName = getRoleName.get().getName();
+
+        return ResponseEntity.ok(new TokenResponse(access, refresh, email, fullName, userRoleName));
     }
 
     // @PostMapping("/mfa/verify")
@@ -101,14 +115,26 @@ public class AuthController {
 
         String access = jwtService.issueAccessToken(user);
         String refresh = authService.issueRefreshToken(user);
-        return ResponseEntity.ok(new TokenResponse(access, refresh));
+        String email = user.getEmail();
+        String fullName = user.getFullName();
+        Optional<BoAdminRole> getRoleName = roleRepo.findById(user.getId());
+
+        String userRoleName = getRoleName.get().getName();
+
+        return ResponseEntity.ok(new TokenResponse(access, refresh, email, fullName, userRoleName));
     }
 
     @PostMapping("/refresh")
     public ResponseEntity<TokenResponse> refresh(@RequestParam("refreshToken") String refreshToken) {
         BoAdminUser user = authService.validateRefreshOrThrow(refreshToken);
         String access = jwtService.issueAccessToken(user);
-        return ResponseEntity.ok(new TokenResponse(access, refreshToken));
+        String email = user.getEmail();
+        String fullName = user.getFullName();
+        Optional<BoAdminRole> getRoleName = roleRepo.findById(user.getId());
+
+        String userRoleName = getRoleName.get().getName();
+
+        return ResponseEntity.ok(new TokenResponse(access, refreshToken, email, fullName, userRoleName));
     }
 
     @PostMapping("/logout")

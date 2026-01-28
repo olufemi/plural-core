@@ -39,7 +39,7 @@ public class InvestmentOrder {
     @Column(nullable = false, length = 64, unique = true)
     private String orderRef;     // public ref for UI & receipts
 
-    @Column(nullable = false, length = 64, unique = true)
+    @Column(nullable = false, length = 64)
     private String parentOrderRef;     // public ref for UI & receipts
 
     @Column(nullable = false, length = 64)

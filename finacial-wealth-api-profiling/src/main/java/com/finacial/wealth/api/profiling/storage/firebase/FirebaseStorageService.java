@@ -171,6 +171,47 @@ public class FirebaseStorageService {
         }
     }
 
+    public BaseResponseFireBase uploadPictureFile(MultipartFile file) {
+        try {
+            if (file == null || file.isEmpty()) {
+                return BaseResponseFireBase.fail(400, "File is required");
+            }
+
+            String original = safeName(file.getOriginalFilename());
+
+            // best effort content type
+            String contentType = guessContentType(file.getContentType(), original);
+
+            // ensure extension exists (important for images/videos)
+            String ext = "";
+            if (original != null) {
+                int dot = original.lastIndexOf('.');
+                if (dot >= 0 && dot < original.length() - 1) {
+                    ext = original.substring(dot); // includes "."
+                }
+            }
+            if (ext == null || ext.trim().isEmpty()) {
+                ext = contentTypeToExt(contentType);
+            }
+
+            // Optional: validate it's an image/gif/video if you want
+            // if (!isAllowedPictureType(contentType, ext)) return BaseResponseFireBase.fail(400, "Unsupported media type");
+            String objectName = PICTURES_DIR + System.currentTimeMillis() + "_" + UUID.randomUUID() + ext;
+
+            BlobInfo blobInfo = BlobInfo.newBuilder(BlobId.of(bucketName, objectName))
+                    .setContentType(contentType)
+                    .build();
+
+            storage.create(blobInfo, file.getBytes());
+
+            FileItem item = buildFileItem(storage.get(BlobId.of(bucketName, objectName)));
+            return BaseResponseFireBase.ok("Uploaded", item);
+
+        } catch (Exception e) {
+            return BaseResponseFireBase.fail(500, "Upload failed: " + e.getMessage());
+        }
+    }
+
     public BaseResponseFireBase deleteSlide(String fileNameOrObjectName) {
         try {
             if (fileNameOrObjectName == null || fileNameOrObjectName.trim().isEmpty()) {

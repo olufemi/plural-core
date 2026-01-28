@@ -7,7 +7,9 @@ package com.finacial.wealth.api.fxpeer.exchange.investment.repo;
 import com.finacial.wealth.api.fxpeer.exchange.investment.domain.InvestmentOrder;
 import com.finacial.wealth.api.fxpeer.exchange.investment.domain.InvestmentPosition;
 import com.finacial.wealth.api.fxpeer.exchange.investment.domain.InvestmentProduct;
+import com.finacial.wealth.api.fxpeer.exchange.investment.domain.InvestmentRequestGuard;
 import com.finacial.wealth.api.fxpeer.exchange.investment.ennum.InvestmentOrderStatus;
+import com.finacial.wealth.api.fxpeer.exchange.investment.ennum.InvestmentOrderType;
 import com.finacial.wealth.api.fxpeer.exchange.offer.Offer;
 import org.springframework.data.repository.CrudRepository;
 
@@ -48,6 +50,9 @@ public interface InvestmentOrderRepository extends JpaRepository<InvestmentOrder
 
     Optional<InvestmentOrder> findByOrderRefAndEmailAddress(String orderRef, String emailAddress);
 
+    @Query("SELECT u FROM InvestmentOrder u where u.orderRef = :orderRef and u.emailAddress = :emailAddress")
+    InvestmentOrder findByOrderRefAndEmailAddressUpdate(@Param("orderRef") String orderRef, @Param("emailAddress") String emailAddress);
+
     @Query("""
         select p from InvestmentOrder p
         where p.emailAddress = :emailAddress 
@@ -71,5 +76,20 @@ public interface InvestmentOrderRepository extends JpaRepository<InvestmentOrder
             List<InvestmentOrderStatus> statuses);
 
     Optional<InvestmentOrder> findByIdempotencyKeyAndEmailAddress(String key, String email);
+
+    @Query("""
+    select g from InvestmentOrder g
+    where g.emailAddress = :email
+      and g.parentOrderRef = :orderRef
+      and g.type in :types
+      and g.createdAt >= :since
+    order by g.createdAt desc
+""")
+    List<InvestmentOrder> findRecent(
+            @Param("email") String email,
+            @Param("orderRef") String orderRef,
+            @Param("types") List<InvestmentOrderType> types,
+            @Param("since") Instant since
+    );
 
 }

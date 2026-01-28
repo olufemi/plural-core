@@ -12,8 +12,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 import com.finacial.wealth.backoffice.admin.dto.*;
 import com.finacial.wealth.backoffice.audit.entity.AdminAuditLog;
+import com.finacial.wealth.backoffice.auth.dto.AdminRoleDto;
 
 import com.finacial.wealth.backoffice.auth.entity.BoAdminUser;
+import com.finacial.wealth.backoffice.auth.repo.BoAdminRoleRepository;
 import com.finacial.wealth.backoffice.auth.repo.BoAdminUserRepository;
 
 import lombok.RequiredArgsConstructor;
@@ -32,6 +34,14 @@ public class AdminUserService {
     private final PasswordEncoder passwordEncoder;
     private final AdminAuditService auditService;
     private final ObjectMapper objectMapper;
+    private final BoAdminRoleRepository roleRepo;
+
+    public List<AdminRoleDto> listRoles() {
+        return roleRepo.findAllByOrderByNameAsc()
+                .stream()
+                .map(r -> new AdminRoleDto(r.getId(), r.getName()))
+                .toList();
+    }
 
     @Transactional
     public AdminUserResponse createAdmin(Long actorAdminId, CreateAdminUserRequest req, String ip, String ua) {
@@ -56,8 +66,8 @@ public class AdminUserService {
         BoAdminUser u = new BoAdminUser();
         u.setEmail(req.email().trim().toLowerCase());
         u.setFullName(req.fullName().trim());
-       // u.setActive(true);
-       // u.setFailedLoginAttempts(0);
+        // u.setActive(true);
+        // u.setFailedLoginAttempts(0);
         u.setLockedUntil(null);
         u.setMfaEnabled(false); // MUST enroll MFA on first login per requirement :contentReference[oaicite:7]{index=7}
         u.setPasswordHash(passwordEncoder.encode(tempPassword));

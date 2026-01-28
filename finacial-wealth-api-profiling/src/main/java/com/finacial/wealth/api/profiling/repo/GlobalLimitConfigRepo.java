@@ -19,6 +19,10 @@ public interface GlobalLimitConfigRepo extends
 
     @Query("SELECT config from GlobalLimitConfig config where config.category=:category")
     List<GlobalLimitConfig> findByLimitCategory(String category);
+    
+    @Query("SELECT config from GlobalLimitConfig config where config.category=:category")
+   GlobalLimitConfig findByCategory(String category);
+
 
     public static final String FIND_LIMITS = "SELECT dailyLimit, singleTransactionLimit, maximumBalance, category FROM GlobalLimitConfig";
 

@@ -1,5 +1,6 @@
 package com.finacial.wealth.backoffice.integrations.fxpeer;
 
+import com.finacial.wealth.backoffice.integrations.fxpeer.model.InvestmentProductUpsertRequest;
 import com.finacial.wealth.backoffice.integrations.fxpeer.model.LiquidationApprovalRequest;
 import com.finacial.wealth.backoffice.model.BaseResponse;
 import org.springframework.cloud.openfeign.FeignClient;
@@ -17,12 +18,12 @@ public interface FxPeerExchangeClient {
     Map<String, Object> getInvestmentProducts();
 
     @PostMapping(value = "/investments/investments/create-product", consumes = "application/json")
-    Map<String, Object> createInvestmentProduct(@RequestBody Map<String, Object> request);
+    Map<String, Object> createInvestmentProduct(@RequestBody InvestmentProductUpsertRequest request);
 
     @PutMapping(value = "/investments/investments/update-product/{productCode}", consumes = "application/json")
     Map<String, Object> updateInvestmentProduct(
             @PathVariable("productCode") String productCode,
-            @RequestBody Map<String, Object> request
+            @RequestBody InvestmentProductUpsertRequest request
     );
 
     @GetMapping("/investments/orders/all-liquidation-settled")

@@ -1,6 +1,7 @@
 package com.finacial.wealth.backoffice.controller;
 
 import com.finacial.wealth.backoffice.integrations.fxpeer.FxPeerExchangeClient;
+import com.finacial.wealth.backoffice.integrations.fxpeer.model.InvestmentProductUpsertRequest;
 import com.finacial.wealth.backoffice.reports.CsvWriter;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
@@ -26,7 +27,7 @@ public class BoInvestmentController {
 
     @PostMapping("/products")
     @PreAuthorize("hasAnyRole('SUPER_ADMIN','ADMIN','OPERATIONS','FINANCE')")
-    public Map<String, Object> createProduct(@RequestBody Map<String, Object> req) {
+    public Map<String, Object> createProduct(@RequestBody InvestmentProductUpsertRequest req) {
         return fxPeerClient.createInvestmentProduct(req);
     }
 
@@ -34,10 +35,9 @@ public class BoInvestmentController {
     @PreAuthorize("hasAnyRole('SUPER_ADMIN','ADMIN','OPERATIONS','FINANCE')")
     public Map<String, Object> updateProduct(
             @PathVariable String productCode,
-            @RequestBody Map<String, Object> req
+            @RequestBody InvestmentProductUpsertRequest req
     ) {
-        // ensure productCode in path wins
-        req.put("productCode", productCode);
+        req.setProductCode(productCode); // path wins
         return fxPeerClient.updateInvestmentProduct(productCode, req);
     }
 

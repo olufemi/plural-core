@@ -9,6 +9,7 @@ package com.finacial.wealth.api.profiling.campaign.service;
  * @author olufemioshin
  */
 import com.finacial.wealth.api.profiling.campaign.ennum.CampaignStatus;
+import com.finacial.wealth.api.profiling.campaign.ennum.MediaKind;
 import com.finacial.wealth.api.profiling.campaign.entity.Campaign;
 import com.finacial.wealth.api.profiling.campaign.entity.CampaignAudit;
 import com.finacial.wealth.api.profiling.campaign.entity.CampaignMediaItem;
@@ -19,6 +20,7 @@ import com.finacial.wealth.api.profiling.campaign.repo.CampaignAuditRepository;
 import com.finacial.wealth.api.profiling.campaign.repo.CampaignMediaItemRepository;
 import com.finacial.wealth.api.profiling.campaign.repo.CampaignRepository;
 import com.finacial.wealth.api.profiling.storage.firebase.FirebaseStorageService;
+import com.google.gson.Gson;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -49,8 +51,58 @@ public class CampaignService {
         this.firebaseStorageService = firebaseStorageService;
     }
 
+    private MediaKind determineMediaKind(String contentType, String objectName) {
+
+        // 1) Prefer contentType if provided
+        if (contentType != null) {
+            String c = contentType.toLowerCase();
+
+            if (c.startsWith("image/")) {
+                if (c.contains("gif")) {
+                    return MediaKind.GIF;
+                }
+                return MediaKind.IMAGE;
+            }
+            if (c.startsWith("video/")) {
+                return MediaKind.VIDEO;
+            }
+            if (c.contains("pdf")) {
+                return MediaKind.PDF;
+            }
+            if (c.contains("powerpoint") || c.contains("presentation")) {
+                return MediaKind.SLIDE;
+            }
+        }
+
+        // 2) Fallback: infer from filename/objectName extension
+        if (objectName != null) {
+            String f = objectName.toLowerCase();
+
+            if (f.endsWith(".gif")) {
+                return MediaKind.GIF;
+            }
+            if (f.endsWith(".jpg") || f.endsWith(".jpeg") || f.endsWith(".png") || f.endsWith(".webp")) {
+                return MediaKind.IMAGE;
+            }
+            if (f.endsWith(".mp4") || f.endsWith(".mov") || f.endsWith(".mkv") || f.endsWith(".webm")) {
+                return MediaKind.VIDEO;
+            }
+            if (f.endsWith(".pdf")) {
+                return MediaKind.PDF;
+            }
+            if (f.endsWith(".ppt") || f.endsWith(".pptx")) {
+                return MediaKind.SLIDE;
+            }
+        }
+
+        return MediaKind.OTHER;
+    }
+
     @Transactional
     public Campaign create(CreateCampaignRequest req, String actor) {
+        
+        System.out.println("CreateCampaignRequest reeq ::::: %S " + new
+        Gson().toJson(req));
 
         validateCampaignBasics(req.embeddedLink, req.startAt, req.endAt);
         validateItems(req.items);
@@ -70,10 +122,16 @@ public class CampaignService {
         c.setEndAt(req.endAt);
         c.setRotationSeconds(req.rotationSeconds == null ? 6 : req.rotationSeconds);
         c.setDisplayMode(resolveDisplayMode(req.displayMode, req.items));
-
+        c.setMediaKind(determineMediaKind(req.getMediaContentType(), req.getMediaObjectName()));
         c.setStatus(CampaignStatus.PENDING_APPROVAL);
         c.setCreatedBy(actor);
         c.setCreatedAt(new Date());
+        c.setMediaContentType(req.getMediaContentType());
+        c.setMediaObjectName(req.getMediaObjectName());
+        c.setStartAt(new Date());
+        c.setEndAt(new Date());
+        c.setApprovedBy(actor);
+         // c.setMediaSignedUrl(req.getMediaSignedUrl());
 
         Campaign saved = campaignRepo.save(c);
 
@@ -147,7 +205,7 @@ public class CampaignService {
         if (c.getStatus() != CampaignStatus.PENDING_APPROVAL) {
             throw new IllegalStateException("Only PENDING_APPROVAL campaigns can be approved");
         }
-        c.setStatus(CampaignStatus.APPROVED);
+        c.setStatus(CampaignStatus.ACTIVE);
         c.setApprovedBy(approver);
         c.setApprovedAt(new Date());
         c.setUpdatedBy(approver);
@@ -291,7 +349,7 @@ public class CampaignService {
         a.setNote(note);
         auditRepo.save(a);
     }
-    
+
     @Transactional(readOnly = true)
     public List<CampaignAudit> auditTrail(Long campaignId) {
         return auditRepo.findByCampaignIdOrderByEventAtAsc(campaignId);

@@ -294,11 +294,12 @@ public class UttilityMethods {
         creLog.setResolved(false);
         creLog.setStatus(CreditLogStatus.PENDING);
         creLog.setCreatedAt(Instant.now());
+        creLog.setCreatedDate(Instant.now());
 
         try {
             statusCode = 400;
 
-            creLog = createDebitLogRepository.save(creLog);
+            //creLog = createDebitLogRepository.save(creLog);
 
             BaseResponse response = restTemplate.postForObject("http://" + "utilities-service" + "/walletmgt/account/debit-Wallet-phone",
                     rq, BaseResponse.class);
@@ -344,10 +345,11 @@ public class UttilityMethods {
         creLog.setResolved(false);
         creLog.setStatus(CreditLogStatus.PENDING);
         creLog.setCreatedAt(Instant.now());
+        creLog.setCreatedDate(Instant.now());
 
         try {
 
-            creLog = createCreditLogRepository.save(creLog);
+           // creLog = createCreditLogRepository.save(creLog);
 
             BaseResponse response = restTemplate.postForObject("http://" + "utilities-service" + "/walletmgt/account/credit-Wallet-phone",
                     caller, BaseResponse.class);
@@ -468,8 +470,9 @@ public class UttilityMethods {
         creLog.setResolved(false);
         creLog.setStatus(CreditLogStatus.PENDING);
         creLog.setCreatedAt(Instant.now());
+        creLog.setCreatedDate(Instant.now());
 
-        creLog = createCreditLogRepository.save(creLog);
+       // creLog = createCreditLogRepository.save(creLog);
 
         try {
 

@@ -171,7 +171,7 @@ public class BreezePayWebhookKeyService {
             ngnGLCredit.setNarration("NGN_Deposit");
             ngnGLCredit.setPhoneNumber(decryptData(utilMeth.getSETTING_KEY_WALLET_SYSTEM_SYSTEM_GG_NIG()));
             ngnGLCredit.setTransAmount(rq.getAmount());
-            ngnGLCredit.setTransactionId(rq.getProcessId());
+            ngnGLCredit.setTransactionId(rq.getProcessId()+"-NGN_GL");
 
             utilMeth.creditCustomerWithType(ngnGLCredit, "NGN_GL");
 

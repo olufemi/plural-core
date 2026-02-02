@@ -61,5 +61,6 @@ public class AppConfigConUtil {
     public static final String SETTING_KEY_LATEST_APP_VERSION = "currentAppVersion";
     public static final String IS_ONBOARDING_AVAILABLE = "isOnboardingAvailable";
     public static final String SETTING_ONBOARDING_DEFAULT_CURRENCY_CODE = "onboardingcCurrencyCode";
+    public static final String SETTING_ONBOARDING_NGN_CURRENCY_CODE_RATE = "ngnCurrencyRate";
 
 }

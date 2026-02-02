@@ -574,7 +574,7 @@ public class OrderService {
                 //debGLCredit.setPhoneNumber(utilService.decryptData(utilService.getSETTING_KEY_WALLET_SYSTEM_SYSTEM_GG_NIG()));
                 debGLCredit.setPhoneNumber(utilService.decryptData(GGL_ACCOUNT));
                 debGLCredit.setTransAmount(receiveAmount.toString());
-                debGLCredit.setTransactionId(transactionId);
+                debGLCredit.setTransactionId(transactionId + "-" + GGL_CODE);
 
                 System.out.println(" debitAcct_GL REQUEST ::::::::::::::::  %S  " + new Gson().toJson(debGLCredit));
 
@@ -590,7 +590,7 @@ public class OrderService {
                 rqC.setNarration(off.get(0).getCurrencyReceive() + "_Deposit");
                 rqC.setPhoneNumber(sellerAcctNumber);
                 rqC.setTransAmount(receiveAmount.toString());
-                rqC.setTransactionId(transactionId);
+                rqC.setTransactionId(transactionId + "-DEPOSIT");
 
                 System.out.println(" CREDIT SELLER Credit REQUEST  ::::::::::::::::  %S  " + new Gson().toJson(rqC));
 
@@ -608,7 +608,7 @@ public class OrderService {
                     //gLCredit.setPhoneNumber(utilService.decryptData(utilService.getSETTING_KEY_WALLET_SYSTEM_SYSTEM_GG_NIG()));
                     gLCredit.setPhoneNumber(utilService.decryptData(GGL_ACCOUNT));
                     gLCredit.setTransAmount(receiveAmount.toString());
-                    gLCredit.setTransactionId(rqC.getTransactionId());
+                    gLCredit.setTransactionId(rqC.getTransactionId() + "-" + off.get(0).getCurrencyReceive().toString() + "-DEPOSIT");
 
                     System.out.println(" CREDIT GL SLLER LEG REQUEST  ::::::::::::::::  %S  " + new Gson().toJson(gLCredit));
 
@@ -825,7 +825,7 @@ public class OrderService {
         // debGLCredit.setPhoneNumber(utilService.decryptData(utilService.getSETTING_KEY_WALLET_SYSTEM_SYSTEM_GG_CAD()));
         debGLCredit.setPhoneNumber(utilService.decryptData(GGL_ACCOUNT));
         debGLCredit.setTransAmount(rqD.getFinalCHarges());
-        debGLCredit.setTransactionId(transactionId);
+        debGLCredit.setTransactionId(transactionId + "-DEBIT");
 
         //   System.out.println(" debGLCredit REQ  ::::::::::::::::  %S  " + new Gson().toJson(debGLCredit));
         //    BaseResponse debit_GL = transactionServiceProxies.debitCustomerWithType(debGLCredit, off.get(0).getCurrencySell().toString(), auth);
@@ -870,7 +870,7 @@ public class OrderService {
         rqC.setNarration(off.get(0).getCurrencySell() + "_Deposit");
         rqC.setPhoneNumber(getBuyyAcctAcct);
         rqC.setTransAmount(amount.toString());
-        rqC.setTransactionId(transactionId);
+        rqC.setTransactionId(transactionId + "-DEPOSIT");
 
         System.out.println(" creditBuyerAcct REQ  ::::::::::::::::  %S  " + new Gson().toJson(rqC));
 
@@ -888,7 +888,7 @@ public class OrderService {
             //GLCredit.setPhoneNumber(utilService.decryptData(utilService.getSETTING_KEY_WALLET_SYSTEM_SYSTEM_GG_CAD()));
             GLCredit.setPhoneNumber(utilService.decryptData(GGL_ACCOUNT));
             GLCredit.setTransAmount(rqC.getFinalCHarges());
-            GLCredit.setTransactionId(rqC.getTransactionId());
+            GLCredit.setTransactionId(rqC.getTransactionId() + "-DEPOSIT-GL");
 
             System.out.println(" creditAcct_GL buyer legCredit REQ  ::::::::::::::::  %S  " + new Gson().toJson(GLCredit));
 

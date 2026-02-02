@@ -740,7 +740,7 @@ public class OfferService {
                 //debGLCredit.setPhoneNumber(utilService.decryptData(utilService.getSETTING_KEY_WALLET_SYSTEM_SYSTEM_GG_NIG()));
                 debGLCredit.setPhoneNumber(utilService.decryptData(GGL_ACCOUNT));
                 debGLCredit.setTransAmount(rqD.getTransAmount());
-                debGLCredit.setTransactionId(correlationId);
+                debGLCredit.setTransactionId(correlationId + "-" + rq.getCurrencySell().toString());
 
                 System.out.println(" debitAcct_GL REQUEST ::::::::::::::::  %S  " + new Gson().toJson(debGLCredit));
 
@@ -904,7 +904,7 @@ public class OfferService {
                     rqC.setFinalCHarges(availableQuantity.toString());
                     rqC.setNarration(getWalDeupdate.getCurrencyToSell() + "_Reversal");
                     rqC.setTransAmount(availableQuantity.toString());
-                    rqC.setTransactionId(o.getCorrelationId());
+                    rqC.setTransactionId(o.getCorrelationId() + "CREDIT-REVERSAL");
 
                     System.out.println(" creditSellerAcct for Reversal REQ  ::::::::::::::::  %S  " + new Gson().toJson(rqC));
 
@@ -932,7 +932,7 @@ public class OfferService {
                         //GLCredit.setPhoneNumber(utilService.decryptData(utilService.getSETTING_KEY_WALLET_SYSTEM_SYSTEM_GG_CAD()));
                         GLCredit.setPhoneNumber(utilService.decryptData(GGL_ACCOUNT));
                         GLCredit.setTransAmount(rqC.getFinalCHarges());
-                        GLCredit.setTransactionId(rqC.getTransactionId());
+                        GLCredit.setTransactionId(rqC.getTransactionId() + "-REVERSAL");
 
                         System.out.println(" creditAcct_GL seller for Reversal REQ  ::::::::::::::::  %S  " + new Gson().toJson(GLCredit));
 
@@ -1002,7 +1002,7 @@ public class OfferService {
             rqC.setFinalCHarges(availableQuantity.toString());
             rqC.setNarration(getWalDeupdate.getCurrencyToSell() + "_Reversal");
             rqC.setTransAmount(availableQuantity.toString());
-            rqC.setTransactionId(rq.getCorrelationId());
+            rqC.setTransactionId(rq.getCorrelationId()+"CREDIT-REVERSAL");
 
             System.out.println(" creditSellerAcct for Reversal REQ  ::::::::::::::::  %S  " + new Gson().toJson(rqC));
 
@@ -1030,7 +1030,7 @@ public class OfferService {
                 //GLCredit.setPhoneNumber(utilService.decryptData(utilService.getSETTING_KEY_WALLET_SYSTEM_SYSTEM_GG_CAD()));
                 GLCredit.setPhoneNumber(utilService.decryptData(GGL_ACCOUNT));
                 GLCredit.setTransAmount(rqC.getFinalCHarges());
-                GLCredit.setTransactionId(rqC.getTransactionId());
+                GLCredit.setTransactionId(rqC.getTransactionId() + "-REVERSAL");
 
                 System.out.println(" creditAcct_GL seller for Reversal REQ  ::::::::::::::::  %S  " + new Gson().toJson(GLCredit));
 

@@ -1,5 +1,6 @@
 package com.finacial.wealth.api.profiling.services;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.gson.Gson;
 import com.google.gson.JsonSyntaxException;
 import com.finacial.wealth.api.profiling.client.model.AuthUserRequest;
@@ -42,6 +43,9 @@ import org.springframework.web.client.RestTemplate;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.util.UriComponentsBuilder;
 import com.finacial.wealth.api.profiling.limits.LedgerSummaryResponse;
+import org.springframework.http.HttpMethod;
+import org.springframework.web.client.HttpStatusCodeException;
+import org.springframework.web.client.ResourceAccessException;
 
 /**
  *
@@ -65,21 +69,28 @@ public class WalletSystemProxyService {
     @Value("${spring.profiles.active}")
     private String environment;
 
+    private final RestTemplate restTemplate;
+
     @Autowired
     public WalletSystemProxyService(UttilityMethods utilMethod,
-            WebClient webClient, AppConfigRepo appConfigRepo) {
+            WebClient webClient, AppConfigRepo appConfigRepo,
+            RestTemplate restTemplate) {
         this.utilMethod = utilMethod;
         this.webClient = webClient;
         this.appConfigRepo = appConfigRepo;
+        this.restTemplate = restTemplate;
     }
 
     private final String CREATE_AS_WALLET_USER = "/profilings/usermgt/create-user";
     private final String AUTHENTICATE_AS_WALLET_USER = "/session-manager/session/authenticate/user";
     private final String ADD_WALLET_NO_TO_WALLET_SYSTEM = "/generalledger/add-wallet-no";
     private final String QUERY_WALLET_NO_EXISTENCE = "/generalledger/check-if-wallet-exists";
-    private final String GET_ACCT_BAL = "/generalledger/get-account-info";
-    private final String WALLET_DEBIT_WALLET = "/generalledger/debit-wallet-account";
-    private final String WALLET_CREDIT_WALLET = "/generalledger/credit-wallet-account";
+    private final String GET_ACCT_BAL = "/generalledger/v2/get-account-info";
+    private final String WALLET_DEBIT_WALLET = "/generalledger/v2/debit-wallet-account";
+    private final String WALLET_CREDIT_WALLET = "/generalledger/v2/credit-wallet-account";
+    private final String LEDGER_SUMMARY_PATH = "/generalledger/v2/summary";
+    private static final String CHANNEL = "Api";
+
     Gson gson = new Gson();
 
     Consumer<HttpHeaders> headers;
@@ -419,91 +430,108 @@ public class WalletSystemProxyService {
         }
     }
 
-    public com.finacial.wealth.api.profiling.limits.LedgerSummaryResponse getLedgerSummaryCaller(LedgerSummaryRequest request) {
-        LedgerSummaryResponse responseModel = new LedgerSummaryResponse();
-        String statusMessage = "An error occurred, please try again";
-        int statusCode = 500;
-
+    public LedgerSummaryResponse getLedgerSummaryCaller(LedgerSummaryRequest request) {
         try {
-            //DecodedJWTToken getDecoded = DecodedJWTToken.getDecoded(auth);
-            //  String phoneNumber = getDecoded.phoneNumber;
-            statusCode = 400;
+            // 1) Authenticate to wallet system
+            AuthUserRequest authReq = new AuthUserRequest();
+            authReq.setEmailAddress(utilMethod.getWALLET_SYSTEM_EMAIL());
+            authReq.setPassword(decryptData(utilMethod.getWALLET_SYSTEM_PASSWORD()));
 
-            // DecodedJWTToken getDecoded = DecodedJWTToken.getDecoded(auth);
-            AuthUserRequest authUserRequest = new AuthUserRequest();
-            authUserRequest.setEmailAddress(utilMethod.getWALLET_SYSTEM_EMAIL());
-            authUserRequest.setPassword(decryptData(utilMethod.getWALLET_SYSTEM_PASSWORD()));
+            ResponseEntity<WalletSystemResponse> authResp = authenticateUser(authReq);
 
-            ResponseEntity<WalletSystemResponse> walletSystemResponse = authenticateUser(authUserRequest);
-            String token = null;
-            String productCode = null;
-
-            if (walletSystemResponse != null && walletSystemResponse.hasBody()) {
-
-                WalletSystemResponse userStatus = walletSystemResponse.getBody();
-                log.info("userStatus :: {}", userStatus);
-                if (userStatus.getStatusCode() != 200) {
-
-                    // responseModel.setDescription("Wallet Info:, " + userStatus.getDescription());
-                    // responseModel.setStatusCode(userStatus.getStatusCode());
-                    return responseModel;
-                }
-
-                log.info("authenticateUser response ::::: {} ", userStatus);
-
-                token = userStatus.getData().getIdToken();
-                productCode = userStatus.getData().getProductCode();
-
+            if (authResp == null || !authResp.hasBody() || authResp.getBody() == null) {
+                return failure("Wallet system auth returned empty response", 502);
             }
-            
+
+            WalletSystemResponse authBody = authResp.getBody();
+            log.info("Wallet system auth response: {}", authBody);
+
+            if (authBody.getStatusCode() != 200 || authBody.getData() == null) {
+                String msg = authBody.getDescription() != null ? authBody.getDescription() : "Wallet system auth failed";
+                return failure(msg, 401);
+            }
+
+            String token = authBody.getData().getIdToken();
+            String productCode = authBody.getData().getProductCode();
+
+            if (token == null || token.trim().isEmpty()) {
+                return failure("Wallet system auth did not return token", 400);
+            }
+            if (productCode == null || productCode.trim().isEmpty()) {
+                return failure("Wallet system auth did not return productCode", 400);
+            }
+
+            // 2) Enrich request with productCode
             request.setProductCode(productCode);
 
-            LedgerSummaryResponse walletInfo = getLedgerSummary(request, token);
+            // 3) Call ledger summary (downstream)
+            LedgerSummaryResponse ledgerResp = getLedgerSummary(request, token);
 
-            log.info("Ledger Summary Info Info :: {}", walletInfo);
-            return walletInfo;
+            if (ledgerResp == null) {
+                return failure("Ledger summary returned empty response", 400);
+            }
+
+            return ledgerResp;
+
         } catch (Exception e) {
-            // responseModel.setDescription(statusMessage);
-            //  responseModel.setStatusCode(statusCode);
-            return responseModel;
+            log.error("getLedgerSummaryCaller failed. request={}", request, e);
+            return failure("An error occurred, please try again", 500);
         }
     }
 
     public LedgerSummaryResponse getLedgerSummary(LedgerSummaryRequest request, String token) {
-        LedgerSummaryResponse response = new LedgerSummaryResponse();
-        String statusMessage = "An error occurred, please try again";
-        int statusCode = 500;
-        try {
-            String baseUrl = utilMethod.getWALLET_SYSTEM_BASE_URL();
+        final String baseUrl = utilMethod.getWALLET_SYSTEM_BASE_URL();
+        final String url = baseUrl + LEDGER_SUMMARY_PATH;
 
-            // 🔹 Prepare headers (forward exactly what came in)
+        try {
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
-            headers.add("authorization", token);
-            headers.add("channel", "Api");
+            headers.set("Authorization", token);   // important: standard header name
+            headers.set("channel", CHANNEL);
 
-            HttpEntity<LedgerSummaryRequest> entity
-                    = new HttpEntity<LedgerSummaryRequest>(request, headers);
+            HttpEntity<LedgerSummaryRequest> entity = new HttpEntity<>(request, headers);
 
-            RestTemplate restTemplate = new RestTemplate();
+            ResponseEntity<LedgerSummaryResponse> resp
+                    = restTemplate.exchange(url, HttpMethod.POST, entity, LedgerSummaryResponse.class);
 
-            String url = baseUrl + "LEDGER_SUMMARY_PATH";
+            log.info("LedgerSummary status  : {}", resp.getStatusCode());
+            log.info("LedgerSummary headers : {}", resp.getHeaders());
+            log.info("LedgerSummary body    : {}", resp.getBody());
+            ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
 
-            // 🔹 Forward call to Ledger service
-            return restTemplate.postForObject(
-                    url,
-                    entity,
-                    LedgerSummaryResponse.class
-            );
+            LedgerSummaryResponse body = resp.getBody();
+            log.info("LedgerSummaryResponse JSON:\n{}",
+                    mapper.writerWithDefaultPrettyPrinter()
+                            .writeValueAsString(body));
+            if (body == null) {
+                return failure("Ledger service returned empty response", 400);
+            }
+
+            return body;
+
+        } catch (HttpStatusCodeException ex) {
+            // Downstream returned 4xx/5xx
+            log.error("Ledger summary call failed. url={} status={} body={}",
+                    url, ex.getStatusCode(), ex.getResponseBodyAsString(), ex);
+
+            return failure("Ledger service error: " + ex.getStatusCode(), 502);
+
+        } catch (ResourceAccessException ex) {
+            // Connection timeout / DNS / refused
+            log.error("Ledger summary call timeout/unreachable. url={}", url, ex);
+            return failure("Ledger service unreachable", 504);
 
         } catch (Exception ex) {
-            ex.printStackTrace();
-            //response.setStatusCode(statusCode);
-            //response.setDescription(statusMessage);
+            log.error("Ledger summary call unexpected failure. url={}", url, ex);
+            return failure("An error occurred, please try again", 500);
         }
-        log.info("getWalletInfo response :: {}", response);
-        return response;
+    }
 
+    private LedgerSummaryResponse failure(String msg, int code) {
+        LedgerSummaryResponse r = new LedgerSummaryResponse();
+        r.setStatusCode(code);
+        r.setDescription(msg);
+        return r;
     }
 
 }

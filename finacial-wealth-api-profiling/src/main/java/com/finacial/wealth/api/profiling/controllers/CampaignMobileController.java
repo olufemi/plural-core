@@ -32,65 +32,70 @@ public class CampaignMobileController {
     private final FirebaseStorageService firebaseStorageService;
 
     public CampaignMobileController(CampaignRepository campaignRepo,
-                                    CampaignMediaItemRepository itemRepo,
-                                    FirebaseStorageService firebaseStorageService) {
+            CampaignMediaItemRepository itemRepo,
+            FirebaseStorageService firebaseStorageService) {
         this.campaignRepo = campaignRepo;
         this.itemRepo = itemRepo;
         this.firebaseStorageService = firebaseStorageService;
     }
 
     @GetMapping("/active")
-    public ResponseEntity<ApiResponseModel> getActiveCampaign() {
-
+    public ResponseEntity<ApiResponseModel> getActiveCampaigns() {
         ApiResponseModel resp = new ApiResponseModel();
 
-        Campaign c = campaignRepo.findFirstByStatusOrderByStartAtAsc(CampaignStatus.ACTIVE);
-        if (c == null) {
+        List<Campaign> campaigns = campaignRepo.findByStatusOrderByStartAtAsc(CampaignStatus.ACTIVE);
+        if (campaigns == null || campaigns.isEmpty()) {
             resp.setStatusCode(400);
             resp.setDescription("No active campaign");
             resp.setData(null);
             return ResponseEntity.ok(resp);
         }
 
-        List<CampaignMediaItem> items = itemRepo.findByCampaignIdOrderByOrderNoAsc(c.getId());
-        if (items == null || items.isEmpty()) {
+        List<ActiveCampaignResponse> payloads = new ArrayList<>();
+
+        for (Campaign c : campaigns) {
+            List<CampaignMediaItem> items = itemRepo.findByCampaignIdOrderByOrderNoAsc(c.getId());
+            if (items == null || items.isEmpty()) {
+                // skip campaigns with no items (or you can include them with empty list)
+                continue;
+            }
+
+            ActiveCampaignResponse payload = new ActiveCampaignResponse();
+            payload.campaignId = c.getId();
+            payload.title = c.getTitle();
+            payload.status = c.getStatus();
+            payload.embeddedLink = c.getEmbeddedLink();
+            payload.displayMode = c.getDisplayMode();
+            payload.rotationSeconds = c.getRotationSeconds();
+            payload.startAt = c.getStartAt();
+            payload.endAt = c.getEndAt();
+
+            payload.items = new ArrayList<>();
+            for (CampaignMediaItem it : items) {
+                CampaignMediaItemResponse x = new CampaignMediaItemResponse();
+                x.orderNo = it.getOrderNo();
+                x.mediaKind = it.getMediaKind().name();
+                x.contentType = it.getContentType();
+                x.objectName = it.getObjectName();
+                x.embeddedLink = it.getEmbeddedLink();
+                x.mediaUrl = firebaseStorageService.signUrl(it.getObjectName());
+                payload.items.add(x);
+            }
+
+            payloads.add(payload);
+        }
+
+        if (payloads.isEmpty()) {
             resp.setStatusCode(400);
             resp.setDescription("No active campaign");
             resp.setData(null);
             return ResponseEntity.ok(resp);
-        }
-
-        ActiveCampaignResponse payload = new ActiveCampaignResponse();
-        payload.campaignId = c.getId();
-        payload.title = c.getTitle();
-        payload.status = c.getStatus();
-        payload.embeddedLink = c.getEmbeddedLink();
-        payload.displayMode = c.getDisplayMode();
-        payload.rotationSeconds = c.getRotationSeconds();
-        payload.startAt = c.getStartAt();
-        payload.endAt = c.getEndAt();
-
-        payload.items = new ArrayList<CampaignMediaItemResponse>();
-        for (CampaignMediaItem it : items) {
-            CampaignMediaItemResponse x = new CampaignMediaItemResponse();
-            x.orderNo = it.getOrderNo();
-            x.mediaKind = it.getMediaKind().name();
-            x.contentType = it.getContentType();
-            x.objectName = it.getObjectName();
-            x.embeddedLink = it.getEmbeddedLink();
-
-            // 🔑 Firebase signed URL (fresh on every call)
-            x.mediaUrl = firebaseStorageService.signUrl(it.getObjectName());
-
-            payload.items.add(x);
         }
 
         resp.setStatusCode(200);
-        resp.setDescription("Active campaign");
-        resp.setData(payload);
-
+        resp.setDescription("Active campaigns");
+        resp.setData(payloads);
         return ResponseEntity.ok(resp);
     }
+
 }
-
-

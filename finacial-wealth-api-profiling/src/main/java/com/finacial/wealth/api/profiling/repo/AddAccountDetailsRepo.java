@@ -30,5 +30,7 @@ public interface AddAccountDetailsRepo extends JpaRepository<AddAccountDetails, 
     
     @Query("SELECT u FROM AddAccountDetails u where  u.emailAddress = :emailAddress")
     List<AddAccountDetails> findByEmailAddress( @Param("emailAddress") String emailAddress);
+    
+    AddAccountDetails findFirstByWalletId(String walletId);
 
 }

@@ -10,6 +10,7 @@ package com.finacial.wealth.api.profiling.campaign.repo;
  */
 import com.finacial.wealth.api.profiling.campaign.ennum.CampaignStatus;
 import com.finacial.wealth.api.profiling.campaign.entity.Campaign;
+import java.time.LocalDateTime;
 import org.springframework.data.jpa.repository.*;
 import org.springframework.data.repository.query.Param;
 
@@ -36,9 +37,14 @@ public interface CampaignRepository extends JpaRepository<Campaign, Long> {
 
     @Query("select c from Campaign c where c.status='ACTIVE' and c.endAt <= :now")
     List<Campaign> findActiveToComplete(@Param("now") Date now);
-    
-    Campaign findFirstByStatusOrderByStartAtAsc(CampaignStatus status);
-    
-    
-}
 
+    Campaign findFirstByStatusOrderByStartAtAsc(CampaignStatus status);
+
+    @Query("select c from Campaign c "
+            + "where c.status = :status and :now between c.startAt and c.endAt "
+            + "order by c.startAt asc")
+    List<Campaign> findRunning(@Param("status") CampaignStatus status, @Param("now") LocalDateTime now);
+    
+    List<Campaign> findByStatusOrderByStartAtAsc(CampaignStatus status);
+
+}

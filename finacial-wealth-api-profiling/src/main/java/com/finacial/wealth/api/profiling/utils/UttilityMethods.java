@@ -79,6 +79,7 @@ public class UttilityMethods {
     String SETTING_KEY_GET_WALLET_USER_GROUP_ID;
     String Device_Change;
     String SETTING_ONBOARDING_DEFAULT_CURRENCY_CODE;
+    String SETTING_ONBOARDING_NGN_CURRENCY_CODE_RATE;
 
     private static final String NO_DEVICE_REGISTERED = "You dont have any device registered";
     private static final String OTP_SUCCESSFULLY_SENT = "Otp Sent SuccessFully.";
@@ -108,6 +109,7 @@ public class UttilityMethods {
         SETTING_KEY_WALLET_SYSTEM_PASSWORD = cache.getApplicationSetting(AppConfigConUtil.SETTING_KEY_WALLET_SYSTEM_PASSWORD);
         SETTING_KEY_WALLET_SYSTEM_EMAIL = cache.getApplicationSetting(AppConfigConUtil.SETTING_KEY_WALLET_SYSTEM_EMAIL);
         SETTING_KEY_WALLET_SYSTEM_CLEARANCEID = cache.getApplicationSetting(AppConfigConUtil.SETTING_KEY_WALLET_SYSTEM_CLEARANCEID);
+        SETTING_ONBOARDING_NGN_CURRENCY_CODE_RATE = cache.getApplicationSetting(AppConfigConUtil.SETTING_ONBOARDING_NGN_CURRENCY_CODE_RATE);
 
         SETTING_REF_LINK = cache.getApplicationSetting(AppConfigConUtil.SETTING_REF_LINK);
         SETTING_MER_LINK = cache.getApplicationSetting(AppConfigConUtil.SETTING_MER_LINK);
@@ -118,8 +120,11 @@ public class UttilityMethods {
         Device_Change = cache.getApplicationSetting(AppConfigConUtil.SETTING_KEY_DEVICE_CHANGE);
 
     }
-    
-    
+
+    public String returnSETTING_ONBOARDING_NGN_CURRENCY_CODE_RATE() {
+        return SETTING_ONBOARDING_NGN_CURRENCY_CODE_RATE;
+    }
+
     public String returnSETTING_ONBOARDING_DEFAULT_CURRENCY_CODE() {
 
         return SETTING_ONBOARDING_DEFAULT_CURRENCY_CODE;

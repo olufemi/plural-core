@@ -26,12 +26,14 @@ import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
  *
  * @author olufemioshin
  */
+@Service
 public class ProfilingLimitsService {
 
     private final LedgerSummaryClient ledgerClient;
@@ -44,6 +46,7 @@ public class ProfilingLimitsService {
     private final RegWalletInfoRepository regWalletInfoRepo;
     private final ProcessorUserFailedTransInfoRepo procFailedRepo;
     private final UttilityMethods utilMeth;
+    // private BigDecimal currencyRate = BigDecimal.ONE;
 
     private final AddAccountDetailsRepo accountProfileRepo; // <-- your mapping (accountNumber -> productCode + currency)
 
@@ -90,6 +93,17 @@ public class ProfilingLimitsService {
         procFailedRepo.save(failed);
     }
 
+    static class CurrencyCtx {
+
+        final String currency;
+        final BigDecimal rate;
+
+        CurrencyCtx(String currency, BigDecimal rate) {
+            this.currency = currency;
+            this.rate = rate;
+        }
+    }
+
     // Cache note:
     // Put @Cacheable here if you have Spring Cache + Redis in profiling.
     // e.g. @Cacheable(value="limits-ui", key="#rq.accountNumber")
@@ -97,83 +111,124 @@ public class ProfilingLimitsService {
     public LimitsUiResponse getLimitsUi(
             LimitsUiRequest rq,
             String auth, String channel) throws UnsupportedEncodingException {
-        LimitsUiResponse response = new LimitsUiResponse();
-        int failCode = 400;
+
+        final int failCode = 400;
+        LimitsUiResponse out = new LimitsUiResponse();
+
+        // ---- basics
         DecodedJWTToken decoded = DecodedJWTToken.getDecoded(auth);
-        String currency = utilMeth.returnSETTING_ONBOARDING_DEFAULT_CURRENCY_CODE();
         String accountNumber = rq.getAccountNumber();
 
-        // ===================== 1) MAIN CUSTOMER ==========================
-        List<RegWalletInfo> list = regWalletInfoRepo.findByPhoneNumberData(accountNumber);
-        if (list == null || list.isEmpty()) {
+        // Default currency + rate
+        String currency = utilMeth.returnSETTING_ONBOARDING_DEFAULT_CURRENCY_CODE();
+        BigDecimal currencyRate = BigDecimal.ONE;
 
+        String walletId = null;
+
+        // ===================== 1) RESOLVE WALLET + CURRENCY ==========================
+        List<RegWalletInfo> list = regWalletInfoRepo.findByPhoneNumberData(accountNumber);
+
+        if (list == null || list.isEmpty()) {
+            // fallback: get account by email (legacy/secondary path)
             List<AddAccountDetails> getOthers = accountProfileRepo.findByEmailAddress(decoded.emailAddress);
             if (getOthers == null || getOthers.isEmpty()) {
                 recordFailedTrans(channel);
-                return error(response, failCode, "Get Limits, Customer is invalid!");
+                return error(out, failCode, "Get Limits, Customer is invalid!");
             }
-            if (!accountNumber.equals(getOthers.get(0).getAccountNumber())) {
-                recordFailedTrans(channel);
-                return error(response, failCode, "Get Limits, Account number is invalid!");
-            }
-            currency = getOthers.get(0).getCurrencyCode();
 
+            AddAccountDetails acct = getOthers.get(0);
+
+            if (acct.getAccountNumber() == null || !accountNumber.equals(acct.getAccountNumber())) {
+                recordFailedTrans(channel);
+                return error(out, failCode, "Get Limits, Account number is invalid!");
+            }
+
+            walletId = acct.getWalletId();
+
+            if (acct.getCurrencyCode() != null && !acct.getCurrencyCode().trim().isEmpty()) {
+                currency = acct.getCurrencyCode().trim();
+            }
+
+        } else {
+            // main customer path
+            RegWalletInfo w = list.get(0);
+            walletId = w.getWalletId();
+
+            // IMPORTANT:
+            // If RegWalletInfo has currencyCode, use it here. If not, try to fetch currency from profile by walletId.
+            // Uncomment whichever exists in your project.
+            // Example A: if RegWalletInfo has currencyCode
+            // if (w.getCurrencyCode() != null && !w.getCurrencyCode().trim().isEmpty()) {
+            //     currency = w.getCurrencyCode().trim();
+            // }
+            // Example B: fetch from account profile by walletId (recommended if you have it)
+            AddAccountDetails acct = accountProfileRepo.findFirstByWalletId(walletId);
+            if (acct != null && acct.getCurrencyCode() != null && !acct.getCurrencyCode().trim().isEmpty()) {
+                currency = acct.getCurrencyCode().trim();
+            }
         }
 
-        LimitsUiResponse out = new LimitsUiResponse();
+        // currency -> rate
+        if ("NGN".equalsIgnoreCase(currency)) {
+            currencyRate = new BigDecimal(utilMeth.returnSETTING_ONBOARDING_NGN_CURRENCY_CODE_RATE());
+        } else {
+            currencyRate = BigDecimal.ONE;
+        }
 
-        // 1) resolve mapping (profiling knows currency + productCode)
-        //String productCode = acct.getProductCode();
+        // Set UI basics
         out.setAccountNumber(accountNumber);
         out.setCurrency(currency);
 
-        // 2) resolve tier
-        // If device-change overrides tier, you can apply here.
-        UserLimitConfig u = userLimitRepo.findByWalletNumberQuery(accountNumber);
+        if (walletId == null || walletId.trim().isEmpty()) {
+            return error(out, failCode, "Get Limits, WalletId not found!");
+        }
+
+        // ===================== 2) RESOLVE TIER + GLOBAL LIMITS ==========================
+        UserLimitConfig u = userLimitRepo.findByWalletNumberQuery(walletId);
         if (u == null || isBlank(u.getTierCategory())) {
-            out.setStatusCode(400);
-            out.setDescription("Tier category not set for account");
-            return out;
+            return error(out, failCode, "Tier category not set for account");
         }
 
         String tier = u.getTierCategory();
         GlobalLimitConfig g = globalLimitRepo.findByCategory(tier);
         if (g == null) {
-            out.setStatusCode(400);
-            out.setDescription("Global limits not found for tier: " + tier);
-            return out;
+            return error(out, failCode, "Global limits not found for tier: " + tier);
         }
 
-        // 3) build periods (calendar). You can switch to rolling later.
+        // ===================== 3) BUILD PERIODS ==========================
         java.time.LocalDate today = java.time.LocalDate.now();
         java.time.LocalDate monthStart = today.withDayOfMonth(1);
-        java.time.LocalDate yearStart = today.withDayOfYear(1);
 
         java.time.DayOfWeek dow = today.getDayOfWeek();
         int shift = dow.getValue() - java.time.DayOfWeek.MONDAY.getValue();
         if (shift < 0) {
             shift = 0;
         }
+
         java.time.LocalDate weekStart = today.minusDays(shift);
 
         List<LedgerPeriodQuery> periods = new ArrayList<LedgerPeriodQuery>();
         periods.add(LedgerPeriodQuery.of("DAILY", today, today));
         periods.add(LedgerPeriodQuery.of("WEEKLY", weekStart, today));
         periods.add(LedgerPeriodQuery.of("MONTHLY", monthStart, today));
-        periods.add(LedgerPeriodQuery.of("YEARLY", yearStart, today));
 
         LedgerSummaryRequest lsq = LedgerSummaryRequest.of(accountNumber, "", periods);
 
-        // 4) call ledger summary
+        // ===================== 4) CALL LEDGER SUMMARY ==========================
         LedgerSummaryResponse lsr = walletSystemProxyService.getLedgerSummaryCaller(lsq);
-        // LedgerSummaryResponse lsr = ledgerClient.summary(auth, channel, lsq);
-        if (lsr == null || lsr.getStatusCode() != 200) {
-            out.setStatusCode(502);
-            out.setDescription("Unable to fetch ledger summary");
+
+        if (lsr == null) {
+            return error(out, failCode, "Ledger service returned empty response");
+        }
+
+        // NOTE: your ledger sometimes returns 0 for success. Accept both.
+        if (!(lsr.getStatusCode() == 0 || lsr.getStatusCode() == 200)) {
+            out.setStatusCode(lsr.getStatusCode());
+            out.setDescription(lsr.getDescription() != null ? lsr.getDescription() : "Unable to fetch ledger summary");
             return out;
         }
 
-        // Map summaries by code
+        // ===================== 5) MAP PERIOD SUMMARIES ==========================
         java.util.Map<String, LedgerPeriodSummary> byCode = new java.util.HashMap<String, LedgerPeriodSummary>();
         if (lsr.getPeriods() != null) {
             for (LedgerPeriodSummary p : lsr.getPeriods()) {
@@ -183,15 +238,12 @@ public class ProfilingLimitsService {
             }
         }
 
-        // 5) Build SEND (debit) UI lines
-        out.setSendSingleTransactionLimit(parseLimitOrNull(g.getWithdrawalSingleTransaction()));
-        out.setSendPeriodLimits(buildSpendLines(byCode, g, true));
+        // ===================== 6) BUILD UI LIMITS ==========================
+        out.setSendSingleTransactionLimit(parseLimitOrNull(g.getWithdrawalSingleTransaction(), currencyRate));
+        out.setSendPeriodLimits(buildSpendLines(byCode, g, true, currencyRate));
 
-        // 6) Build RECEIVE (credit) UI lines
-        // Some products want receive unlimited; you can store null/unlimited in config.
-        // If you have a credit single limit field, plug it in; else treat as unlimited.
-        out.setReceiveSingleTransactionLimit(parseLimitOrNull(g.getWalletSingleDeposit()));
-        out.setReceivePeriodLimits(buildReceiveLines(byCode, g));
+        out.setReceiveSingleTransactionLimit(parseLimitOrNull(g.getWalletSingleDeposit(), currencyRate));
+        out.setReceivePeriodLimits(buildReceiveLines(byCode, g, currencyRate));
 
         out.setStatusCode(200);
         out.setDescription("OK");
@@ -199,27 +251,27 @@ public class ProfilingLimitsService {
     }
 
     // SEND side uses DEBIT spent amounts
-    private List<UiLimitLine> buildSpendLines(java.util.Map<String, LedgerPeriodSummary> byCode, GlobalLimitConfig g, boolean includeMonthly) {
+    private List<UiLimitLine> buildSpendLines(java.util.Map<String, LedgerPeriodSummary> byCode, GlobalLimitConfig g, boolean includeMonthly, BigDecimal currencyRate) {
 
         List<UiLimitLine> lines = new ArrayList<UiLimitLine>();
-
-        lines.add(line("Daily Limit", parseLimitOrNull(g.getDailyLimit()), debitSpent(byCode, "DAILY")));
-        lines.add(line("Weekly Limit", parseLimitOrNull(g.getWeeklyLimit() == null ? "0.00" : g.getWeeklyLimit()), debitSpent(byCode, "WEEKLY")));
-        lines.add(line("Monthly Limit", parseLimitOrNull(g.getMonthlyLimit() == null ? "0.00" : g.getMonthlyLimit()), debitSpent(byCode, "MONTHLY")));
+        lines.add(line("Daily Limit", parseLimitOrNull(g.getDailyLimit(), currencyRate), debitSpent(byCode, "DAILY")));
+        lines.add(line("Weekly Limit", parseLimitOrNull(g.getWeeklyLimit() == null ? "0.00" : g.getWeeklyLimit(), currencyRate), debitSpent(byCode, "SINGLE")));
+        lines.add(line("Monthly Limit", parseLimitOrNull(g.getMonthlyLimit() == null ? "0.00" : g.getMonthlyLimit(), currencyRate), debitSpent(byCode, "MONTHLY")));
 
         return lines;
     }
 
     // RECEIVE side uses CREDIT amounts. Your screenshots show deposit per-tx limit can be unlimited.
-    private List<UiLimitLine> buildReceiveLines(java.util.Map<String, LedgerPeriodSummary> byCode, GlobalLimitConfig g) {
+    private List<UiLimitLine> buildReceiveLines(java.util.Map<String, LedgerPeriodSummary> byCode, GlobalLimitConfig g, BigDecimal currencyRate
+    ) {
 
         List<UiLimitLine> lines = new ArrayList<UiLimitLine>();
 
         // Per screenshots: daily/weekly/monthly receive limits exist.
         // If you store them in same dailyLimit/monthlyLimit, reuse; otherwise add new columns.
-        lines.add(line("Daily Limit", parseLimitOrNull(g.getDailyLimit()), creditReceived(byCode, "DAILY")));
-        lines.add(line("Weekly Limit", parseLimitOrNull(g.getWeeklyLimit() == null ? "0.00" : g.getWeeklyLimit()), creditReceived(byCode, "WEEKLY")));
-        lines.add(line("Monthly Limit", parseLimitOrNull(g.getMonthlyLimit() == null ? "0.00" : g.getMonthlyLimit()), creditReceived(byCode, "MONTHLY")));
+        lines.add(line("Daily Limit", parseLimitOrNull(g.getDailyLimit(), currencyRate), creditReceived(byCode, "DAILY")));
+        lines.add(line("Weekly Limit", parseLimitOrNull(g.getWeeklyLimit() == null ? "0.00" : g.getWeeklyLimit(), currencyRate), creditReceived(byCode, "WEEKLY")));
+        lines.add(line("Monthly Limit", parseLimitOrNull(g.getMonthlyLimit() == null ? "0.00" : g.getMonthlyLimit(), currencyRate), creditReceived(byCode, "MONTHLY")));
 
         return lines;
     }
@@ -264,7 +316,7 @@ public class ProfilingLimitsService {
     // Unlimited representation:
     // - store as NULL in DB OR "UNLIMITED" string.
     // This parser treats blank/"UNLIMITED"/"-1" as unlimited.
-    private BigDecimal parseLimitOrNull(String raw) {
+    private BigDecimal parseLimitOrNull(String raw, BigDecimal currencyRate) {
         if (raw == null) {
             return null;
         }
@@ -278,7 +330,7 @@ public class ProfilingLimitsService {
         if ("-1".equals(s)) {
             return null;
         }
-        return new BigDecimal(s);
+        return new BigDecimal(s).multiply(currencyRate);
     }
 
     private BigDecimal nz(BigDecimal v) {

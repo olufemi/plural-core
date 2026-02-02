@@ -359,7 +359,7 @@ public class InvestmentOrderService {
             debGLCredit.setNarration(debitBuyer.getNarration());
             debGLCredit.setPhoneNumber(decryptedGL);
             debGLCredit.setTransAmount(receiveAmount.toString());
-            debGLCredit.setTransactionId(processId);
+            debGLCredit.setTransactionId(processId + "-" + rq.getCurrencyCode());
 
             BaseResponse debitGLRes = transactionServiceProxies.debitCustomerWithType(debGLCredit, rq.getCurrencyCode(), auth);
             System.out.println(" preDebitAndSettleAirtime debitGLRes ::::::::::::::::  %S  " + new Gson().toJson(debitGLRes));

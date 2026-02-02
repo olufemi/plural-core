@@ -204,7 +204,7 @@ public class GroupSavingWalletFacadeImpl implements WalletFacade {
         cadGLCredit.setNarration("CAD_Withdrawal");
         cadGLCredit.setPhoneNumber(decryptData(utilMeth.getSETTING_KEY_WALLET_SYSTEM_SYSTEM_GG_CAD()));
         cadGLCredit.setTransAmount(amount.toString());
-        cadGLCredit.setTransactionId(reff);
+        cadGLCredit.setTransactionId(reff+"-CAD_GL");
 
         utilMeth.debitCustomerWithType(cadGLCredit, "CAD_GL", CCY);
         txn.setWalletPocRef(reff);
@@ -327,7 +327,7 @@ public class GroupSavingWalletFacadeImpl implements WalletFacade {
         cadGLCredit.setNarration("CAD_Deposit");
         cadGLCredit.setPhoneNumber(decryptData(utilMeth.getSETTING_KEY_WALLET_SYSTEM_SYSTEM_GG_CAD()));
         cadGLCredit.setTransAmount(amount.toString());
-        cadGLCredit.setTransactionId(reff);
+        cadGLCredit.setTransactionId(reff+"-CAD_GL");
 
         utilMeth.creditCustomerWithType(cadGLCredit, "CAD_GL");
 

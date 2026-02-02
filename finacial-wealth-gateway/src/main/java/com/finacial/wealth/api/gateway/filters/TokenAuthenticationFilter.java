@@ -63,9 +63,9 @@ public class TokenAuthenticationFilter extends ZuulFilter {
      */
     @Override
     public boolean shouldFilter() {
-        System.out.println("the raw u::::::::::::::::   " + RequestContext.getCurrentContext().getRequest().getRequestURI());
+       // System.out.println("the raw u::::::::::::::::   " + RequestContext.getCurrentContext().getRequest().getRequestURI());
         String uri = RequestContext.getCurrentContext().getRequest().getRequestURI().replaceFirst(apiPrefix, "");
-        System.out.println("uri ::::::::::::::::   " + uri);
+       // System.out.println("uri ::::::::::::::::   " + uri);
         /* 
         boolean toReturn = true;
        // System.out.println("::::::::::::::::   " + whiteList.parallelStream().noneMatch(wl -> wl.matcher(uri).matches()));
@@ -80,7 +80,7 @@ public class TokenAuthenticationFilter extends ZuulFilter {
 
         //run the uri against the whiteListed paths
         //if the uri is whiteListed, it will return false otherwise it will return true
-        System.out.println("::::::::::::::::   " + whiteList.parallelStream().noneMatch(wl -> wl.matcher(uri).matches()));
+      //  System.out.println("::::::::::::::::   " + whiteList.parallelStream().noneMatch(wl -> wl.matcher(uri).matches()));
 
         return whiteList.parallelStream().noneMatch(wl -> wl.matcher(uri).matches());
         // return false;
@@ -92,7 +92,7 @@ public class TokenAuthenticationFilter extends ZuulFilter {
 
         RequestContext requestContext = RequestContext.getCurrentContext();
         String authorizationHeader = requestContext.getRequest().getHeader("Authorization");
-        System.out.println("authorizationHeader ::::::::::::::::   " + authorizationHeader);
+        //System.out.println("authorizationHeader ::::::::::::::::   " + authorizationHeader);
 
         if (requestContext.getRequest().getRequestURI().contains("notification-manager")) {
             Map<String, Object> response = new HashMap<>();
@@ -117,7 +117,7 @@ public class TokenAuthenticationFilter extends ZuulFilter {
         }
 
         Either<Throwable, Map<String, Object>> sessionManagerResponse = Try.of(() -> sessionManagerClient.verifyBearerToken(authorizationHeader)).toEither();
-         System.out.println("sessionManagerResponse ::::::::::::::::   " + sessionManagerResponse);
+        // System.out.println("sessionManagerResponse ::::::::::::::::   " + sessionManagerResponse);
 
         if (sessionManagerResponse.isLeft()) {
             Throwable exception = sessionManagerResponse.getLeft();

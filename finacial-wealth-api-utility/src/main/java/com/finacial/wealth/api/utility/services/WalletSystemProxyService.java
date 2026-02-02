@@ -78,9 +78,9 @@ public class WalletSystemProxyService {
     private final String AUTHENTICATE_AS_WALLET_USER = "/session-manager/session/authenticate/user";
     private final String ADD_WALLET_NO_TO_WALLET_SYSTEM = "/generalledger/add-wallet-no";
     private final String QUERY_WALLET_NO_EXISTENCE = "/generalledger/check-if-wallet-exists";
-    private final String GET_ACCT_BAL = "/generalledger/get-account-info";
-    private final String WALLET_DEBIT_WALLET = "/generalledger/debit-wallet-account";
-    private final String WALLET_CREDIT_WALLET = "/generalledger/credit-wallet-account";
+    private final String GET_ACCT_BAL = "/generalledger/v2/get-account-info";
+    private final String WALLET_DEBIT_WALLET = "/generalledger/v2/debit-wallet-account";
+    private final String WALLET_CREDIT_WALLET = "/generalledger/v2/credit-wallet-account";
     Gson gson = new Gson();
 
     Consumer<HttpHeaders> headers;

@@ -17,6 +17,7 @@ import com.finacial.wealth.api.profiling.domain.GenerateVirtAcctNumb;
 import com.finacial.wealth.api.profiling.domain.PinActFailedTransLog;
 import com.finacial.wealth.api.profiling.domain.RegWalletInfo;
 import com.finacial.wealth.api.profiling.domain.VerifyReqIdDetailsAuth;
+import com.finacial.wealth.api.profiling.models.AddNewUserToLimit;
 import com.finacial.wealth.api.profiling.models.accounts.AddAccountObj;
 import com.finacial.wealth.api.profiling.models.accounts.ValidationResponse;
 import com.finacial.wealth.api.profiling.proxies.BreezePayVirtAcctProxy;
@@ -357,6 +358,20 @@ public class AddAccountService {
                 responseModel.setStatusCode(addUserToWalletSystem.getStatusCode());
                 return responseModel;
 
+            }
+
+            AddNewUserToLimit addLimit = new AddNewUserToLimit();
+            addLimit.setCategory(uttilityMethods.getTier2());
+            addLimit.setWalletNumber(addDe.getWalletId());
+            BaseResponse bAddLimitRes = walletServices.addTierToWallet(addLimit);
+            //BaseResponse bAddLimitRes = null;
+
+            //ALSO CREATE WALLET HERE
+            if (bAddLimitRes.getStatusCode() != 200) {
+
+                responseModel.setDescription(bAddLimitRes.getDescription());
+                responseModel.setStatusCode(bAddLimitRes.getStatusCode());
+                return responseModel;
             }
 
             addAccountDetailsRepo.save(addDe);

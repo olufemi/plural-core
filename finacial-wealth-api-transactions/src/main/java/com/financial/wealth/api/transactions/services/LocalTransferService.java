@@ -1851,7 +1851,7 @@ public class LocalTransferService {
                 debGLCredit.setNarration("CAD_Withdrawal");
                 debGLCredit.setPhoneNumber(decryptData(utilMeth.getSETTING_KEY_WALLET_SYSTEM_SYSTEM_GG_CAD()));
                 debGLCredit.setTransAmount(amount);
-                debGLCredit.setTransactionId(rq.getProcessId());
+                debGLCredit.setTransactionId(rq.getProcessId()+"-CAD_GL");
 
                 utilMeth.debitCustomerWithType(debGLCredit, "CAD_GL", CCY);
                 /* KuleanPaymentTransaction kTrans = new KuleanPaymentTransaction();

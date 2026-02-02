@@ -34,4 +34,6 @@ public void setDescription(String description) { this.description = description;
 
 public List<LedgerPeriodSummary> getPeriods() { return periods; }
 public void setPeriods(List<LedgerPeriodSummary> periods) { this.periods = periods; }
+
+
 }

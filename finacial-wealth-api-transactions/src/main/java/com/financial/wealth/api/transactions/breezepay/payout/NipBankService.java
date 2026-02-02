@@ -1221,7 +1221,7 @@ public class NipBankService {
                 debGLCredit.setNarration("NGN_Withdrawal");
                 debGLCredit.setPhoneNumber(localTransferService.decryptData(utilMeth.getSETTING_KEY_WALLET_SYSTEM_SYSTEM_GG_NIG()));
                 debGLCredit.setTransAmount(amount);
-                debGLCredit.setTransactionId(rq.getProcessId());
+                debGLCredit.setTransactionId(rq.getProcessId()+"-NGN_GL");
 
                 utilMeth.debitCustomerWithType(debGLCredit, "NGN_GL", CCY);
 

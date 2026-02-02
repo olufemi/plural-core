@@ -328,7 +328,7 @@ public class WebhookKeyService {
             cadGLCredit.setNarration("CAD_Withdrawal");
             cadGLCredit.setPhoneNumber(decryptData(utilMeth.getSETTING_KEY_WALLET_SYSTEM_SYSTEM_GG_CAD()));
             cadGLCredit.setTransAmount(rqq.getAmount());
-            cadGLCredit.setTransactionId(rqq.getQuoteId());
+            cadGLCredit.setTransactionId(rqq.getQuoteId()+"-CAD_GL");
 
             utilMeth.debitCustomerWithType(cadGLCredit, "CAD_GL", CCY);
             responseModel.setDescription("Successful");
@@ -570,7 +570,7 @@ public class WebhookKeyService {
             cadGLCredit.setNarration("CAD_Deposit");
             cadGLCredit.setPhoneNumber(decryptData(utilMeth.getSETTING_KEY_WALLET_SYSTEM_SYSTEM_GG_CAD()));
             cadGLCredit.setTransAmount(amount);
-            cadGLCredit.setTransactionId(quoteId);
+            cadGLCredit.setTransactionId(quoteId+"-CAD_GL");
 
             utilMeth.creditCustomerWithType(cadGLCredit, "CAD_GL");
 

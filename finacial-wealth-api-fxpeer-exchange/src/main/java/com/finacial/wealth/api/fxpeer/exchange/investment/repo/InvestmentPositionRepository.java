@@ -6,6 +6,7 @@ package com.finacial.wealth.api.fxpeer.exchange.investment.repo;
 
 import com.finacial.wealth.api.fxpeer.exchange.investment.domain.InvestmentPosition;
 import com.finacial.wealth.api.fxpeer.exchange.investment.domain.InvestmentProduct;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.repository.CrudRepository;
 
 /**
@@ -16,6 +17,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
 import java.util.Optional;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -56,5 +58,10 @@ public interface InvestmentPositionRepository extends JpaRepository<InvestmentPo
     
     @Query("SELECT u FROM InvestmentPosition u where u.orderRef = :orderRef")
     InvestmentPosition findByOrderRefUpdate(@Param("orderRef") String orderRef);
+    
+    
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select p from InvestmentPosition p where p.id = :id")
+    Optional<InvestmentPosition> lockById(@Param("id") Long id);
 
 }

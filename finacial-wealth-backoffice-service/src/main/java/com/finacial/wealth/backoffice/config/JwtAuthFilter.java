@@ -23,6 +23,7 @@ import java.util.Objects;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpHeaders;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 
@@ -44,15 +45,32 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         System.out.println("URI=" + request.getRequestURI()
                 + " servletPath=" + request.getServletPath()
                 + " contextPath=" + request.getContextPath());
+        System.out.println("JWT_FILTER uri=" + request.getRequestURI());
+        System.out.println("JWT_FILTER auth=" + request.getHeader("Authorization"));
 
-        String auth = request.getHeader("Authorization");
+        /*String auth = request.getHeader("Authorization");
         if (auth == null || !auth.startsWith("Bearer ")) {
             filterChain.doFilter(request, response);
             return;
         }
 
         //String token = auth.substring(7).trim();
-        String token = auth.substring("Bearer ".length()).trim();
+        String token = auth.substring("Bearer ".length()).trim();*/
+        String auth = request.getHeader(HttpHeaders.AUTHORIZATION);
+        if (auth == null) {
+            filterChain.doFilter(request, response);
+            return;
+        }
+
+        auth = auth.trim();
+
+// Case-insensitive "Bearer "
+        if (!auth.regionMatches(true, 0, "Bearer ", 0, 7)) {
+            filterChain.doFilter(request, response);
+            return;
+        }
+
+        String token = auth.substring(7).trim();
 
 // Defensive: strip anything appended after the JWT (comma/space)
         int comma = token.indexOf(',');

@@ -13,7 +13,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.*;
 
 @RestController
-@RequestMapping("/bo/investments")
+@RequestMapping("/backoffice/investments")
 @RequiredArgsConstructor
 public class BoInvestmentController {
 

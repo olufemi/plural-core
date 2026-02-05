@@ -9,7 +9,7 @@ import com.finacial.wealth.api.profiling.domain.GlobalLimitConfig;
 import com.finacial.wealth.api.profiling.domain.ProcessorUserFailedTransInfo;
 import com.finacial.wealth.api.profiling.domain.RegWalletInfo;
 import com.finacial.wealth.api.profiling.domain.UserLimitConfig;
-import com.finacial.wealth.api.profiling.models.ApiResponseModel;
+
 import com.finacial.wealth.api.profiling.proxies.LedgerSummaryClient;
 import com.finacial.wealth.api.profiling.repo.AddAccountDetailsRepo;
 import com.finacial.wealth.api.profiling.repo.DeviceChangeLimitConfigRepo;
@@ -24,7 +24,7 @@ import com.finacial.wealth.api.profiling.utils.UttilityMethods;
 import java.io.UnsupportedEncodingException;
 import java.math.BigDecimal;
 import java.util.ArrayList;
-import java.util.Collections;
+
 import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -255,7 +255,7 @@ public class ProfilingLimitsService {
 
         List<UiLimitLine> lines = new ArrayList<UiLimitLine>();
         lines.add(line("Daily Limit", parseLimitOrNull(g.getDailyLimit(), currencyRate), debitSpent(byCode, "DAILY")));
-        lines.add(line("Weekly Limit", parseLimitOrNull(g.getWeeklyLimit() == null ? "0.00" : g.getWeeklyLimit(), currencyRate), debitSpent(byCode, "SINGLE")));
+        lines.add(line("Weekly Limit", parseLimitOrNull(g.getWeeklyLimit() == null ? "0.00" : g.getWeeklyLimit(), currencyRate), debitSpent(byCode, "WEEKLY")));
         lines.add(line("Monthly Limit", parseLimitOrNull(g.getMonthlyLimit() == null ? "0.00" : g.getMonthlyLimit(), currencyRate), debitSpent(byCode, "MONTHLY")));
 
         return lines;

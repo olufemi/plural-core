@@ -138,6 +138,7 @@ public class InvestmentOrderService {
     private final InvestmentHistoryService investmentHistoryService;
     private final InvestmentPositionHistoryRepository historyRepo;
     private final InvestmentRequestGuardRepository guardRepo;
+    private static final ZoneId ZONE = ZoneId.of("Africa/Lagos");
 
     public InvestmentOrderService(AppConfigRepo appConfigRepo,
             AddAccountDetailsRepo addAccountDetailsRepo,
@@ -576,7 +577,7 @@ public class InvestmentOrderService {
         InvestmentOrder order = new InvestmentOrder();
         order.setOrderRef(rq.orderRef());
         order.setIdempotencyKey(rq.idempotencyKey());
-        order.setParentOrderRef(String.valueOf("ORID_") + GlobalMethods.generateTransactionId());
+        order.setParentOrderRef(String.valueOf("ORID-") + GlobalMethods.generateTransactionId());
         order.setEmailAddress(rq.emailAddress());
         order.setWalletId(rq.walletId());
         order.setProduct(rq.product());
@@ -757,9 +758,8 @@ public class InvestmentOrderService {
 
             System.out.println("requestLiquidation :: " + new Gson().toJson(rq));
 
-            // Basic validation
             if (rq == null || rq.orderId() == null || rq.orderId().trim().isEmpty()) {
-                res.setStatusCode(202);
+                res.setStatusCode(statusCode);
                 res.setDescription("Missing orderId");
                 res.setData(Collections.emptyMap());
                 return res;
@@ -771,6 +771,7 @@ public class InvestmentOrderService {
                 res.setData(Collections.emptyMap());
                 return res;
             }
+
             final String phoneNumber = utilService.getClaimFromJwt(auth, "phoneNumber");
 
             String emailAddress = utilService.getClaimFromJwt(auth, "emailAddress");
@@ -782,25 +783,32 @@ public class InvestmentOrderService {
             }
 
             Optional<RegWalletInfo> getRec = regWalletInfoRepository.findByPhoneNumber(phoneNumber);
-
-            BaseResponse bResPin = new BaseResponse();
-            WalletNo wSend = new WalletNo();
-            wSend.setPin(rq.pin());
-
-            wSend.setWalletId(getRec.get().getWalletId());
-            bResPin = transactionServiceProxies.validatePin(wSend, auth);
-            if (bResPin.getStatusCode() != 200) {
-                res.setStatusCode(bResPin.getStatusCode());
-                res.setDescription(bResPin.getDescription());
+            if (!getRec.isPresent()) {
+                res.setStatusCode(statusCode);
+                res.setDescription("Wallet record not found");
+                res.setData(Collections.emptyMap());
                 return res;
             }
 
-            // ✅ Do NOT throw: return BaseResponse instead
+            // Validate PIN
+            WalletNo wSend = new WalletNo();
+            wSend.setPin(rq.pin());
+            wSend.setWalletId(getRec.get().getWalletId());
+
+            BaseResponse bResPin = transactionServiceProxies.validatePin(wSend, auth);
+            if (bResPin == null || bResPin.getStatusCode() != 200) {
+                res.setStatusCode(bResPin == null ? statusCode : bResPin.getStatusCode());
+                res.setDescription(bResPin == null ? "PIN validation failed" : bResPin.getDescription());
+                res.setData(Collections.emptyMap());
+                return res;
+            }
+
+            // Find subscription order (must be ACTIVE)
             Optional<InvestmentOrder> optSubOrder
                     = orderRepo.findByOrderRefAndEmailAddress(rq.orderId().trim(), emailAddress.trim());
 
             if (!optSubOrder.isPresent()) {
-                res.setStatusCode(202);
+                res.setStatusCode(statusCode);
                 res.setDescription("Investment position not found");
                 res.setData(Collections.emptyMap());
                 return res;
@@ -808,7 +816,6 @@ public class InvestmentOrderService {
 
             InvestmentOrder subscriptionOrder = optSubOrder.get();
 
-            // Business rule: must be ACTIVE
             if (subscriptionOrder.getStatus() != InvestmentOrderStatus.ACTIVE) {
                 res.setStatusCode(statusCode);
                 res.setDescription("Order is not eligible for liquidation.");
@@ -816,26 +823,34 @@ public class InvestmentOrderService {
                 return res;
             }
 
-            Optional<InvestmentPosition> optPos
-                    = positionRepo.findByOrderRef(subscriptionOrder.getOrderRef());
+            // Load position (and lock it to prevent concurrent oversell)
+            InvestmentPosition position = positionRepo.findByOrderRef(subscriptionOrder.getOrderRef())
+                    .orElse(null);
 
-            if (!optPos.isPresent()) {
-                res.setStatusCode(202);
+            if (position == null) {
+                res.setStatusCode(statusCode);
                 res.setDescription("Position not found");
                 res.setData(Collections.emptyMap());
                 return res;
             }
 
-            InvestmentPosition position = optPos.get();
+            position = positionRepo.lockById(position.getId())
+                    .orElseThrow(() -> new IllegalStateException("Position lock failed"));
 
             boolean fullLiquidation = rq.fullLiquidation();
 
+            BigDecimal currentValue = nvl(position.getCurrentValue());
+            if (currentValue.compareTo(BigDecimal.ZERO) <= 0) {
+                res.setStatusCode(statusCode);
+                res.setDescription("Position has no value available for liquidation");
+                res.setData(Collections.emptyMap());
+                return res;
+            }
+
             BigDecimal liquidationBaseAmount;
             if (fullLiquidation) {
-                // full market value
-                liquidationBaseAmount = position.getCurrentValue();
+                liquidationBaseAmount = currentValue; // full market value
             } else {
-                // partial liquidation – CAPITAL ONLY
                 liquidationBaseAmount = rq.liquidationAmount();
                 if (liquidationBaseAmount == null || liquidationBaseAmount.compareTo(BigDecimal.ZERO) <= 0) {
                     res.setStatusCode(statusCode);
@@ -844,7 +859,8 @@ public class InvestmentOrderService {
                     return res;
                 }
 
-                BigDecimal investedAmount = position.getInvestedAmount() == null ? BigDecimal.ZERO : position.getInvestedAmount();
+                // Your current business rule: partial liquidation is capital-only
+                BigDecimal investedAmount = nvl(position.getInvestedAmount());
                 if (liquidationBaseAmount.compareTo(investedAmount) > 0) {
                     res.setStatusCode(statusCode);
                     res.setDescription("Amount exceeds available capital.");
@@ -853,25 +869,21 @@ public class InvestmentOrderService {
                 }
             }
 
-            if (liquidationBaseAmount == null || liquidationBaseAmount.compareTo(BigDecimal.ZERO) <= 0) {
+            // ✅ Prevent oversell across multiple liquidation requests
+            BigDecimal reserved = nvl(position.getReservedLiquidationAmount());
+            BigDecimal available = currentValue.subtract(reserved);
+
+            if (liquidationBaseAmount.compareTo(available) > 0) {
                 res.setStatusCode(statusCode);
-                res.setDescription("Liquidation base amount is invalid");
+                res.setDescription("Insufficient available balance. Available: " + available);
                 res.setData(Collections.emptyMap());
                 return res;
             }
 
-            BigDecimal fees = computeEntireMarketValuesLiquidationFee(position.getProduct(), liquidationBaseAmount);
-            if (fees == null) {
-                fees = BigDecimal.ZERO;
-            }
-
-            BigDecimal tax = computeTax(subscriptionOrder.getProduct(), liquidationBaseAmount);
-            if (tax == null) {
-                tax = BigDecimal.ZERO;
-            }
+            BigDecimal fees = nvl(computeEntireMarketValuesLiquidationFee(position.getProduct(), liquidationBaseAmount));
+            BigDecimal tax = nvl(computeTax(subscriptionOrder.getProduct(), liquidationBaseAmount));
 
             BigDecimal netAmount = liquidationBaseAmount.subtract(fees).subtract(tax);
-
             if (netAmount.compareTo(BigDecimal.ZERO) <= 0) {
                 res.setStatusCode(statusCode);
                 res.setDescription("Net amount after charges is not positive.");
@@ -879,31 +891,41 @@ public class InvestmentOrderService {
                 return res;
             }
 
-            String idemKey = "ORID_:" + subscriptionOrder.getOrderRef() + ":" + rq.liquidationAmount() + ":" + fullLiquidation;
+            // Better idempotency (stable for same request)
+            String idemKey = ("LIQ:" + subscriptionOrder.getOrderRef()
+                    + ":" + (fullLiquidation ? "FULL" : liquidationBaseAmount.toPlainString())
+                    + ":" + emailAddress).trim();
 
-            // create liquidation order (ASYNC)
+            // Reserve immediately (so multiple requests are safe)
+            position.setReservedLiquidationAmount(reserved.add(liquidationBaseAmount));
+            position.setUpdatedAt(Instant.now());
+            positionRepo.save(position);
+
+            // Create liquidation order (pending approval)
             InvestmentOrder liqOrder = new InvestmentOrder();
             liqOrder.setParentOrderRef(subscriptionOrder.getOrderRef());
-            liqOrder.setOrderRef(generateOrderRef("ORID_"));
+            liqOrder.setOrderRef(generateOrderRef("LIQ"));
             liqOrder.setEmailAddress(emailAddress);
             liqOrder.setWalletId(position.getWalletId());
             liqOrder.setProduct(position.getProduct());
             liqOrder.setPosition(position);
             liqOrder.setType(InvestmentOrderType.LIQUIDATION);
-            liqOrder.setStatus(InvestmentOrderStatus.LIQUIDATION_PROCESSING);
+
+            liqOrder.setStatus(InvestmentOrderStatus.LIQUIDATION_PENDING_APPROVAL); // ✅ approval stage
             liqOrder.setAmount(liquidationBaseAmount);
             liqOrder.setFees(fees);
             liqOrder.setTax(tax);
             liqOrder.setNetAmount(netAmount);
-            liqOrder.setCreatedAt(Instant.now());
             liqOrder.setAmountBalance(netAmount);
+
             liqOrder.setIdempotencyKey(idemKey);
+            liqOrder.setCreatedAt(Instant.now());
             liqOrder.setUpdatedAt(Instant.now());
 
             orderRepo.save(liqOrder);
 
             res.setStatusCode(200);
-            res.setDescription("Your liquidation request is processing. This may take some time.");
+            res.setDescription("Liquidation request created and pending approval.");
             res.setData(Collections.singletonMap("liquidationOrderRef", liqOrder.getOrderRef()));
             return res;
 
@@ -916,134 +938,144 @@ public class InvestmentOrderService {
         }
     }
 
+    private static Instant reserveFeatureCutoff() {
+        // start of "today" in Lagos
+        return LocalDate.now(ZONE).atStartOfDay(ZONE).toInstant();
+    }
+
     @Transactional
-    public BaseResponse onLiquidationSettled(String liquidationOrderRef) {
+    protected BaseResponse onLiquidationSettledInternal(InvestmentOrder order) {
 
         BaseResponse res = new BaseResponse();
-        int statusCode = 500;
-        String description = "Something went wrong";
+        int statusCode = 400;
 
-        try {
-            statusCode = 400;
-
-            // Basic validation
-            if (liquidationOrderRef == null || liquidationOrderRef.trim().isEmpty()) {
-                res.setStatusCode(202);
-                res.setDescription("Liquidation order ref is required");
-
-                return res;
-            }
-
-            // ✅ Do NOT throw: return BaseResponse instead
-            Optional<InvestmentOrder> optOrder = orderRepo.findByOrderRef(liquidationOrderRef.trim());
-            if (!optOrder.isPresent()) {
-                res.setStatusCode(202);
-                res.setDescription("Liquidation order not found");
-                // res.setData(Collections.emptyMap());
-                return res;
-            }
-
-            InvestmentOrder order = optOrder.get();
-
-            // Must be in processing state
-            if (order.getStatus() != InvestmentOrderStatus.LIQUIDATION_PROCESSING) {
-                res.setStatusCode(statusCode);
-                res.setDescription("Liquidation is not in a processable state: " + order.getStatus());
-                //res.setData(Collections.emptyMap());
-                return res;
-            }
-
-            InvestmentPosition position = order.getPosition();
-            if (position == null) {
-                res.setStatusCode(statusCode);
-                res.setDescription("Position not found on liquidation order");
-                //res.setData(Collections.emptyMap());
-                return res;
-            }
-
-            BigDecimal liquidationAmount = order.getAmount(); // base amount removed
-            if (liquidationAmount == null || liquidationAmount.compareTo(BigDecimal.ZERO) <= 0) {
-                res.setStatusCode(statusCode);
-                res.setDescription("Invalid liquidation amount on order");
-                // res.setData(Collections.emptyMap());
-                return res;
-            }
-
-            BigDecimal currentValue = position.getCurrentValue();
-            if (currentValue == null) {
-                res.setStatusCode(statusCode);
-                res.setDescription("Position current value is missing");
-                // res.setData(Collections.emptyMap());
-                return res;
-            }
-
-            boolean fullLiquidation = liquidationAmount.compareTo(currentValue) >= 0;
-
-            // 1️⃣ Credit wallet FIRST (external dependency)
-            BaseResponse credit = processCredit(order.getOrderRef(), order.getEmailAddress());
-            if (credit == null || credit.getStatusCode() != 200) {
-
-                // Optional: keep it in LIQUIDATION_PROCESSING so it can be retried OR mark as FAILED
-                // order.setStatus(InvestmentOrderStatus.FAILED);
-                // order.setUpdatedAt(Instant.now());
-                // orderRepo.save(order);
-                res.setStatusCode(statusCode);
-                res.setDescription("Wallet credit failed");
-                //res.setData(Collections.emptyMap());
-                return res;
-            }
-
-            // 2️⃣ Apply liquidation to position
-            if (fullLiquidation) {
-                position.setInvestedAmount(BigDecimal.ZERO);
-                position.setAccruedInterest(BigDecimal.ZERO);
-                position.setTotalAccruedInterest(position.getTotalAccruedInterest()); // (kept your logic)
-                position.setCurrentValue(BigDecimal.ZERO);
-                position.setUnits(BigDecimal.ZERO);
-                position.setStatus(InvestmentPositionStatus.FULLY_LIQUIDATED);
-                // 3️⃣ Close order
-                order.setStatus(InvestmentOrderStatus.SETTLED);
-            } else {
-                // PARTIAL – CAPITAL ONLY
-                BigDecimal investedAmount = position.getInvestedAmount() == null ? BigDecimal.ZERO : position.getInvestedAmount();
-                BigDecimal accruedInterest = position.getAccruedInterest() == null ? BigDecimal.ZERO : position.getAccruedInterest();
-
-                BigDecimal newInvested = investedAmount.subtract(liquidationAmount);
-                if (newInvested.compareTo(BigDecimal.ZERO) < 0) {
-                    res.setStatusCode(statusCode);
-                    res.setDescription("Liquidation amount exceeds invested amount");
-                    // res.setData(Collections.emptyMap());
-                    return res;
-                }
-
-                // 3️⃣ Close order
-                order.setStatus(InvestmentOrderStatus.ACTIVE);
-
-                position.setInvestedAmount(newInvested);
-                position.setCurrentValue(newInvested.add(accruedInterest));
-                position.setStatus(InvestmentPositionStatus.PARTIALLY_LIQUIDATED);
-            }
-
-            position.setUpdatedAt(Instant.now());
-            positionRepo.save(position);
-
-            order.setUpdatedAt(Instant.now());
-            orderRepo.save(order);
-
-            activityService.logInvestmentLiquidation(order, position);
-
-            res.setStatusCode(200);
-            res.setDescription("Liquidation completed successfully.");
-            res.setData(Collections.emptyMap());
-            return res;
-
-        } catch (Exception ex) {
-            ex.printStackTrace();
+        // if already settled (idempotency)
+        if (order.getStatus() == InvestmentOrderStatus.SETTLED) {
             res.setStatusCode(statusCode);
-            res.setDescription(description);
+            res.setDescription("Already settled!");
             res.setData(Collections.emptyMap());
             return res;
         }
+
+        if (order.getStatus() != InvestmentOrderStatus.LIQUIDATION_PROCESSING) {
+            res.setStatusCode(statusCode);
+            res.setDescription("Liquidation is not in a processable state: " + order.getStatus());
+            res.setData(Collections.emptyMap());
+            return res;
+        }
+
+        InvestmentPosition position = order.getPosition();
+        if (position == null) {
+            res.setStatusCode(statusCode);
+            res.setDescription("Position not found on liquidation order");
+            res.setData(Collections.emptyMap());
+            return res;
+        }
+
+        // lock position row
+        position = positionRepo.lockById(position.getId())
+                .orElseThrow(() -> new IllegalStateException("Position lock failed"));
+
+        BigDecimal liquidationAmount = nvl(order.getAmount());
+        if (liquidationAmount.compareTo(BigDecimal.ZERO) <= 0) {
+            res.setStatusCode(statusCode);
+            res.setDescription("Invalid liquidation amount on order");
+            res.setData(Collections.emptyMap());
+            return res;
+        }
+
+        BigDecimal investedAmount = nvl(position.getInvestedAmount());
+        BigDecimal accruedInterest = nvl(position.getAccruedInterest());
+        BigDecimal currentValue = nvl(position.getCurrentValue());
+        BigDecimal reserved = nvl(position.getReservedLiquidationAmount());
+
+        // 2) release reserved
+        Instant cutoff = reserveFeatureCutoff();
+        boolean legacyOrder = order.getCreatedAt() != null && order.getCreatedAt().isBefore(cutoff);
+
+        if (!legacyOrder) {
+            // NEW FLOW: reserve must exist and cover this settlement
+            if (reserved.compareTo(liquidationAmount) < 0) {
+                res.setStatusCode(statusCode);
+                res.setDescription("Reserved liquidation amount is insufficient for this order");
+                res.setData(Collections.emptyMap());
+                return res;
+            }
+            position.setReservedLiquidationAmount(reserved.subtract(liquidationAmount));
+        } else {
+            // LEGACY FLOW: do not enforce reserve; do not subtract
+            // (still enforce other validations like invested/currentValue)
+        }
+
+        // Determine full vs partial at settlement time
+        boolean fullLiquidation = liquidationAmount.compareTo(currentValue) >= 0;
+
+        // 1) credit wallet first
+        BaseResponse credit = processCredit(order.getOrderRef(), order.getEmailAddress());
+        if (credit == null || credit.getStatusCode() != 200) {
+            // keep in PROCESSING for retry OR mark failed; your choice
+            res.setStatusCode(statusCode);
+            res.setDescription("Wallet credit failed");
+            res.setData(Collections.emptyMap());
+            return res;
+        }
+
+        // 3) apply to position
+        //apply parentOrder to update original invested amount
+        InvestmentOrder orderIdm = orderRepo.findByOrderRef(order.getParentOrderRef().trim()).orElse(null);
+
+        if (fullLiquidation) {
+            position.setInvestedAmount(BigDecimal.ZERO);
+            position.setAccruedInterest(BigDecimal.ZERO);
+            position.setCurrentValue(BigDecimal.ZERO);
+            position.setUnits(BigDecimal.ZERO);
+            position.setStatus(InvestmentPositionStatus.FULLY_LIQUIDATED);
+            orderIdm.setStatus(InvestmentOrderStatus.SETTLED);
+            orderIdm.setUpdatedAt(Instant.now());
+            orderIdm.setAmount(BigDecimal.ZERO);
+            orderIdm.setAmountBalance(BigDecimal.ZERO);
+            orderRepo.save(order);
+
+        } else {
+            if (liquidationAmount.compareTo(investedAmount) > 0) {
+                res.setStatusCode(statusCode);
+                res.setDescription("Liquidation amount exceeds invested amount");
+                res.setData(Collections.emptyMap());
+                return res;
+            }
+
+            BigDecimal newInvested = investedAmount.subtract(liquidationAmount);
+            position.setInvestedAmount(newInvested);
+            position.setCurrentValue(newInvested.add(accruedInterest));
+            position.setStatus(newInvested.compareTo(BigDecimal.ZERO) == 0
+                    ? InvestmentPositionStatus.FULLY_LIQUIDATED
+                    : InvestmentPositionStatus.PARTIALLY_LIQUIDATED);
+            
+            orderIdm.setUpdatedAt(Instant.now());
+            orderIdm.setAmount(newInvested);
+            orderIdm.setAmountBalance(newInvested);
+            orderRepo.save(order);
+        }
+
+        position.setUpdatedAt(Instant.now());
+        positionRepo.save(position);
+
+        // 4) close order
+        order.setStatus(InvestmentOrderStatus.SETTLED);
+        order.setUpdatedAt(Instant.now());
+        orderRepo.save(order);
+
+        // 5) audit/activity
+        activityService.logInvestmentLiquidation(order, position);
+
+        res.setStatusCode(200);
+        res.setDescription("Liquidation completed successfully.");
+        res.setData(Collections.emptyMap());
+        return res;
+    }
+
+    private static BigDecimal nvl(BigDecimal v) {
+        return v == null ? BigDecimal.ZERO : v;
     }
 
     public BaseResponse processCredit(String orderId, String emailAddress) {

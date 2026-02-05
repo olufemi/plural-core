@@ -14,6 +14,7 @@ import com.finacial.wealth.backoffice.auth.service.AdminUserService;
 import jakarta.servlet.http.HttpServletRequest;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -95,5 +96,21 @@ public ResponseEntity<AdminUserResponse> activate(
     private String ua(HttpServletRequest r) {
         String ua = r.getHeader("User-Agent");
         return (ua == null) ? "" : ua;
+    }
+
+    @GetMapping("/admins/{adminId}")
+    public AdminUserResponse getAdmin(@PathVariable Long adminId,
+            @RequestHeader("boAdminUserId") Long actorAdminId,
+            HttpServletRequest request) {
+        return adminUserService.getAdmin(actorAdminId, adminId, request.getRemoteAddr(), request.getHeader("User-Agent"));
+    }
+
+    @GetMapping("/admins")
+    public Page<AdminUserResponse> getAdmins(@RequestHeader("boAdminUserId") Long actorAdminId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) String q,
+            HttpServletRequest request) {
+        return adminUserService.getAdmins(actorAdminId, page, size, q, request.getRemoteAddr(), request.getHeader("User-Agent"));
     }
 }

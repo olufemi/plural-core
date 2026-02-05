@@ -95,7 +95,7 @@ public class InvestmentServicesController {
             @RequestBody LiquidationApprovalRequest request
     ) {
         return ResponseEntity.ok(
-                liquidationActionService.approveLiquidation(
+                liquidationActionService.approveAndSettleLiquidation(
                         request.getOrderRef()
                 )
         );

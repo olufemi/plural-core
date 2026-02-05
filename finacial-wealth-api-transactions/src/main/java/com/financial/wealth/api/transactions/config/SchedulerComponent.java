@@ -53,7 +53,7 @@ public class SchedulerComponent {
 
         if (disable.equalsIgnoreCase("false")) {
             webhookKeyService.processWebHookDeposit();
-            LOG.info("****** running scheduled processWebHookWithdrawal  >>> " + Calendar.getInstance().getTime() + "******");
+            LOG.info("****** running scheduled processWebHookDeposit  >>> " + Calendar.getInstance().getTime() + "******");
         }
 
     }

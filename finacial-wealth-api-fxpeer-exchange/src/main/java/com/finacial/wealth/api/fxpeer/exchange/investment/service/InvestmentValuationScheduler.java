@@ -9,6 +9,8 @@ import com.finacial.wealth.api.fxpeer.exchange.investment.domain.InvestmentPosit
 import com.finacial.wealth.api.fxpeer.exchange.investment.domain.InvestmentPositionHistory;
 import com.finacial.wealth.api.fxpeer.exchange.investment.domain.InvestmentProduct;
 import com.finacial.wealth.api.fxpeer.exchange.investment.ennum.InterestCapitalization;
+import com.finacial.wealth.api.fxpeer.exchange.investment.ennum.InvestmentOrderStatus;
+import com.finacial.wealth.api.fxpeer.exchange.investment.ennum.InvestmentOrderType;
 import com.finacial.wealth.api.fxpeer.exchange.investment.ennum.InvestmentPositionStatus;
 import com.finacial.wealth.api.fxpeer.exchange.investment.record.CustomerInvestmentsPojo;
 import com.finacial.wealth.api.fxpeer.exchange.investment.record.InvestmentPositionHistoryPojo;
@@ -377,8 +379,11 @@ public class InvestmentValuationScheduler {
                 return ResponseEntity.ok(responseModel);
             }
 
-            List<InvestmentOrder> currInvPojo
-                    = investmentOrderRepository.findActiveByEmailAddress(email);
+            /* List<InvestmentOrder> currInvPojo
+                    = investmentOrderRepository.findActiveByEmailAddress(email);*/
+            List<InvestmentOrder> currInvPojo = investmentOrderRepository.findByEmailAddressAndTypeAndStatusOrderByUpdatedAtDesc(
+                    email, InvestmentOrderType.SUBSCRIPTION, InvestmentOrderStatus.ACTIVE
+            );
 
             List<CustomerInvestmentsPojo> items = new ArrayList<>();
 

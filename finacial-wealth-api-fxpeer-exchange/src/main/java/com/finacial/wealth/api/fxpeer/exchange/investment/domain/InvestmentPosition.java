@@ -82,6 +82,7 @@ public class InvestmentPosition {
     private InterestCapitalization interestCapitalization;
     
     private LocalDate lastCapitalizationDate;    // prevents double sweeps
+    private BigDecimal reservedLiquidationAmount; // default 0
 
     // getters/setters
 }

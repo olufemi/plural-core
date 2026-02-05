@@ -63,7 +63,7 @@ public class CampaignManagementController {
         return service.restartCampaign(id);
     }
 
-    @GetMapping
+    @GetMapping("/get-all")
     public ApiResponseModel list() {
         return service.listCampaigns();
     }

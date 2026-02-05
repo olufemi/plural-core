@@ -9,7 +9,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/bo/group-savings")
+@RequestMapping("/backoffice/group-savings")
 @RequiredArgsConstructor
 public class BoGroupSavingsController {
 

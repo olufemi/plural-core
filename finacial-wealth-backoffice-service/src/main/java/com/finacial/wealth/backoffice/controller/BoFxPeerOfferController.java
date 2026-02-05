@@ -9,7 +9,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/bo/fxpeer/offers")
+@RequestMapping("/backoffice/fxpeer/offers")
 @RequiredArgsConstructor
 public class BoFxPeerOfferController {
 

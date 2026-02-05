@@ -9,6 +9,7 @@ package com.finacial.wealth.backoffice.auth.service;
  * @author olufemioshin
  */
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.finacial.wealth.backoffice.PasswordPolicy;
 
 import com.finacial.wealth.backoffice.admin.dto.*;
 import com.finacial.wealth.backoffice.audit.entity.AdminAuditLog;
@@ -17,6 +18,7 @@ import com.finacial.wealth.backoffice.auth.dto.AdminRoleDto;
 import com.finacial.wealth.backoffice.auth.entity.BoAdminUser;
 import com.finacial.wealth.backoffice.auth.repo.BoAdminRoleRepository;
 import com.finacial.wealth.backoffice.auth.repo.BoAdminUserRepository;
+import com.finacial.wealth.backoffice.model.BaseResponse;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -25,6 +27,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.*;
 import java.util.*;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 
 @Service
 @RequiredArgsConstructor
@@ -35,6 +40,7 @@ public class AdminUserService {
     private final AdminAuditService auditService;
     private final ObjectMapper objectMapper;
     private final BoAdminRoleRepository roleRepo;
+    private final PasswordPolicy passwordPolicy;
 
     public List<AdminRoleDto> listRoles() {
         return roleRepo.findAllByOrderByNameAsc()
@@ -70,7 +76,20 @@ public class AdminUserService {
         // u.setFailedLoginAttempts(0);
         u.setLockedUntil(null);
         u.setMfaEnabled(false); // MUST enroll MFA on first login per requirement :contentReference[oaicite:7]{index=7}
-        u.setPasswordHash(passwordEncoder.encode(tempPassword));
+
+        if (!req.password().equals(req.confirmPassword())) {
+            throw new IllegalArgumentException("Confirm password not same as password!");
+        }
+
+        BaseResponse getPol = passwordPolicy.validate(req.password());
+
+        if (getPol.getStatusCode() != 200) {
+            throw new IllegalArgumentException(getPol.getDescription());
+        }
+
+        String encoded = passwordEncoder.encode(req.password());
+        u.setPassword(encoded);
+        // u.setPasswordHash(passwordEncoder.encode(req.password()));
         u.setRoles(new HashSet<>(req.roles()));
 
         u = userRepo.save(u);
@@ -177,5 +196,48 @@ public class AdminUserService {
             sb.append(chars.charAt(r.nextInt(chars.length())));
         }
         return sb.toString();
+    }
+
+    @Transactional(readOnly = true)
+    public AdminUserResponse getAdmin(Long actorAdminId, Long adminId, String ip, String ua) {
+
+        BoAdminUser u = userRepo.findById(adminId)
+                .orElseThrow(() -> new IllegalArgumentException("Admin user not found"));
+
+        // optional audit (only if your org audits reads)
+        audit("ADMIN_VIEW", actorAdminId, u.getId(), ip, ua,
+                Map.of("adminId", adminId));
+
+        return toResponse(u);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<AdminUserResponse> getAdmins(Long actorAdminId,
+            int page,
+            int size,
+            String q, // search query (optional)
+            String ip,
+            String ua) {
+
+        // guard page/size
+        int p = Math.max(page, 0);
+        int s = Math.min(Math.max(size, 1), 100); // cap to 100
+
+        PageRequest pr = PageRequest.of(p, s, Sort.by(Sort.Direction.DESC, "id"));
+
+        Page<BoAdminUser> result;
+
+        if (q != null && !q.trim().isEmpty()) {
+            String query = q.trim();
+            result = userRepo.findByEmailContainingIgnoreCaseOrFullNameContainingIgnoreCase(query, query, pr);
+        } else {
+            result = userRepo.findAll(pr);
+        }
+
+        // optional audit (usually you don't audit list reads, but you can)
+        audit("ADMIN_LIST", actorAdminId, null, ip, ua,
+                Map.of("page", p, "size", s, "q", q));
+
+        return result.map(this::toResponse);
     }
 }

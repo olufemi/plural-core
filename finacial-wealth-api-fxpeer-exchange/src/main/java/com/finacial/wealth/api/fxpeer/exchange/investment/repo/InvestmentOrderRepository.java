@@ -11,6 +11,7 @@ import com.finacial.wealth.api.fxpeer.exchange.investment.domain.InvestmentReque
 import com.finacial.wealth.api.fxpeer.exchange.investment.ennum.InvestmentOrderStatus;
 import com.finacial.wealth.api.fxpeer.exchange.investment.ennum.InvestmentOrderType;
 import com.finacial.wealth.api.fxpeer.exchange.offer.Offer;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.repository.CrudRepository;
 
 /**
@@ -23,6 +24,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -53,12 +55,17 @@ public interface InvestmentOrderRepository extends JpaRepository<InvestmentOrder
     @Query("SELECT u FROM InvestmentOrder u where u.orderRef = :orderRef and u.emailAddress = :emailAddress")
     InvestmentOrder findByOrderRefAndEmailAddressUpdate(@Param("orderRef") String orderRef, @Param("emailAddress") String emailAddress);
 
-    @Query("""
+    /*@Query("""
         select p from InvestmentOrder p
         where p.emailAddress = :emailAddress 
           and p.status in (com.finacial.wealth.api.fxpeer.exchange.investment.ennum.InvestmentOrderStatus.ACTIVE)
         """)
-    List<InvestmentOrder> findActiveByEmailAddress(String emailAddress);
+   List<InvestmentOrder> findActiveByEmailAddress(String emailAddress);*/
+    List<InvestmentOrder> findByEmailAddressAndTypeAndStatusOrderByUpdatedAtDesc(
+            String emailAddress,
+            InvestmentOrderType type,
+            InvestmentOrderStatus status
+    );
 
     List<InvestmentOrder> findByProductAndStatus(
             InvestmentProduct product,
@@ -90,6 +97,37 @@ public interface InvestmentOrderRepository extends JpaRepository<InvestmentOrder
             @Param("orderRef") String orderRef,
             @Param("types") List<InvestmentOrderType> types,
             @Param("since") Instant since
+    );
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select o from InvestmentOrder o where o.orderRef = :orderRef")
+    Optional<InvestmentOrder> lockByOrderRef(@Param("orderRef") String orderRef);
+
+    // ===== LIQUIDATION HISTORY FOR A POSITION (parentOrderRef) =====
+// 1) All liquidations for a subscription/position (history)
+    List<InvestmentOrder> findByParentOrderRefAndTypeOrderByCreatedAtDesc(
+            String parentOrderRef,
+            InvestmentOrderType type
+    );
+
+// 2) Latest liquidation for a subscription/position
+    Optional<InvestmentOrder> findTopByParentOrderRefAndTypeOrderByCreatedAtDesc(
+            String parentOrderRef,
+            InvestmentOrderType type
+    );
+
+// 3) Open liquidations (pending approval + processing) for a position
+    List<InvestmentOrder> findByParentOrderRefAndTypeAndStatusInOrderByCreatedAtDesc(
+            String parentOrderRef,
+            InvestmentOrderType type,
+            List<InvestmentOrderStatus> statuses
+    );
+
+// 4) Fast “exists” check to prevent too many concurrent liquidations (optional rule)
+    boolean existsByParentOrderRefAndTypeAndStatusIn(
+            String parentOrderRef,
+            InvestmentOrderType type,
+            List<InvestmentOrderStatus> statuses
     );
 
 }

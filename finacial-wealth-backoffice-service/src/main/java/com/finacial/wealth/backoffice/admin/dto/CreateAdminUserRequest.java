@@ -14,5 +14,7 @@ import java.util.Set;
 public record CreateAdminUserRequest(
         String email,
         String fullName,
+        String password,
+        String confirmPassword,
         Set<BoAdminRole> roles
 ) {}

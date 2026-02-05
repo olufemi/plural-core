@@ -8,7 +8,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/bo/interbank")
+@RequestMapping("/backoffice/interbank")
 @RequiredArgsConstructor
 public class BoInterbankController {
 

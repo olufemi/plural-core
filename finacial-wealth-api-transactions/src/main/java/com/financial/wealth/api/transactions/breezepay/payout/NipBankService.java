@@ -28,8 +28,10 @@ import com.financial.wealth.api.transactions.domain.UserLimitConfig;
 import com.financial.wealth.api.transactions.models.ApiResponseModel;
 import com.financial.wealth.api.transactions.models.BaseResponse;
 import com.financial.wealth.api.transactions.models.DebitWalletCaller;
+import com.financial.wealth.api.transactions.models.OtherBankBeneficiariesFind;
 import com.financial.wealth.api.transactions.models.OtherBankTransferRequest;
 import com.financial.wealth.api.transactions.models.PushNotificationFireBase;
+import com.financial.wealth.api.transactions.models.SaveBeneficiary;
 import com.financial.wealth.api.transactions.models.WalletNoReq;
 import com.financial.wealth.api.transactions.models.local.trans.NameLookUp;
 import com.financial.wealth.api.transactions.proxies.BreezePayVirtAcctProxy;
@@ -77,6 +79,7 @@ import java.util.stream.Collectors;
 import org.apache.commons.lang.StringUtils;
 import org.joda.time.DateTime;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.PageRequest;
 
 @Service
 public class NipBankService {
@@ -375,15 +378,14 @@ public class NipBankService {
             if (isWalletIdSender) {
 
                 System.out.println("isWalletIdSender :::::::: " + "     ");
+                List<AddAccountDetails> getVirtDeOtherSender = addAccountDetailsRepo.findByWalletId(rq.getSender());
 
-                getSender = regWalletInfoRepository.findByWalletIdList(rq.getSender());
-
-                if (getSender.size() <= 0) {
+                if (getVirtDeOtherSender.size() <= 0) {
 
                     PaymentsFailedTransInfo procFailedTrans = new PaymentsFailedTransInfo(
-                            "Wallet-Wallet-Transfer", "Wallet to Wallet transfer, Sender does not exists!",
+                            "Wallet-Bank-Transfer", "Wallet to Wallet transfer, Sender does not exists!",
                             String.valueOf(GlobalMethods.generateTransactionId()), "", channel,
-                            "Local-Transfer-Service"
+                            "Bank-Transfer-Service"
                     );
 
                     responseModel.setDescription("Wallet to Wallet transfer, Sender does not exists!");
@@ -393,7 +395,10 @@ public class NipBankService {
                     return responseModel;
 
                 }
+                getSender = regWalletInfoRepository.findByEmailsList(getVirtDeOtherSender.get(0).getEmailAddress());
+
                 senderPhoneNumber = getSender.get(0).getPhoneNumber();
+
             }
 
             if (isPhonenUmberSender) {
@@ -405,9 +410,9 @@ public class NipBankService {
                 if (getSender.size() <= 0) {
 
                     PaymentsFailedTransInfo procFailedTrans = new PaymentsFailedTransInfo(
-                            "Wallet-Wallet-Transfer", "Wallet to Wallet transfer, Sender does not exists!",
+                            "Wallet-Bank-Transfer", "Wallet to Wallet transfer, Sender does not exists!",
                             String.valueOf(GlobalMethods.generateTransactionId()), "", channel,
-                            "Local-Transfer-Service"
+                            "Bank-Transfer-Service"
                     );
 
                     responseModel.setDescription("Wallet to Wallet transfer, Sender does not exists!");
@@ -441,9 +446,9 @@ public class NipBankService {
             if (rq.getReceiver().equals(getDecoded.phoneNumber)) {
 
                 PaymentsFailedTransInfo procFailedTrans = new PaymentsFailedTransInfo(
-                        "Wallet-Wallet-Transfer", "Wallet to Wallet transfer, invalid transaction, Customer cannot transfer to self!",
+                        "Wallet-Bank-Transfer", "Wallet to Wallet transfer, invalid transaction, Customer cannot transfer to self!",
                         String.valueOf(GlobalMethods.generateTransactionId()), "", channel,
-                        "Local-Transfer-Service"
+                        "Payment-Transfer-Service"
                 );
 
                 responseModel.setDescription("Wallet to Wallet transfer, invalid transaction, Customer cannot transfer to self!");
@@ -496,9 +501,9 @@ public class NipBankService {
 
             if (getTotalBal.getStatusCode() != 200) {
                 PaymentsFailedTransInfo procFailedTrans = new PaymentsFailedTransInfo(
-                        "Wallet-Wallet-Transfer", getTotalBal.getDescription(),
+                        "Wallet-Bank-Transfer", getTotalBal.getDescription(),
                         String.valueOf(GlobalMethods.generateTransactionId()), "", channel,
-                        "Local-Transfer-Service"
+                        "Payment-Transfer-Service"
                 );
 
                 responseModel.setDescription(getTotalBal.getDescription());
@@ -826,6 +831,188 @@ public class NipBankService {
                     }
                 }
             }
+
+        } catch (Exception ex) {
+            responseModel.setDescription(statusMessage);
+            responseModel.setStatusCode(statusCode);
+
+            ex.printStackTrace();
+        }
+
+        return responseModel;
+    }
+
+    public BaseResponse saveBeneficiaryOtheBank(SaveBeneficiary rq, String channel, String auth) {
+
+        BaseResponse responseModel = new BaseResponse();
+        int statusCode = 500;
+        String statusMessage = "An error occured,please try again";
+        try {
+            statusCode = 400;
+            DecodedJWTToken getDecoded = DecodedJWTToken.getDecoded(auth);
+
+            /*List<WToBankTransfer> getExistRec = wToBankTransferRepo.findBySenderAndReceiver(getDecoded.phoneNumber, rq.getBeneficiaryNo());
+            if (getExistRec.size() > 0) {
+            }
+            if (wToBankTransferRepo.existsByReceiver(rq.getBeneficiaryNo())) {*/
+            List<OtherBankBeneficiaries> getSavedBen = otherBankBeneficiariesRepo.findByWalletNoByBeneficiaryActive(getDecoded.phoneNumber, rq.getBeneficiaryNo(), "1");
+            if (getSavedBen.size() <= 0) {
+                System.out.println("saveBeneficiary rq.getBeneficiaryName() :::::::: " + "  ::::::::::::::::::::: " + rq.getBeneficiaryName());
+                System.out.println("saveBeneficiary rq.getBeneficiaryName().replaceAll() :::::::: " + "  ::::::::::::::::::::: " + rq.getBeneficiaryName().replaceAll("\\s+", ""));
+
+                List<AddAccountDetails> getVirtDe = addAccountDetailsRepo.findByEmailAddress(getDecoded.emailAddress);
+                if (getVirtDe.size() > 0) {
+
+                    String senderVirtAcct = getVirtDe.get(0).getAccountNumber() == null ? "0" : getVirtDe.get(0).getAccountNumber();
+
+                    if (getVirtDe.get(0).getAccountNumber().equals("0")) {
+                        PaymentsFailedTransInfo procFailedTrans = new PaymentsFailedTransInfo(
+                                "Wallet-Bank-Transfer", "Wallet to Bank transfer," + STATUS_CODE_NIGERIA_ONBOARDING_FLOW_DESCRIPTION,
+                                String.valueOf(GlobalMethods.generateTransactionId()), "", channel,
+                                "Payment-Service"
+                        );
+                        responseModel.setDescription(STATUS_CODE_NIGERIA_ONBOARDING_FLOW_DESCRIPTION);
+                        responseModel.setStatusCode(STATUS_CODE_NIGERIA_ONBOARDING_FLOW_CODE);
+                        return responseModel;
+
+                    }
+
+                    if (getVirtDe.get(0).getAccountNumber().equals(rq.getBeneficiaryNo().trim())) {
+
+                        PaymentsFailedTransInfo procFailedTrans = new PaymentsFailedTransInfo(
+                                "Wallet-Bank-Transfer", "Wallet to Bank transfer, The Receiver's Account is same as Sender Virtual Account.",
+                                String.valueOf(GlobalMethods.generateTransactionId()), "", channel,
+                                "Payment-Service"
+                        );
+
+                        responseModel.setDescription("Wallet to Bank transfer, This transaction cannot be processed!");
+                        responseModel.setStatusCode(statusCode);
+
+                        localTransFailedTransInfoRepo.save(procFailedTrans);
+                        return responseModel;
+
+                    }
+
+                }
+
+                if (rq.getBankCode().isEmpty() || rq.getBankCode() == null) {
+
+                    PaymentsFailedTransInfo procFailedTrans = new PaymentsFailedTransInfo(
+                            "Wallet-Bank-Transfer", "Wallet to Bank transfer, Bank is empty",
+                            String.valueOf(GlobalMethods.generateTransactionId()), "", channel,
+                            "Payment-Service"
+                    );
+
+                    responseModel.setDescription("Wallet to Bank transfer, Bank is empty!");
+                    responseModel.setStatusCode(statusCode);
+
+                    localTransFailedTransInfoRepo.save(procFailedTrans);
+                    return responseModel;
+
+                }
+
+
+                /*Optional<NipCredAcccTranLog> checkB = nipCredAcccTranLogRepo.findByCreditAccount(rq.getBeneficiaryNo());
+                if (!checkB.isPresent()) {
+                    PaymentsFailedTransInfo procFailedTrans = new PaymentsFailedTransInfo(
+                            "Wallet-Bank-Transfer", "Wallet to Bank transfer, please complete transfer!",
+                            String.valueOf(GlobalMethods.generateTransactionId()), "", channel,
+                            "Payment-Service"
+                    );
+
+                    responseModel.setDescription("Wallet to Bank transfer, please complete transfer!");
+                    responseModel.setStatusCode(statusCode);
+
+                    localTransFailedTransInfoRepo.save(procFailedTrans);
+                    return responseModel;
+                }*/
+                OtherBankBeneficiaries sBen = new OtherBankBeneficiaries();
+                sBen.setBeneficiaryName(rq.getBeneficiaryName());
+                sBen.setBeneficiaryNo(rq.getBeneficiaryNo());
+                sBen.setBankCode(rq.getBankCode());
+                sBen.setBankName(rq.getBankName());
+                sBen.setBeneficiaryStatus("1");
+                sBen.setTransactionCount(1);
+                sBen.setCreatedDate(Instant.now());
+                sBen.setWalletNo(getDecoded.phoneNumber);
+                otherBankBeneficiariesRepo.save(sBen);
+            }
+            responseModel.setDescription("Beneficiary saved successfully");
+            responseModel.setStatusCode(200);
+
+            /* } else {
+
+                PaymentsFailedTransInfo procFailedTrans = new PaymentsFailedTransInfo(
+                        "Wallet-Bank-Transfer", "Wallet to Bank transfer, Customer has not performed a successful transaction with Receiver!",
+                        String.valueOf(GlobalMethods.generateTransactionId()), "", channel,
+                        "Payment-Service"
+                );
+
+                responseModel.setDescription("Wallet to Bank transfer, Customer has not performed a successful transaction with Receiver!");
+                responseModel.setStatusCode(statusCode);
+
+                localTransFailedTransInfoRepo.save(procFailedTrans);
+
+                return responseModel;
+            }*/
+        } catch (Exception ex) {
+            responseModel.setDescription(statusMessage);
+            responseModel.setStatusCode(statusCode);
+
+            ex.printStackTrace();
+        }
+
+        return responseModel;
+        //find frequentlyusedBeneficiaries
+    }
+
+    public ApiResponseModel findSavedOtherBanksBeneficiaries(String channel, String auth) {
+
+        ApiResponseModel responseModel = new ApiResponseModel();
+        int statusCode = 500;
+        String statusMessage = "An error occured,please try again";
+        try {
+            statusCode = 400;
+            DecodedJWTToken getDecoded = DecodedJWTToken.getDecoded(auth);
+
+            List<OtherBankBeneficiaries> getLocalBen = otherBankBeneficiariesRepo.findByWalletNoActive(getDecoded.phoneNumber, "1");
+            if (getLocalBen.size() <= 0) {
+
+                PaymentsFailedTransInfo procFailedTrans = new PaymentsFailedTransInfo(
+                        "Wallet-Bank-Transfer", "Wallet to Bank transfer, Customer has no Beneficiary!",
+                        String.valueOf(GlobalMethods.generateTransactionId()), "", channel,
+                        "Payment-Service"
+                );
+
+                responseModel.setDescription("Wallet to Bank transfer, Customer has no Beneficiary!");
+                responseModel.setStatusCode(statusCode);
+
+                localTransFailedTransInfoRepo.save(procFailedTrans);
+                return responseModel;
+
+            }
+            List<Object> mapAll = new ArrayList<Object>();
+
+            if (getLocalBen.size() > 0) {
+
+                for (OtherBankBeneficiaries gConfig : getLocalBen) {
+                    OtherBankBeneficiariesFind lData = new OtherBankBeneficiariesFind();
+                    lData.setBeneficiaryAccountName(gConfig.getBeneficiaryName());
+                    lData.setBeneficiaryAccountNo(gConfig.getBeneficiaryNo());
+                    lData.setBankCode(gConfig.getBankCode());
+                    lData.setBankName(gConfig.getBankName());
+                    mapAll.add(lData);
+
+                }
+
+                responseModel.setDescription("List of Beneficiaries.");
+                responseModel.setStatusCode(200);
+                responseModel.setData(mapAll);
+                return responseModel;
+            }
+
+            responseModel.setDescription("Customer has no Beneficiary!");
+            responseModel.setStatusCode(statusCode);
 
         } catch (Exception ex) {
             responseModel.setDescription(statusMessage);
@@ -1221,7 +1408,7 @@ public class NipBankService {
                 debGLCredit.setNarration("NGN_Withdrawal");
                 debGLCredit.setPhoneNumber(localTransferService.decryptData(utilMeth.getSETTING_KEY_WALLET_SYSTEM_SYSTEM_GG_NIG()));
                 debGLCredit.setTransAmount(amount);
-                debGLCredit.setTransactionId(rq.getProcessId()+"-NGN_GL");
+                debGLCredit.setTransactionId(rq.getProcessId() + "-NGN_GL");
 
                 utilMeth.debitCustomerWithType(debGLCredit, "NGN_GL", CCY);
 
@@ -1279,13 +1466,10 @@ public class NipBankService {
                         nipReqLog.setResponseCode(nipCre.getResponseCode());
                         nipReqLog.setResponseMessage(nipCre.getResponseMessage());
                         nipReqLog.setResponseReference(nipCre.getTransactionReference());
-                        nipReqLog.setResponseCode(nipCre.getResponseCode());
-                        nipReqLog.setResponseMessage(nipCre.getResponseMessage());
-                        nipReqLog.setResponseReference(nipCre.getTransactionReference());
                         nipReqLog.setCreatedDate(Instant.now());
+                        nipReqLog.setCreditBankName("Access Bank");
                         nipCredAcccTranLogRepo.save(nipReqLog);
 
-                        nipCredAcccTranLogRepo.save(nipReqLog);
                         //mark for roll back
                         List<SuccessDebitLog> getSucc = successDebitLogRepo.findByTransactionId(rq.getProcessId());
                         if (getSucc.size() > 0) {
@@ -1301,6 +1485,32 @@ public class NipBankService {
 
                         return responseModel;
                     }
+
+                    nipReqLog.setResponseCode(nipCre.getResponseCode());
+                    nipReqLog.setResponseMessage(nipCre.getResponseMessage());
+                    nipReqLog.setResponseReference(nipCre.getTransactionReference());
+                    nipReqLog.setCreatedDate(Instant.now());
+                    nipReqLog.setCreditBankName("Access Bank");
+                    nipCredAcccTranLogRepo.save(nipReqLog);
+
+                    FinWealthPaymentTransaction kTrans2b = new FinWealthPaymentTransaction();
+                    kTrans2b.setAmmount(new BigDecimal(rq.getAmount()));
+                    kTrans2b.setCreatedDate(Instant.now().plusSeconds(1));
+                    kTrans2b.setFees(new BigDecimal(getKul.get().getFees()));
+                    kTrans2b.setPaymentType("Wallet to Bank Transfer");
+                    kTrans2b.setReceiver(rq.getReceiverBankAccount());
+                    kTrans2b.setSender(getDecoded.phoneNumber);
+                    kTrans2b.setTransactionId(rq.getProcessId());
+                    kTrans2b.setSenderTransactionType("Withdrawal");
+                    kTrans2b.setReceiverTransactionType("Deposit");
+
+                    kTrans2b.setWalletNo(getDecoded.phoneNumber);
+                    kTrans2b.setReceiverName(rq.getReceiverAccountName());
+                    kTrans2b.setSenderName(senderName);
+                    kTrans2b.setSentAmount(amountTSendToCus.toString());
+                    kTrans2b.setTheNarration(getnarration);
+
+                    finWealthPaymentTransactionRepo.save(kTrans2b);
                 } else {
                     NipCreditTransferResponse nipCre = new NipCreditTransferResponse();
 
@@ -1333,7 +1543,27 @@ public class NipBankService {
                     nipReqLog.setResponseMessage(nipCre.getResponseMessage());
                     nipReqLog.setResponseReference(nipCre.getTransactionReference());
                     nipReqLog.setCreatedDate(Instant.now());
+                    nipReqLog.setCreditBankName("Access Bank");
                     nipCredAcccTranLogRepo.save(nipReqLog);
+
+                    FinWealthPaymentTransaction kTrans2b = new FinWealthPaymentTransaction();
+                    kTrans2b.setAmmount(new BigDecimal(rq.getAmount()));
+                    kTrans2b.setCreatedDate(Instant.now().plusSeconds(1));
+                    kTrans2b.setFees(new BigDecimal(getKul.get().getFees()));
+                    kTrans2b.setPaymentType("Wallet to Bank Transfer");
+                    kTrans2b.setReceiver(rq.getReceiverBankAccount());
+                    kTrans2b.setSender(getDecoded.phoneNumber);
+                    kTrans2b.setTransactionId(rq.getProcessId());
+                    kTrans2b.setSenderTransactionType("Withdrawal");
+                    kTrans2b.setReceiverTransactionType("Deposit");
+
+                    kTrans2b.setWalletNo(getDecoded.phoneNumber);
+                    kTrans2b.setReceiverName(rq.getReceiverAccountName());
+                    kTrans2b.setSenderName(senderName);
+                    kTrans2b.setSentAmount(amountTSendToCus.toString());
+                    kTrans2b.setTheNarration(getnarration);
+
+                    finWealthPaymentTransactionRepo.save(kTrans2b);
 
                 }
 

@@ -21,7 +21,7 @@ import org.springframework.web.bind.annotation.RestController;
  * @author olufemioshin
  */
 @RestController
-@RequestMapping("/api/audit")
+@RequestMapping("/backoffice/audit")
 @RequiredArgsConstructor
 public class AuditController {
 

@@ -100,6 +100,22 @@ public class TransferServicesControllers {
         return new ResponseEntity<>(baseResponse, HttpStatus.OK);
     }
 
+    @GetMapping("/otherbanktransfer/find-saved-beneficiaries")
+    public ResponseEntity<ApiResponseModel> findSavedBeneficiaries(@RequestHeader(value = "authorization", required = true) String auth,
+            @RequestHeader(value = "channel", required = true) String channel) {
+
+        ApiResponseModel baseResponse = nipService.findSavedOtherBanksBeneficiaries(channel, auth);
+        return new ResponseEntity<>(baseResponse, HttpStatus.OK);
+    }
+
+    @PostMapping("/otherbanktransfer/save-beneficiary")
+    public ResponseEntity<BaseResponse> otherBankSaveBeneficiary(@RequestHeader(value = "authorization", required = true) String auth,
+            @RequestBody @Valid SaveBeneficiary rq) {
+
+        BaseResponse baseResponse = nipService.saveBeneficiaryOtheBank(rq, "", auth);
+        return new ResponseEntity<>(baseResponse, HttpStatus.OK);
+    }
+
     @PostMapping("/get-transactions-history")
     public ResponseEntity<ApiResponseModel> walletToWalletUserTransactions(@RequestHeader(value = "authorization", required = true) String auth,
             // @RequestHeader(value = "channel", required = true) String channel, 

@@ -35,39 +35,39 @@ public class CampaignController {
 
     @PostMapping
     public ResponseEntity<Campaign> create(@RequestBody CreateCampaignRequest req,
-                                          @RequestHeader(value="X-User-Id", required=false) String userId) {
+            @RequestHeader(value = "X-User-Id", required = false) String userId) {
         return ResponseEntity.ok(campaignService.create(req, actor(userId)));
     }
 
     @PutMapping("/{id}")
     public ResponseEntity<Campaign> update(@PathVariable Long id,
-                                          @RequestBody UpdateCampaignRequest req,
-                                          @RequestHeader(value="X-User-Id", required=false) String userId) {
+            @RequestBody UpdateCampaignRequest req,
+            @RequestHeader(value = "X-User-Id", required = false) String userId) {
         return ResponseEntity.ok(campaignService.update(id, req, actor(userId)));
     }
 
     @PostMapping("/{id}/stop")
     public ResponseEntity<Campaign> stop(@PathVariable Long id,
-                                        @RequestHeader(value="X-User-Id", required=false) String userId) {
+            @RequestHeader(value = "X-User-Id", required = false) String userId) {
         return ResponseEntity.ok(campaignService.stop(id, actor(userId)));
     }
 
     @PostMapping("/{id}/cancel")
     public ResponseEntity<Campaign> cancel(@PathVariable Long id,
-                                          @RequestHeader(value="X-User-Id", required=false) String userId) {
+            @RequestHeader(value = "X-User-Id", required = false) String userId) {
         return ResponseEntity.ok(campaignService.cancel(id, actor(userId)));
     }
 
     @PostMapping("/{id}/restart")
     public ResponseEntity<Campaign> restart(@PathVariable Long id,
-                                           @RequestHeader(value="X-User-Id", required=false) String userId) {
+            @RequestHeader(value = "X-User-Id", required = false) String userId) {
         return ResponseEntity.ok(campaignService.restart(id, actor(userId)));
     }
 
     @PostMapping("/{id}/approve")
     public ResponseEntity<Campaign> approve(@PathVariable Long id,
-                                           @RequestBody(required=false) ApproveCampaignRequest req,
-                                           @RequestHeader(value="X-User-Id", required=false) String userId) {
+            @RequestBody(required = false) ApproveCampaignRequest req,
+            @RequestHeader(value = "X-User-Id", required = false) String userId) {
         String note = (req == null ? null : req.note);
         return ResponseEntity.ok(campaignService.approve(id, actor(userId), note));
     }
@@ -87,4 +87,3 @@ public class CampaignController {
         return ResponseEntity.ok(campaignService.auditTrail(id));
     }
 }
-

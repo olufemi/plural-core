@@ -3,6 +3,7 @@ package com.finacial.wealth.backoffice.controller;
 import com.finacial.wealth.backoffice.integrations.fxpeer.FxPeerExchangeClient;
 import com.finacial.wealth.backoffice.integrations.fxpeer.model.InvestmentProductUpsertRequest;
 import com.finacial.wealth.backoffice.reports.CsvWriter;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -21,8 +22,9 @@ public class BoInvestmentController {
 
     @GetMapping("/products")
     @PreAuthorize("hasAnyRole('SUPER_ADMIN','ADMIN','OPERATIONS','FINANCE')")
-    public Map<String, Object> getProducts() {
-        return fxPeerClient.getInvestmentProducts();
+    public Map<String, Object> getProducts(HttpServletRequest req) {
+        String auth = req.getHeader("Authorization"); // preserve case
+        return fxPeerClient.getInvestmentProducts(auth);
     }
 
     @PostMapping("/products")
@@ -43,9 +45,10 @@ public class BoInvestmentController {
 
     @GetMapping(value = "/products/export.csv", produces = "text/csv")
     @PreAuthorize("hasAnyRole('SUPER_ADMIN','ADMIN','FINANCE')")
-    public void exportProducts(HttpServletResponse response) throws Exception {
+    public void exportProducts(HttpServletResponse response, HttpServletRequest req) throws Exception {
+        String auth = req.getHeader("Authorization");
         response.setHeader("Content-Disposition", "attachment; filename=\"investment-products.csv\"");
-        Map<String, Object> data = fxPeerClient.getInvestmentProducts();
+        Map<String, Object> data = fxPeerClient.getInvestmentProducts(auth);
         List<Map<String, Object>> items = extractItems(data);
 
         List<String> headers = List.of("productCode", "name", "currency", "minimumInvestmentAmount", "status");

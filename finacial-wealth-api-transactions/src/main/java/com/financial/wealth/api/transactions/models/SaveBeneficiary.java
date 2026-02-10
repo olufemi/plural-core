@@ -13,6 +13,9 @@ import lombok.Data;
  */
 @Data
 public class SaveBeneficiary {
+
     private String beneficiaryNo;
     private String beneficiaryName;
+    private String bankCode;
+    private String bankName;
 }

@@ -4,6 +4,8 @@
  */
 package com.financial.wealth.api.transactions.breezepay.payout;
 
+import com.financial.wealth.api.transactions.domain.FinWealthPaymentTransaction;
+import java.util.Optional;
 import org.springframework.data.repository.CrudRepository;
 
 /**
@@ -12,5 +14,8 @@ import org.springframework.data.repository.CrudRepository;
  */
 public interface NipCredAcccTranLogRepo extends
         CrudRepository<NipCredAcccTranLog, String>{
+    
+     Optional<NipCredAcccTranLog> findByCreditAccount(String creditAccount);
+
     
 }

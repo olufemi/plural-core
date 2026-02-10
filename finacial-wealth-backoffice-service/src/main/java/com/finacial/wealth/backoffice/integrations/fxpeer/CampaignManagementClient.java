@@ -12,6 +12,9 @@ import com.finacial.wealth.backoffice.campaign.model.ApproveCampaignRequest;
 import com.finacial.wealth.backoffice.campaign.model.CreateCampaignRequest;
 import com.finacial.wealth.backoffice.campaign.model.UpdateCampaignRequest;
 import com.finacial.wealth.backoffice.model.ApiResponseModel;
+import com.finacial.wealth.backoffice.model.CampaignAudit;
+import com.finacial.wealth.backoffice.model.CampaignDto;
+import java.util.List;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.*;
 
@@ -28,7 +31,7 @@ public interface CampaignManagementClient {
     ApiResponseModel createCampaign(@RequestBody CreateCampaignRequest request);
 
     @PutMapping(value = "/campaigns/{id}", consumes = "application/json")
-    ApiResponseModel updateCampaign(@PathVariable("id") Long id,
+    CampaignDto updateCampaign(@PathVariable("id") Long id,
             @RequestBody UpdateCampaignRequest request);
 
     @PostMapping(value = "/campaigns/{id}/approve", consumes = "application/json")
@@ -36,22 +39,22 @@ public interface CampaignManagementClient {
             @RequestBody ApproveCampaignRequest request);
 
     @PostMapping("/campaigns/{id}/stop")
-    ApiResponseModel stopCampaign(@PathVariable("id") Long id);
+    CampaignDto stopCampaign(@PathVariable("id") Long id);
 
     @PostMapping("/campaigns/{id}/cancel")
-    ApiResponseModel cancelCampaign(@PathVariable("id") Long id);
+    CampaignDto cancelCampaign(@PathVariable("id") Long id);
 
     @PostMapping("/campaigns/{id}/restart")
-    ApiResponseModel restartCampaign(@PathVariable("id") Long id);
+    CampaignDto restartCampaign(@PathVariable("id") Long id);
 
     @GetMapping("/campaigns")
-    ApiResponseModel listCampaigns();
+    List<CampaignDto> listCampaigns();
 
     @GetMapping("/campaigns/{id}")
-    ApiResponseModel getCampaign(@PathVariable("id") Long id);
+    CampaignDto getCampaign(@PathVariable("id") Long id);
 
     @GetMapping("/campaigns/{id}/audit")
-    ApiResponseModel getCampaignAudit(@PathVariable("id") Long id);
+    List<CampaignAudit> getCampaignAudit(@PathVariable("id") Long id);
 
     @GetMapping("/campaigns/active")
     ApiResponseModel getActiveCampaign();

@@ -605,8 +605,10 @@ public class LocalTransferService {
 
             newAcctBalance = accountBalRec.add(new BigDecimal(rq.getAmount()));
 
-            //System.out.println("newAcctBalance :::::::: " + "     " + newAcctBalance);
-            //  System.out.println("getMaxAcctBal:::::::: " + "     " + getMaxAcctBal);
+            System.out.println("current receiver AcctBalance :::::::: " + "     " + accountBalRec);
+            System.out.println("new receiver  newAcctBalance:::::::: " + "     " + newAcctBalance);
+            System.out.println("new receiver  getMaxAcctBal:::::::: " + "     " + getMaxAcctBal);
+          
             if (newAcctBalance.compareTo(getMaxAcctBal) > 0) {
                 responseModel.setStatusCode(400);
                 System.out.println("Receiver newAcctBalance " + newAcctBalance + " will be greater than Maximuim bal: :::::::: " + "     " + newAcctBalance);
@@ -874,15 +876,14 @@ public class LocalTransferService {
             statusCode = 400;
             DecodedJWTToken getDecoded = DecodedJWTToken.getDecoded(auth);
 
-            List<WToWaletTransfer> getExistRec = wToWaletTransferRepo.findBySenderAndReceiver(getDecoded.phoneNumber, rq.getBeneficiaryNo());
-            if (getExistRec.size() > 0) {
-
-                List<LocalBeneficiaries> getSavedBen = localBeneficiariesRepo.findByWalletNoByBeneficiaryActive(getDecoded.phoneNumber, rq.getBeneficiaryNo(), "1");
-                if (getSavedBen.size() <= 0) {
-                    System.out.println("saveBeneficiary rq.getBeneficiaryName() :::::::: " + "  ::::::::::::::::::::: " + rq.getBeneficiaryName());
-                    System.out.println("saveBeneficiary rq.getBeneficiaryName().replaceAll() :::::::: " + "  ::::::::::::::::::::: " + rq.getBeneficiaryName().replaceAll("\\s+", ""));
-                    //String rmSpace = rq.getBeneficiaryName().replaceAll("\\s+", "");
-                    /*if (utilMeth.isAlpha(rq.getBeneficiaryName().replaceAll("\\s+", "")) == false) {
+            /*List<WToWaletTransfer> getExistRec = wToWaletTransferRepo.findBySenderAndReceiver(getDecoded.phoneNumber, rq.getBeneficiaryNo());
+            if (getExistRec.size() > 0) {*/
+            List<LocalBeneficiaries> getSavedBen = localBeneficiariesRepo.findByWalletNoByBeneficiaryActive(getDecoded.phoneNumber, rq.getBeneficiaryNo(), "1");
+            if (getSavedBen.size() <= 0) {
+                System.out.println("saveBeneficiary rq.getBeneficiaryName() :::::::: " + "  ::::::::::::::::::::: " + rq.getBeneficiaryName());
+                System.out.println("saveBeneficiary rq.getBeneficiaryName().replaceAll() :::::::: " + "  ::::::::::::::::::::: " + rq.getBeneficiaryName().replaceAll("\\s+", ""));
+                //String rmSpace = rq.getBeneficiaryName().replaceAll("\\s+", "");
+                /*if (utilMeth.isAlpha(rq.getBeneficiaryName().replaceAll("\\s+", "")) == false) {
                         if (utilMeth.isAlphaNumeric(rq.getBeneficiaryName().replaceAll("\\s+", "")) == false) {
                             LocalTransFailedTransInfo procFailedTrans = new LocalTransFailedTransInfo(
                                     "Wallet-Wallet-Transfer", "Wallet to Wallet transfer, invalid Alias as name!",
@@ -897,20 +898,20 @@ public class LocalTransferService {
                             return responseModel;
                         }
                     }*/
-                    LocalBeneficiaries sBen = new LocalBeneficiaries();
-                    sBen.setBeneficiaryName(rq.getBeneficiaryName());
-                    sBen.setBeneficiaryNo(rq.getBeneficiaryNo());
-                    sBen.setBeneficiaryStatus("1");
-                    sBen.setTransactionCount(1);
-                    sBen.setCreatedDate(Instant.now());
-                    sBen.setWalletNo(getDecoded.phoneNumber);
-                    sBen.setRequestSource("Wallet-To-Wallet-Transfer");
-                    localBeneficiariesRepo.save(sBen);
-                }
-                responseModel.setDescription("Beneficiary saved successfully");
-                responseModel.setStatusCode(200);
+                LocalBeneficiaries sBen = new LocalBeneficiaries();
+                sBen.setBeneficiaryName(rq.getBeneficiaryName());
+                sBen.setBeneficiaryNo(rq.getBeneficiaryNo());
+                sBen.setBeneficiaryStatus("1");
+                sBen.setTransactionCount(1);
+                sBen.setCreatedDate(Instant.now());
+                sBen.setWalletNo(getDecoded.phoneNumber);
+                sBen.setRequestSource("Wallet-To-Wallet-Transfer");
+                localBeneficiariesRepo.save(sBen);
+            }
+            responseModel.setDescription("Beneficiary saved successfully");
+            responseModel.setStatusCode(200);
 
-            } else {
+            /* } else {
 
                 LocalTransFailedTransInfo procFailedTrans = new LocalTransFailedTransInfo(
                         "Wallet-Wallet-Transfer", "Wallet to Wallet transfer, Customer has not performed a successful transaction with Receiver!",
@@ -923,8 +924,7 @@ public class LocalTransferService {
 
                 localTransFailedTransInfoRepo.save(procFailedTrans);
                 return responseModel;
-            }
-
+            }*/
         } catch (Exception ex) {
             responseModel.setDescription(statusMessage);
             responseModel.setStatusCode(statusCode);
@@ -1851,7 +1851,7 @@ public class LocalTransferService {
                 debGLCredit.setNarration("CAD_Withdrawal");
                 debGLCredit.setPhoneNumber(decryptData(utilMeth.getSETTING_KEY_WALLET_SYSTEM_SYSTEM_GG_CAD()));
                 debGLCredit.setTransAmount(amount);
-                debGLCredit.setTransactionId(rq.getProcessId()+"-CAD_GL");
+                debGLCredit.setTransactionId(rq.getProcessId() + "-CAD_GL");
 
                 utilMeth.debitCustomerWithType(debGLCredit, "CAD_GL", CCY);
                 /* KuleanPaymentTransaction kTrans = new KuleanPaymentTransaction();

@@ -94,7 +94,7 @@ public class AdminUserService {
 
         u = userRepo.save(u);
 
-        audit("ADMIN_CREATE", actorAdminId, u.getId(), ip, ua,
+        auditService.audit("ADMIN_CREATE", actorAdminId, u.getId(), ip, ua,
                 Map.of("email", u.getEmail(), "roles", u.getRoles()));
 
         // IMPORTANT: return temp password ONLY if your policy allows it (often you email it instead).
@@ -115,7 +115,7 @@ public class AdminUserService {
 
         u = userRepo.save(u);
 
-        audit("ADMIN_UPDATE", actorAdminId, u.getId(), ip, ua,
+        auditService.audit("ADMIN_UPDATE", actorAdminId, u.getId(), ip, ua,
                 Map.of("roles", u.getRoles(), "fullName", u.getFullName()));
 
         return toResponse(u);
@@ -135,7 +135,7 @@ public class AdminUserService {
         u.setStatus(activate ? BoAdminUser.Status.ACTIVE : BoAdminUser.Status.SUSPENDED);
         u = userRepo.save(u);
 
-        audit(
+        auditService.audit(
                 activate ? "ADMIN_ACTIVATE" : "ADMIN_SUSPEND",
                 actorAdminId,
                 u.getId(),
@@ -162,26 +162,10 @@ public class AdminUserService {
 
         userRepo.save(u);
 
-        audit("ADMIN_PASSWORD_RESET", actorAdminId, u.getId(), ip, ua,
+        auditService.audit("ADMIN_PASSWORD_RESET", actorAdminId, u.getId(), ip, ua,
                 Map.of("email", u.getEmail()));
 
         // TODO: send tempPassword via email/SMS/secure channel.
-    }
-
-    private void audit(String action, Long actorId, Long targetId, String ip, String ua, Map<String, Object> meta) {
-        try {
-            auditService.log(AdminAuditLog.builder()
-                    .actorAdminId(actorId)
-                    .action(action)
-                    .targetType("BoAdminUser")
-                    .targetId(targetId)
-                    .ip(ip)
-                    .userAgent(ua)
-                    .metadataJson(objectMapper.writeValueAsString(meta))
-                    .build());
-        } catch (Exception ignored) {
-            // last resort: don't break business flow because audit serialization failed
-        }
     }
 
     private AdminUserResponse toResponse(BoAdminUser u) {
@@ -205,7 +189,7 @@ public class AdminUserService {
                 .orElseThrow(() -> new IllegalArgumentException("Admin user not found"));
 
         // optional audit (only if your org audits reads)
-        audit("ADMIN_VIEW", actorAdminId, u.getId(), ip, ua,
+        auditService.audit("ADMIN_VIEW", actorAdminId, u.getId(), ip, ua,
                 Map.of("adminId", adminId));
 
         return toResponse(u);
@@ -215,29 +199,44 @@ public class AdminUserService {
     public Page<AdminUserResponse> getAdmins(Long actorAdminId,
             int page,
             int size,
-            String q, // search query (optional)
+            String q,
             String ip,
             String ua) {
 
         // guard page/size
         int p = Math.max(page, 0);
-        int s = Math.min(Math.max(size, 1), 100); // cap to 100
+        int s = Math.min(Math.max(size, 1), 100);
 
         PageRequest pr = PageRequest.of(p, s, Sort.by(Sort.Direction.DESC, "id"));
 
-        Page<BoAdminUser> result;
+        String query = (q == null ? null : q.trim());
+        boolean hasQ = (query != null && !query.isEmpty());
 
-        if (q != null && !q.trim().isEmpty()) {
-            String query = q.trim();
-            result = userRepo.findByEmailContainingIgnoreCaseOrFullNameContainingIgnoreCase(query, query, pr);
-        } else {
-            result = userRepo.findAll(pr);
+        Page<BoAdminUser> result = hasQ
+                ? userRepo.findByEmailContainingIgnoreCaseOrFullNameContainingIgnoreCase(query, query, pr)
+                : userRepo.findAll(pr);
+
+        // audit metadata (no null values)
+        Map<String, Object> meta = new HashMap<>();
+        meta.put("page", p);
+        meta.put("size", s);
+        if (hasQ) {
+            meta.put("q", query);
         }
 
-        // optional audit (usually you don't audit list reads, but you can)
-        audit("ADMIN_LIST", actorAdminId, null, ip, ua,
-                Map.of("page", p, "size", s, "q", q));
+        // IMPORTANT: do audit in a separate transaction so read-only tx is not poisoned
+        safeAuditAdminList(actorAdminId, ip, ua, meta);
 
         return result.map(this::toResponse);
     }
+
+    private void safeAuditAdminList(Long actorAdminId, String ip, String ua, Map<String, Object> meta) {
+        try {
+            auditService.audit("ADMIN_LIST", actorAdminId, null, ip, ua, meta);
+        } catch (Exception e) {
+            // don't break list reads if audit fails
+           // log.warn("Audit failed for ADMIN_LIST actorAdminId={} ip={}", actorAdminId, ip, e);
+        }
+    }
+
 }

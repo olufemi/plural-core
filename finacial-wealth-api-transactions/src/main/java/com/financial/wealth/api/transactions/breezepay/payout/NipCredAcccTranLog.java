@@ -52,6 +52,7 @@ public class NipCredAcccTranLog implements Serializable {
     private String creditAccount;
 
     private String creditBankCode;
+    private String creditBankName;
 
     private String debitVirtualAccount;
 

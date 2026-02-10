@@ -8,19 +8,33 @@ package com.finacial.wealth.backoffice.auth.repo;
  *
  * @author olufemioshin
  */
-
 import com.finacial.wealth.backoffice.auth.entity.BoAdminRole;
+import com.finacial.wealth.backoffice.auth.entity.BoAdminUser;
+import feign.Param;
 import java.util.List;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.Optional;
+import org.springframework.data.jpa.repository.Query;
 
 public interface BoAdminRoleRepository extends JpaRepository<BoAdminRole, Long> {
+
     Optional<BoAdminRole> findByName(String name);
-    
+
     Optional<BoAdminRole> findById(Long id);
-    
-     // for frontend dropdown / multi-select
+
+    // for frontend dropdown / multi-select
     List<BoAdminRole> findAllByOrderByNameAsc();
-    
+
+    public interface BoAdminUserRepository extends JpaRepository<BoAdminUser, Long> {
+
+        @Query("""
+        select distinct u
+        from BoAdminUser u
+        left join fetch u.roles r
+        where u.id = :id
+    """)
+        Optional<BoAdminUser> findByIdWithRoles(@Param("id") Long id);
+    }
+
 }

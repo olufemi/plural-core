@@ -196,6 +196,8 @@ public class CreateQuoteClient {
             cQuote.setOnBehalfOf(String.valueOf(GlobalMethods.generateTransactionId()));
             String bodyJson = mapper.writeValueAsString(cQuote);
 
+            System.out.println("createQuoteWithdrawal req to thirdparty ::::::::::::::::  %S  " + new Gson().toJson(bodyJson));
+
             Map<String, String> sig = HmacSigner.makeSignature(hmacSecret, bodyJson);
 
             HttpHeaders headers = new HttpHeaders();
@@ -206,6 +208,7 @@ public class CreateQuoteClient {
             if (sendToThirdParty.endsWith("1")) {
                 HttpEntity<String> entity = new HttpEntity<>(bodyJson, headers);
                 ResponseEntity<CreateQuoteWithResponse> resp = restTemplate.postForEntity(url, entity, CreateQuoteWithResponse.class);
+                System.out.println("createQuoteWithdrawal resp from thirdparty ::::::::::::::::  %S  " + new Gson().toJson(resp));
 
                 //return some details to the customer to confirm payment
                 CreateQuoteWithResponseFE resFE = new CreateQuoteWithResponseFE();
@@ -256,6 +259,8 @@ public class CreateQuoteClient {
                 responseModel.setData(mp);
                 responseModel.setDescription("Please accept quote");
                 responseModel.setStatusCode(200);
+                System.out.println("createQuoteWithdrawal responseModel to FE ::::::::::::::::  %S  " + new Gson().toJson(responseModel));
+
             } else {
 
                 String quoteId = String.valueOf(GlobalMethods.generateTransactionId());
@@ -293,6 +298,8 @@ public class CreateQuoteClient {
                 responseModel.setData(mp);
                 responseModel.setDescription("Please accept quote");
                 responseModel.setStatusCode(200);
+
+                System.out.println("It is NOT THIRDPARTY createQuoteWithdrawal responseModel to FE ::::::::::::::::  %S  " + new Gson().toJson(responseModel));
 
             }
 
@@ -384,6 +391,8 @@ public class CreateQuoteClient {
             aQuote.setAccepted(rq.isAccepted());
             String bodyJson = mapper.writeValueAsString(aQuote);
 
+            System.out.println("It is NOT THIRDPARTY acceptQuoteWithdrawal req to thirdparty ::::::::::::::::  %S  " + new Gson().toJson(bodyJson));
+
             Map<String, String> sig = HmacSigner.makeSignature(hmacSecret, bodyJson);
 
             HttpHeaders headers = new HttpHeaders();
@@ -394,6 +403,7 @@ public class CreateQuoteClient {
             if (sendToThirdParty.endsWith("1")) {
                 HttpEntity<String> entity = new HttpEntity<>(bodyJson, headers);
                 ResponseEntity<AcceptQuoteResponse> resp = restTemplate.postForEntity(url, entity, AcceptQuoteResponse.class);
+                System.out.println("acceptcreateQuoteWithdrawal resp from thirdparty ::::::::::::::::  %S  " + new Gson().toJson(resp));
 
                 BigDecimal left = resp.getBody().getPaymentInstructions().getAmount();   // BigDecimal
                 String rightStr = getDee.get(0).getAmount();                             // String
@@ -473,6 +483,8 @@ public class CreateQuoteClient {
             responseModel.setDescription("Quote accepted.");
             responseModel.setStatusCode(200);
 
+            System.out.println(" acceptQuoteWithdrawal responseModel to FE ::::::::::::::::  %S  " + new Gson().toJson(responseModel));
+
         } catch (Exception ex) {
             responseModel.setDescription(statusMessage);
             responseModel.setStatusCode(statusCode);
@@ -521,6 +533,8 @@ public class CreateQuoteClient {
             //on_behalf_of - Customer ID (must belong to your business)
             String bodyJson = mapper.writeValueAsString(cQuote);
 
+            System.out.println("createQuote req to thirdparty ::::::::::::::::  %S  " + new Gson().toJson(bodyJson));
+
             Map<String, String> sig = HmacSigner.makeSignature(hmacSecret, bodyJson);
 
             HttpHeaders headers = new HttpHeaders();
@@ -531,6 +545,7 @@ public class CreateQuoteClient {
             if (sendToThirdParty.endsWith("1")) {
                 HttpEntity<String> entity = new HttpEntity<>(bodyJson, headers);
                 ResponseEntity<CreateQuoteResponse> resp = restTemplate.postForEntity(url, entity, CreateQuoteResponse.class);
+                System.out.println("createQuote resp from thirdparty ::::::::::::::::  %S  " + new Gson().toJson(bodyJson));
 
                 //return some details to the customer to confirm payment
                 CreateQuoteResponseFE resFE = new CreateQuoteResponseFE();
@@ -581,6 +596,8 @@ public class CreateQuoteClient {
                 responseModel.setData(mp);
                 responseModel.setDescription("Please accept quote");
                 responseModel.setStatusCode(200);
+                System.out.println("createQuote responseModel to FE ::::::::::::::::  %S  " + new Gson().toJson(responseModel));
+
             } else {
 
                 String quoteId = String.valueOf(GlobalMethods.generateTransactionId());
@@ -698,6 +715,8 @@ public class CreateQuoteClient {
             aQuote.setAccepted(rq.isAccepted());
             String bodyJson = mapper.writeValueAsString(aQuote);
 
+            System.out.println("acceptCreateQuote req to thirdparty ::::::::::::::::  %S  " + new Gson().toJson(bodyJson));
+
             Map<String, String> sig = HmacSigner.makeSignature(hmacSecret, bodyJson);
 
             HttpHeaders headers = new HttpHeaders();
@@ -708,6 +727,7 @@ public class CreateQuoteClient {
             if (sendToThirdParty.endsWith("1")) {
                 HttpEntity<String> entity = new HttpEntity<>(bodyJson, headers);
                 ResponseEntity<AcceptQuoteResponse> resp = restTemplate.postForEntity(url, entity, AcceptQuoteResponse.class);
+                System.out.println("acceptCreateQuote resp from thirdparty ::::::::::::::::  %S  " + new Gson().toJson(resp));
 
                 BigDecimal left = resp.getBody().getPaymentInstructions().getAmount();   // BigDecimal
                 String rightStr = getDee.get(0).getAmount();                             // String
@@ -774,6 +794,8 @@ public class CreateQuoteClient {
             responseModel.setData(mp);
             responseModel.setDescription("Quote accepted.");
             responseModel.setStatusCode(200);
+
+            System.out.println("acceptCreateQuote responseModel to frontEnd ::::::::::::::::  %S  " + new Gson().toJson(responseModel));
 
             getDeeUp.setIsAccepted("1");
             getDeeUp.setAcceptQuoteResponse("SUCCESS");

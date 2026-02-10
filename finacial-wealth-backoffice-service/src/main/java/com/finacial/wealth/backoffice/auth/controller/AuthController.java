@@ -18,6 +18,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Base64;
 import java.util.Optional;
+import org.springframework.transaction.annotation.Transactional;
 
 //@RestController
 //@RequestMapping("/bo/auth")
@@ -124,8 +125,8 @@ public class AuthController {
         return ResponseEntity.ok(new TokenResponse(access, refresh, email, fullName, userRoleName));
     }
 
-    @PostMapping("/refresh")
-    public ResponseEntity<TokenResponse> refresh(@RequestParam("refreshToken") String refreshToken) {
+    @PostMapping("/refresh-old")
+    public ResponseEntity<TokenResponse> refreshOld(@RequestParam("refreshToken") String refreshToken) {
         BoAdminUser user = authService.validateRefreshOrThrow(refreshToken);
         String access = jwtService.issueAccessToken(user);
         String email = user.getEmail();
@@ -135,6 +136,28 @@ public class AuthController {
         String userRoleName = getRoleName.get().getName();
 
         return ResponseEntity.ok(new TokenResponse(access, refreshToken, email, fullName, userRoleName));
+    }
+
+    @Transactional(readOnly = true)
+    @PostMapping("/refresh")
+    public ResponseEntity<TokenResponse> refresh(@RequestParam("refreshToken") String refreshToken) {
+        BoAdminUser user = authService.validateRefreshOrThrow(refreshToken);
+
+        String access = jwtService.issueAccessToken(user);
+
+        // role name(s)
+        String userRoleName = user.getRoles().stream()
+                .findFirst()
+                .map(BoAdminRole::getName)
+                .orElse(null);
+
+        return ResponseEntity.ok(new TokenResponse(
+                access,
+                refreshToken,
+                user.getEmail(),
+                user.getFullName(),
+                userRoleName
+        ));
     }
 
     @PostMapping("/logout")

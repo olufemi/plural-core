@@ -114,7 +114,6 @@ public class InvestmentServicesController {
 
     @GetMapping(
             path = "/get-products",
-            consumes = MediaType.APPLICATION_JSON_VALUE,
             produces = MediaType.APPLICATION_JSON_VALUE
     )
     public ResponseEntity<ApiResponseModel> getProducts(
@@ -125,7 +124,7 @@ public class InvestmentServicesController {
 
     @PostMapping(
             path = "/create-subscription",
-            consumes = MediaType.APPLICATION_JSON_VALUE,
+            //           consumes = MediaType.APPLICATION_JSON_VALUE,
             produces = MediaType.APPLICATION_JSON_VALUE
     )
     public BaseResponse createSubscription(
@@ -137,7 +136,7 @@ public class InvestmentServicesController {
 
     @PostMapping(
             path = "/request-liquidation",
-            consumes = MediaType.APPLICATION_JSON_VALUE,
+            //     consumes = MediaType.APPLICATION_JSON_VALUE,
             produces = MediaType.APPLICATION_JSON_VALUE
     )
     public BaseResponse reqLiquidation(
@@ -149,7 +148,7 @@ public class InvestmentServicesController {
 
     @GetMapping(
             path = "/get-customer-history",
-            consumes = MediaType.APPLICATION_JSON_VALUE,
+            //     consumes = MediaType.APPLICATION_JSON_VALUE,
             produces = MediaType.APPLICATION_JSON_VALUE
     )
     public ResponseEntity<ApiResponseModel> getHistory(
@@ -169,7 +168,7 @@ public class InvestmentServicesController {
 
     @PostMapping(
             path = "/request-top-up",
-            consumes = MediaType.APPLICATION_JSON_VALUE,
+            //   consumes = MediaType.APPLICATION_JSON_VALUE,
             produces = MediaType.APPLICATION_JSON_VALUE
     )
     public BaseResponse reqLiquidation(

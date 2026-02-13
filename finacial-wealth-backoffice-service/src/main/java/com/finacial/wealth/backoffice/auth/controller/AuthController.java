@@ -58,7 +58,7 @@ public class AuthController {
             Optional<BoAdminRole> getRoleName = roleRepo.findById(user.getId());
 
             String userRoleName = getRoleName.get().getName();
-            return ResponseEntity.ok(new TokenResponse(access, refresh, email, fullName, userRoleName));
+            return ResponseEntity.ok(new TokenResponse(access, refresh, email, fullName, userRoleName,user.getId()));
         }
 
         String challengeId = authService.createMfaChallenge(user.getId());
@@ -94,7 +94,7 @@ public class AuthController {
 
         String userRoleName = getRoleName.get().getName();
 
-        return ResponseEntity.ok(new TokenResponse(access, refresh, email, fullName, userRoleName));
+        return ResponseEntity.ok(new TokenResponse(access, refresh, email, fullName, userRoleName,user.getId()));
     }
 
     // @PostMapping("/mfa/verify")
@@ -122,7 +122,7 @@ public class AuthController {
 
         String userRoleName = getRoleName.get().getName();
 
-        return ResponseEntity.ok(new TokenResponse(access, refresh, email, fullName, userRoleName));
+        return ResponseEntity.ok(new TokenResponse(access, refresh, email, fullName, userRoleName,user.getId()));
     }
 
     @PostMapping("/refresh-old")
@@ -135,7 +135,7 @@ public class AuthController {
 
         String userRoleName = getRoleName.get().getName();
 
-        return ResponseEntity.ok(new TokenResponse(access, refreshToken, email, fullName, userRoleName));
+        return ResponseEntity.ok(new TokenResponse(access, refreshToken, email, fullName, userRoleName,user.getId()));
     }
 
     @Transactional(readOnly = true)
@@ -156,7 +156,7 @@ public class AuthController {
                 refreshToken,
                 user.getEmail(),
                 user.getFullName(),
-                userRoleName
+                userRoleName,user.getId()
         ));
     }
 

@@ -2,6 +2,7 @@ package com.finacial.wealth.backoffice.controller;
 
 import com.finacial.wealth.backoffice.integrations.fxpeer.FxPeerExchangeClient;
 import com.finacial.wealth.backoffice.integrations.fxpeer.model.InvestmentProductUpsertRequest;
+import com.finacial.wealth.backoffice.integrations.fxpeer.model.LiquidationApprovalRequest;
 import com.finacial.wealth.backoffice.reports.CsvWriter;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -31,6 +32,18 @@ public class BoInvestmentController {
     @PreAuthorize("hasAnyRole('SUPER_ADMIN','ADMIN','OPERATIONS','FINANCE')")
     public Map<String, Object> createProduct(@RequestBody InvestmentProductUpsertRequest req) {
         return fxPeerClient.createInvestmentProduct(req);
+    }
+
+    @PostMapping("/approve-liquidation-request")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','ADMIN','OPERATIONS','FINANCE')")
+    public Map<String, Object> approveLiquidation(@RequestBody LiquidationApprovalRequest req) {
+        return fxPeerClient.approveLiquidation(req);
+    }
+
+    @PostMapping("/deny-customer-liquidation-request")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','ADMIN','OPERATIONS','FINANCE')")
+    public Map<String, Object> cancelLiquidation(@RequestBody LiquidationApprovalRequest req) {
+        return fxPeerClient.cancelLiquidation(req);
     }
 
     @PutMapping("/products/{productCode}")

@@ -24,6 +24,11 @@
         <shedlock.version>4.48.0</shedlock.version>
     </properties>
     <dependencies>
+       
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-amqp</artifactId>
+        </dependency>
         <!-- ShedLock core + Spring integration -->
         <dependency>
             <groupId>net.javacrumbs.shedlock</groupId>

@@ -12,14 +12,13 @@ import com.finacial.wealth.api.fxpeer.exchange.domain.AddAccountDetails;
 import com.finacial.wealth.api.fxpeer.exchange.domain.AddAccountDetailsRepo;
 import com.finacial.wealth.api.fxpeer.exchange.domain.AppConfig;
 import com.finacial.wealth.api.fxpeer.exchange.domain.AppConfigRepo;
+import com.finacial.wealth.api.fxpeer.exchange.domain.FinWealthPaymentTransaction;
 import com.finacial.wealth.api.fxpeer.exchange.domain.RegWalletInfo;
 import com.finacial.wealth.api.fxpeer.exchange.domain.RegWalletInfoRepository;
 import com.finacial.wealth.api.fxpeer.exchange.feign.ProfilingProxies;
 import com.finacial.wealth.api.fxpeer.exchange.feign.TransactionServiceProxies;
 import com.finacial.wealth.api.fxpeer.exchange.fx.p.p.wallet.FinWealthPaymentTransactionRepo;
-import com.finacial.wealth.api.fxpeer.exchange.inter.airtime.security.PreDebitResult;
-import com.finacial.wealth.api.fxpeer.exchange.inter.airtime.security.ProcSochitelServices;
-import com.finacial.wealth.api.fxpeer.exchange.inter.airtime.security.ProcessTrnsactionReq;
+
 import com.finacial.wealth.api.fxpeer.exchange.investment.domain.InvestmentOrder;
 import com.finacial.wealth.api.fxpeer.exchange.investment.domain.InvestmentPosition;
 import com.finacial.wealth.api.fxpeer.exchange.investment.domain.InvestmentPositionHistory;
@@ -139,6 +138,7 @@ public class InvestmentOrderService {
     private final InvestmentPositionHistoryRepository historyRepo;
     private final InvestmentRequestGuardRepository guardRepo;
     private static final ZoneId ZONE = ZoneId.of("Africa/Lagos");
+    private final TransactionHistoryClientLocalT transactionHistoryClientLocalT;
 
     public InvestmentOrderService(AppConfigRepo appConfigRepo,
             AddAccountDetailsRepo addAccountDetailsRepo,
@@ -154,7 +154,8 @@ public class InvestmentOrderService {
             ProfilingProxies profilingProxies,
             InvestmentHistoryService investmentHistoryService,
             InvestmentPositionHistoryRepository historyRepo,
-            InvestmentRequestGuardRepository guardRepo
+            InvestmentRequestGuardRepository guardRepo,
+            TransactionHistoryClientLocalT transactionHistoryClientLocalT
     ) {
         this.appConfigRepo = appConfigRepo;
         this.addAccountDetailsRepo = addAccountDetailsRepo;
@@ -172,6 +173,7 @@ public class InvestmentOrderService {
         this.investmentHistoryService = investmentHistoryService;
         this.historyRepo = historyRepo;
         this.guardRepo = guardRepo;
+        this.transactionHistoryClientLocalT = transactionHistoryClientLocalT;
 
     }
 
@@ -382,6 +384,26 @@ public class InvestmentOrderService {
             out.setFinCharges(finCharges);
             out.setReceiveAmount(receiveAmount);
             out.setWalletId(walletId);
+
+            FinWealthPaymentTransaction kTrans2b = new FinWealthPaymentTransaction();
+            kTrans2b.setAmmount(finCharges);
+            kTrans2b.setCreatedDate(Instant.now().plusSeconds(1));
+            kTrans2b.setFees(new BigDecimal(debitBuyer.getFees()));
+            kTrans2b.setPaymentType("Investment Transfer");
+            kTrans2b.setReceiver("Investment");
+            kTrans2b.setSender(accountNumber);
+            kTrans2b.setTransactionId(debitBuyer.getTransactionId());
+            kTrans2b.setSenderTransactionType("Withdrawal");
+            kTrans2b.setReceiverTransactionType("Deposit");
+            kTrans2b.setReceiverBankName("Investment");
+            kTrans2b.setWalletNo(accountNumber);
+            kTrans2b.setReceiverName("Investment");
+            kTrans2b.setSenderName(regOpt.get().getFullName());
+            kTrans2b.setSentAmount(finCharges.toString());
+            kTrans2b.setTheNarration("Investment purchase.");
+            kTrans2b.setCurrencyCode(rq.getCurrencyCode());
+
+            transactionHistoryClientLocalT.publishFromTxn(kTrans2b);
 
             return out;
 
@@ -1011,7 +1033,7 @@ public class InvestmentOrderService {
         boolean fullLiquidation = liquidationAmount.compareTo(currentValue) >= 0;
 
         // 1) credit wallet first
-        BaseResponse credit = processCredit(order.getOrderRef(), order.getEmailAddress());
+        BaseResponse credit = processCredit(order.getOrderRef(), order.getEmailAddress(), fullLiquidation);
         if (credit == null || credit.getStatusCode() != 200) {
             // keep in PROCESSING for retry OR mark failed; your choice
             res.setStatusCode(statusCode);
@@ -1050,7 +1072,7 @@ public class InvestmentOrderService {
             position.setStatus(newInvested.compareTo(BigDecimal.ZERO) == 0
                     ? InvestmentPositionStatus.FULLY_LIQUIDATED
                     : InvestmentPositionStatus.PARTIALLY_LIQUIDATED);
-            
+
             orderIdm.setUpdatedAt(Instant.now());
             orderIdm.setAmount(newInvested);
             orderIdm.setAmountBalance(newInvested);
@@ -1078,7 +1100,7 @@ public class InvestmentOrderService {
         return v == null ? BigDecimal.ZERO : v;
     }
 
-    public BaseResponse processCredit(String orderId, String emailAddress) {
+    public BaseResponse processCredit(String orderId, String emailAddress, boolean fullLiquidation) {
 
         int statusCode = 500;
         final BaseResponse res = new BaseResponse();
@@ -1097,12 +1119,17 @@ public class InvestmentOrderService {
                 throw new IllegalStateException("Attempt to credit non-liquidation order");
             }
 
+            String receiverName;
+
+            RegWalletInfo wallet
+                    = regWalletInfoRepository.findByEmail(emailAddress)
+                            .orElseThrow(() -> new BusinessException("Wallet not found"));
+            rqC.setPhoneNumber(wallet.getPhoneNumber());
+
             // ---------------- Wallet selection ----------------
             if ("CAD".equals(order.getProduct().getCurrency())) {
-                RegWalletInfo wallet
-                        = regWalletInfoRepository.findByEmail(emailAddress)
-                                .orElseThrow(() -> new BusinessException("Wallet not found"));
-                rqC.setPhoneNumber(wallet.getPhoneNumber());
+
+                receiverName = wallet.getFirstName();
             } else {
                 List<AddAccountDetails> wallets
                         = addAccountDetailsRepo.findByEmailAddressrData(emailAddress);
@@ -1110,6 +1137,8 @@ public class InvestmentOrderService {
                     throw new BusinessException("No wallet account found");
                 }
                 rqC.setPhoneNumber(wallets.get(0).getAccountNumber());
+                receiverName = wallet.getFirstName();
+
             }
 
             // ---------------- Credit payload ----------------
@@ -1155,6 +1184,30 @@ public class InvestmentOrderService {
                     gl, order.getProduct().getCurrency(), "");
 
             res.setStatusCode(200);
+
+            FinWealthPaymentTransaction kTrans2b = new FinWealthPaymentTransaction();
+            kTrans2b.setAmmount(order.getNetAmount());
+            kTrans2b.setCreatedDate(Instant.now().plusSeconds(1));
+            kTrans2b.setFees(new BigDecimal(rqC.getFees()));
+            kTrans2b.setPaymentType("Investment Transfer");
+            kTrans2b.setReceiver(rqC.getPhoneNumber());
+            kTrans2b.setSender("Investment");
+            kTrans2b.setTransactionId(rqC.getTransactionId());
+            kTrans2b.setSenderTransactionType("Withdrawal");
+            kTrans2b.setReceiverTransactionType("Deposit");
+            kTrans2b.setReceiverBankName(receiverName);
+            kTrans2b.setWalletNo("Investment");
+            kTrans2b.setReceiverName(receiverName);
+            kTrans2b.setSenderName("Investment");
+            kTrans2b.setSentAmount(order.getNetAmount().toPlainString());
+            kTrans2b.setTheNarration("Investment partial liquidation.");
+            if (fullLiquidation) {
+                kTrans2b.setTheNarration("Investment full liquidation.");
+            }
+            kTrans2b.setTheNarration("Investment Liquidation.");
+            kTrans2b.setCurrencyCode(order.getProduct().getCurrency());
+
+            transactionHistoryClientLocalT.publishFromTxn(kTrans2b);
 
         } catch (Exception ex) {
             ex.printStackTrace();

@@ -37,15 +37,12 @@ public interface FxPeerExchangeClient {
             value = "/investments/orders/liquidation/approve",
             consumes = "application/json"
     )
-    BaseResponse approveLiquidation(
-            @RequestBody LiquidationApprovalRequest request
-    );
+    Map<String, Object> approveLiquidation(@RequestBody LiquidationApprovalRequest request);
 
     @PostMapping(
             value = "/investments/orders/liquidation/cancel",
             consumes = "application/json"
     )
-    BaseResponse cncelLiquidation(
-            @RequestBody LiquidationApprovalRequest request
-    );
+    Map<String, Object> cancelLiquidation(@RequestBody LiquidationApprovalRequest request);
+
 }

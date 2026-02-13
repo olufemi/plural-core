@@ -24,6 +24,7 @@ import com.financial.wealth.api.transactions.domain.OtherBankBeneficiariesInd;
 import com.financial.wealth.api.transactions.domain.RegWalletCheckLog;
 import com.financial.wealth.api.transactions.domain.RegWalletInfo;
 import com.financial.wealth.api.transactions.domain.SuccessDebitLog;
+import com.financial.wealth.api.transactions.domain.TransactionHistoryEvent;
 import com.financial.wealth.api.transactions.domain.UserLimitConfig;
 import com.financial.wealth.api.transactions.models.ApiResponseModel;
 import com.financial.wealth.api.transactions.models.BaseResponse;
@@ -53,6 +54,7 @@ import com.financial.wealth.api.transactions.repo.UserLimitConfigRepo;
 import com.financial.wealth.api.transactions.services.LocalTransferService;
 import static com.financial.wealth.api.transactions.services.LocalTransferService.betweenTransBand;
 import static com.financial.wealth.api.transactions.services.LocalTransferService.pushNotifyDebitWalletForWalletTransferSender;
+import com.financial.wealth.api.transactions.services.TransactionHistoryClientNgnInterbank;
 import com.financial.wealth.api.transactions.services.notify.MessageCenterService;
 import com.financial.wealth.api.transactions.utils.DecodedJWTToken;
 import com.financial.wealth.api.transactions.utils.GlobalMethods;
@@ -78,6 +80,7 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import org.apache.commons.lang.StringUtils;
 import org.joda.time.DateTime;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.PageRequest;
 
@@ -110,6 +113,7 @@ public class NipBankService {
     private final DeviceDetailsRepo deviceDetailsRepo;
     private final SuccessDebitLogRepo successDebitLogRepo;
     private final NipCredAcccTranLogRepo nipCredAcccTranLogRepo;
+    private final TransactionHistoryClientNgnInterbank transactionHistoryClientNgnInterbank;
 
     private static final char[] ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789".toCharArray();
     private static final SecureRandom RNG = new SecureRandom();
@@ -156,6 +160,9 @@ public class NipBankService {
 
     long nowMillis = System.currentTimeMillis();
 
+    @Autowired
+    private RabbitTemplate rabbitTemplate;
+
     public NipBankService(RestTemplate restTemplate, NipBankRepository repository,
             PaymentsFailedTransInfoRepo localTransFailedTransInfoRepo,
             RegWalletInfoRepository regWalletInfoRepository,
@@ -173,7 +180,8 @@ public class NipBankService {
             OtherBankBeneficiariesRepo otherBankBeneficiariesRepo,
             OtherBankBeneficiariesIndRepo otherBankBeneficiariesIndRepo, MessageCenterService messageCenterService,
             DeviceDetailsRepo deviceDetailsRepo, SuccessDebitLogRepo successDebitLogRepo,
-            NipCredAcccTranLogRepo nipCredAcccTranLogRepo) {
+            NipCredAcccTranLogRepo nipCredAcccTranLogRepo,
+            TransactionHistoryClientNgnInterbank transactionHistoryClientNgnInterbank) {
         this.otherBankBeneficiariesIndRepo = otherBankBeneficiariesIndRepo;
         this.otherBankBeneficiariesRepo = otherBankBeneficiariesRepo;
         this.addAccountDetailsRepo = addAccountDetailsRepo;
@@ -198,6 +206,7 @@ public class NipBankService {
         this.deviceDetailsRepo = deviceDetailsRepo;
         this.successDebitLogRepo = successDebitLogRepo;
         this.nipCredAcccTranLogRepo = nipCredAcccTranLogRepo;
+        this.transactionHistoryClientNgnInterbank = transactionHistoryClientNgnInterbank;
     }
 
     static String stripBom(byte[] raw) {
@@ -1413,30 +1422,11 @@ public class NipBankService {
                 utilMeth.debitCustomerWithType(debGLCredit, "NGN_GL", CCY);
 
                 //System.out.println("processKuleanPaymentTransactionLedger" + "   ::::::::::::::::::::: " + bProcLed.getDescription());
-                FinWealthPaymentTransaction kTrans2 = new FinWealthPaymentTransaction();
-                kTrans2.setAmmount(finalChrges);
-                kTrans2.setSentAmount(amountTSendToCus.toString());
-                kTrans2.setCreatedDate(Instant.now());
-                kTrans2.setFees(kulFees);
-                kTrans2.setPaymentType("Transfer to Bank Account");
-                kTrans2.setReceiver(rq.getReceiverBankAccount());
-                kTrans2.setReceiverName(rq.getReceiverAccountName());
-                kTrans2.setSenderName(senderName);
-                kTrans2.setReceiverBankCode(rq.getBankCode());
-                kTrans2.setReceiverBankName(rq.getBankName());
-                kTrans2.setCurrencyCode(CCY);
-
-                kTrans2.setSender(getDecoded.phoneNumber);
-                kTrans2.setTransactionId(rq.getProcessId());
-                kTrans2.setTransactionType("Withdrawal");
-                kTrans2.setWalletNo(getDecoded.phoneNumber);
-                finWealthPaymentTransactionRepo.save(kTrans2);
-
                 NipCreditAccountTransferRequest nipReq = new NipCreditAccountTransferRequest();
                 nipReq.setChannelCode(channelCode);
                 nipReq.setCreditAccount(rq.getReceiverBankAccount());
                 nipReq.setCreditBankCode(rq.getBankCode());
-                nipReq.setDebitCustomerId(kTrans2.getSender());
+                nipReq.setDebitCustomerId(rq.getSender());
                 nipReq.setDebitMerchantId(merchantId);
                 nipReq.setDebitVirtualAccount(getNameLookUpDe.get(0).getSenderVirtualAccount());
                 nipReq.setTransactionAmount(amountTSendToCus);
@@ -1447,7 +1437,7 @@ public class NipBankService {
                 nipReqLog.setChannelCode(channelCode);
                 nipReqLog.setCreditAccount(rq.getReceiverBankAccount());
                 nipReqLog.setCreditBankCode(rq.getBankCode());
-                nipReqLog.setDebitCustomerId(kTrans2.getSender());
+                nipReqLog.setDebitCustomerId(rq.getSender());
                 nipReqLog.setDebitMerchantId(merchantId);
                 nipReqLog.setDebitVirtualAccount(getNameLookUpDe.get(0).getSenderVirtualAccount());
                 nipReqLog.setTransactionAmount(amountTSendToCus);
@@ -1496,7 +1486,7 @@ public class NipBankService {
                     FinWealthPaymentTransaction kTrans2b = new FinWealthPaymentTransaction();
                     kTrans2b.setAmmount(new BigDecimal(rq.getAmount()));
                     kTrans2b.setCreatedDate(Instant.now().plusSeconds(1));
-                    kTrans2b.setFees(new BigDecimal(getKul.get().getFees()));
+                    kTrans2b.setFees(new BigDecimal(rqD.getFees()));
                     kTrans2b.setPaymentType("Wallet to Bank Transfer");
                     kTrans2b.setReceiver(rq.getReceiverBankAccount());
                     kTrans2b.setSender(getDecoded.phoneNumber);
@@ -1506,11 +1496,16 @@ public class NipBankService {
 
                     kTrans2b.setWalletNo(getDecoded.phoneNumber);
                     kTrans2b.setReceiverName(rq.getReceiverAccountName());
-                    kTrans2b.setSenderName(senderName);
+
                     kTrans2b.setSentAmount(amountTSendToCus.toString());
                     kTrans2b.setTheNarration(getnarration);
+                    kTrans2b.setSenderName(senderName);
+                    kTrans2b.setReceiverBankCode(rq.getBankCode());
+                    kTrans2b.setReceiverBankName(rq.getBankName());
+                    kTrans2b.setCurrencyCode(CCY);
+                    transactionHistoryClientNgnInterbank.publishFromTxn(kTrans2b);
 
-                    finWealthPaymentTransactionRepo.save(kTrans2b);
+                    //  finWealthPaymentTransactionRepo.save(kTrans2b);
                 } else {
                     NipCreditTransferResponse nipCre = new NipCreditTransferResponse();
 
@@ -1549,22 +1544,26 @@ public class NipBankService {
                     FinWealthPaymentTransaction kTrans2b = new FinWealthPaymentTransaction();
                     kTrans2b.setAmmount(new BigDecimal(rq.getAmount()));
                     kTrans2b.setCreatedDate(Instant.now().plusSeconds(1));
-                    kTrans2b.setFees(new BigDecimal(getKul.get().getFees()));
+                    kTrans2b.setFees(new BigDecimal(rqD.getFees()));
                     kTrans2b.setPaymentType("Wallet to Bank Transfer");
                     kTrans2b.setReceiver(rq.getReceiverBankAccount());
                     kTrans2b.setSender(getDecoded.phoneNumber);
                     kTrans2b.setTransactionId(rq.getProcessId());
                     kTrans2b.setSenderTransactionType("Withdrawal");
                     kTrans2b.setReceiverTransactionType("Deposit");
-
                     kTrans2b.setWalletNo(getDecoded.phoneNumber);
-                    kTrans2b.setReceiverName(rq.getReceiverAccountName());
-                    kTrans2b.setSenderName(senderName);
+
                     kTrans2b.setSentAmount(amountTSendToCus.toString());
                     kTrans2b.setTheNarration(getnarration);
 
-                    finWealthPaymentTransactionRepo.save(kTrans2b);
+                    kTrans2b.setSenderName(senderName);
+                    kTrans2b.setReceiverBankCode(rq.getBankCode());
+                    kTrans2b.setReceiverBankName(rq.getBankName());
+                    kTrans2b.setReceiverName(rq.getReceiverAccountName());
+                    kTrans2b.setCurrencyCode(CCY);
+                    transactionHistoryClientNgnInterbank.publishFromTxn(kTrans2b);
 
+                    // finWealthPaymentTransactionRepo.save(kTrans2b);
                 }
 
                 //save to wallet to wallet log

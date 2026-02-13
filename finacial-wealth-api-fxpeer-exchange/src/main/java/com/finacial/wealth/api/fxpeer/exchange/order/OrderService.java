@@ -16,6 +16,7 @@ import com.finacial.wealth.api.fxpeer.exchange.domain.AddAccountDetails;
 import com.finacial.wealth.api.fxpeer.exchange.domain.AddAccountDetailsRepo;
 import com.finacial.wealth.api.fxpeer.exchange.domain.AppConfig;
 import com.finacial.wealth.api.fxpeer.exchange.domain.AppConfigRepo;
+import com.finacial.wealth.api.fxpeer.exchange.domain.FinWealthPaymentTransaction;
 import com.finacial.wealth.api.fxpeer.exchange.domain.PeerToPeerFxReferral;
 import com.finacial.wealth.api.fxpeer.exchange.domain.RegWalletInfo;
 import com.finacial.wealth.api.fxpeer.exchange.domain.RegWalletInfoRepository;
@@ -39,6 +40,7 @@ import com.finacial.wealth.api.fxpeer.exchange.fx.p.p.wallet.WalletIndivTransact
 import com.finacial.wealth.api.fxpeer.exchange.fx.p.p.wallet.WalletIndivTransactionsDetailsRepo;
 import com.finacial.wealth.api.fxpeer.exchange.fx.p.p.wallet.WalletTransactionsDetails;
 import com.finacial.wealth.api.fxpeer.exchange.fx.p.p.wallet.WalletTransactionsDetailsRepo;
+import com.finacial.wealth.api.fxpeer.exchange.investment.service.TransactionHistoryClientLocalT;
 
 import com.google.gson.Gson;
 import jakarta.transaction.Transactional;
@@ -82,6 +84,7 @@ public class OrderService {
     private final AppConfigRepo appConfigRepo;
     private final PeerToPeerFxReferralRepo peerToPeerFxReferralRepo;
     private final ObjectMapper mapper;
+    private final TransactionHistoryClientLocalT transactionHistoryClientLocalT;
 
     public OrderService(OrderRepository orders, OfferRepository offers,
             TransactionServiceProxies transactionServiceProxies,
@@ -90,7 +93,7 @@ public class OrderService {
             ProfilingProxies profilingProxies, WalletTransactionsDetailsRepo walletTransactionsDetailsRepo,
             WalletIndivTransactionsDetailsRepo walletIndivTransactionsDetailsRepo,
             AppConfigRepo appConfigRepo, PeerToPeerFxReferralRepo peerToPeerFxReferralRepo,
-            ObjectMapper mapper) {
+            ObjectMapper mapper, TransactionHistoryClientLocalT transactionHistoryClientLocalT) {
         this.orders = orders;
         this.offers = offers;
         this.transactionServiceProxies = transactionServiceProxies;
@@ -103,6 +106,7 @@ public class OrderService {
         this.appConfigRepo = appConfigRepo;
         this.peerToPeerFxReferralRepo = peerToPeerFxReferralRepo;
         this.mapper = mapper;
+        this.transactionHistoryClientLocalT = transactionHistoryClientLocalT;
     }
 
     private ResponseEntity<ApiResponseModel> bad(ApiResponseModel res, String msg, int statusCode) {
@@ -389,6 +393,7 @@ public class OrderService {
             }
 
             String sellerAcctNumber = null;
+            String sellerAcctNumberName = null;
 
             System.out.println("accountNumber OUT  ::::::::::::::::  %S  " + accountNumber);
 
@@ -438,11 +443,13 @@ public class OrderService {
                 if ("CAD".equals(off.get(0).getCurrencyReceive().toString())) {
 
                     sellerAcctNumber = getRecCheSeller.get().getPhoneNumber();
+                    sellerAcctNumberName = getRecCheSeller.get().getAccountName();
 
                 } else {
                     for (AddAccountDetails getWa : getSellerAcct) {
                         if (getWa.getCurrencyCode().equals(off.get(0).getCurrencyReceive().toString())) {
                             sellerAcctNumber = getWa.getAccountNumber();
+                            sellerAcctNumberName = getRecCheSeller.get().getAccountName();
                         }
                     }
                 }
@@ -618,6 +625,27 @@ public class OrderService {
 
                 }
 
+                FinWealthPaymentTransaction kTrans2b = new FinWealthPaymentTransaction();
+                kTrans2b.setAmmount(new BigDecimal(rqC.getFinalCHarges()));
+                kTrans2b.setCreatedDate(Instant.now().plusSeconds(1));
+                kTrans2b.setFees(new BigDecimal(rqC.getFees()));
+                kTrans2b.setPaymentType("FxPeer Transfer");
+                kTrans2b.setReceiver(sellerAcctNumber);
+                kTrans2b.setSender(accountNumber);
+                kTrans2b.setTransactionId(transactionId);
+                kTrans2b.setSenderTransactionType("Withdrawal");
+                kTrans2b.setReceiverTransactionType("Deposit");
+                kTrans2b.setReceiverBankName(sellerAcctNumberName);
+                kTrans2b.setWalletNo(accountNumber);
+                kTrans2b.setReceiverName(sellerAcctNumberName);
+                kTrans2b.setSenderName(getRec.get().getFullName());
+                kTrans2b.setSentAmount(rqC.getFinalCHarges());
+                kTrans2b.setTheNarration("Fx Peer-Peer Transfer");
+                kTrans2b.setCurrencyCode(off.get(0).getCurrencyReceive().toString());
+
+                // finWealthPaymentTransactionRepo.save(kTrans2b);
+                transactionHistoryClientLocalT.publishFromTxn(kTrans2b);
+
                 //augument WalletTransactionsDetails
                 WalletTransactionsDetails getWalDeupdate = walletTransactionsDetailsRepo.findByCorrelationIdUpdated(rq.getOfferCorrelationId());
                 BigDecimal availableQuantity = getWalDeupdate.getAvailableQuantity();
@@ -684,7 +712,7 @@ public class OrderService {
                 wallInd.setQuantityPurchased(setAmount);
 
                 walletIndivTransactionsDetailsRepo.save(wallInd);
-                Order orddd = buyNow(off.get(0).getId(), setAmount, walletId, 0L, rq.getOfferCorrelationId(),
+                Order orddd = buyNow(getRec.get().getFirstName(), sellerAcctNumberName, off.get(0).getId(), setAmount, walletId, 0L, rq.getOfferCorrelationId(),
                         String.valueOf(off.get(0).getSellerUserId()), "0.00", transactionId, auth);
 
                 String referralSharingPayment;
@@ -757,7 +785,7 @@ public class OrderService {
     }
 
     @Transactional
-    public Order buyNow(long offerId, BigDecimal amount, String buyerId, long lockTtlSeconds,
+    public Order buyNow(String receiverAcctName, String senderName, long offerId, BigDecimal amount, String buyerId, long lockTtlSeconds,
             String correlId, String sellerId, String fees, String transactionId, String auth)
             throws NoSuchAlgorithmException, NoSuchPaddingException,
             InvalidKeyException, IllegalBlockSizeException, BadPaddingException {
@@ -898,6 +926,26 @@ public class OrderService {
 
         }
         // }
+
+        FinWealthPaymentTransaction kTrans2b = new FinWealthPaymentTransaction();
+        kTrans2b.setAmmount(new BigDecimal(rqC.getFinalCHarges()));
+        kTrans2b.setCreatedDate(Instant.now().plusSeconds(1));
+        kTrans2b.setFees(new BigDecimal(rqC.getFees()));
+        kTrans2b.setPaymentType("FxPeer Transfer");
+        kTrans2b.setReceiver(getBuyyAcctAcct);
+        kTrans2b.setSender(getSellerAccttAcct);
+        kTrans2b.setTransactionId(transactionId);
+        kTrans2b.setSenderTransactionType("Withdrawal");
+        kTrans2b.setReceiverTransactionType("Deposit");
+        kTrans2b.setReceiverBankName(receiverAcctName);
+        kTrans2b.setWalletNo(getSellerAccttAcct);
+        kTrans2b.setReceiverName(receiverAcctName);
+        kTrans2b.setSenderName(senderName);
+        kTrans2b.setSentAmount(rqC.getFinalCHarges());
+        kTrans2b.setTheNarration("Fx Peer-Peer Transfer");
+        kTrans2b.setCurrencyCode(off.get(0).getCurrencyReceive().toString());
+
+        transactionHistoryClientLocalT.publishFromTxn(kTrans2b);
 
         Order ord = new Order();
         ord.setOfferId(off.get(0).getId());

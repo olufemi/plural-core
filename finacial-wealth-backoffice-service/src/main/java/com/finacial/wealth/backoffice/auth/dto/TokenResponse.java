@@ -11,4 +11,5 @@ public class TokenResponse {
   private String emailAddress;
   private String fullName;
   private String userRole;
+  private Long adminId;
 }

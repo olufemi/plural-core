@@ -112,6 +112,7 @@ public class LocalTransferService {
     private final DeviceDetailsRepo deviceDetailsRepo;
     private final MessageCenterService messageCenterService;
     private static final String CCY = "CAD";
+    private final TransactionHistoryClientLocalT transactionHistoryClientLocalT;
 
     @Qualifier("withEureka")
     @Autowired
@@ -134,7 +135,8 @@ public class LocalTransferService {
             LocalBeneficiariesIndividualRepo localBeneficiariesIndividualRepo,
             FcmService fcmService,
             DeviceDetailsRepo deviceDetailsRepo,
-            MessageCenterService messageCenterService) {
+            MessageCenterService messageCenterService,
+            TransactionHistoryClientLocalT transactionHistoryClientLocalT) {
 
         this.localTransFailedTransInfoRepo = localTransFailedTransInfoRepo;
         this.regWalletInfoRepository = regWalletInfoRepository;
@@ -154,6 +156,7 @@ public class LocalTransferService {
         this.fcmService = fcmService;
         this.deviceDetailsRepo = deviceDetailsRepo;
         this.messageCenterService = messageCenterService;
+        this.transactionHistoryClientLocalT = transactionHistoryClientLocalT;
     }
 
     private static int parseDaysSafely(String raw, int fallback) {
@@ -608,7 +611,7 @@ public class LocalTransferService {
             System.out.println("current receiver AcctBalance :::::::: " + "     " + accountBalRec);
             System.out.println("new receiver  newAcctBalance:::::::: " + "     " + newAcctBalance);
             System.out.println("new receiver  getMaxAcctBal:::::::: " + "     " + getMaxAcctBal);
-          
+
             if (newAcctBalance.compareTo(getMaxAcctBal) > 0) {
                 responseModel.setStatusCode(400);
                 System.out.println("Receiver newAcctBalance " + newAcctBalance + " will be greater than Maximuim bal: :::::::: " + "     " + newAcctBalance);
@@ -1901,7 +1904,7 @@ public class LocalTransferService {
                 rqC.setNarration(narration);
                 rqC.setPhoneNumber(rq.getReceiver());
                 rqC.setTransAmount(rqq.getTransAmount().toString());
-                rqC.setTransactionId(rq.getProcessId());
+                rqC.setTransactionId(rq.getProcessId()+ "-CAD_RECV");
                 BaseResponse creditAcct = utilMeth.creditCustomer(rqC);
 
                 //  System.out.println("Credit Response from core ::::::::::::::::  %S  " + new Gson().toJson(creditAcct));
@@ -1916,27 +1919,11 @@ public class LocalTransferService {
                     cadGLCredit.setNarration("CAD_Deposit");
                     cadGLCredit.setPhoneNumber(decryptData(utilMeth.getSETTING_KEY_WALLET_SYSTEM_SYSTEM_GG_CAD()));
                     cadGLCredit.setTransAmount(amount);
-                    cadGLCredit.setTransactionId(rq.getProcessId());
+                    cadGLCredit.setTransactionId(rq.getProcessId()+ "-CAD_GL_RECV");
 
-                    utilMeth.creditCustomerWithType(cadGLCredit, "CAD_GL");
+                    utilMeth.creditCustomerWithType(cadGLCredit, "CAD_GL_RECV");
 
-                    FinWealthPaymentTransaction kTrans2 = new FinWealthPaymentTransaction();
-                    kTrans2.setAmmount(amountToDebit);
-                    kTrans2.setCreatedDate(Instant.now().plusSeconds(1));
-                    kTrans2.setFees(new BigDecimal(getKul.get().getFees()));
-                    kTrans2.setPaymentType("Wallet to Wallet Transfer");
-                    kTrans2.setReceiver(rq.getReceiver());
-                    kTrans2.setSender(getDecoded.phoneNumber);
-                    kTrans2.setTransactionId(rq.getProcessId());
-                    kTrans2.setSenderTransactionType("Withdrawal");
-                    kTrans2.setReceiverTransactionType("Deposit");
-                    kTrans2.setWalletNo(getDecoded.phoneNumber);
-                    kTrans2.setReceiverName(rq.getReceiverName());
-                    kTrans2.setSenderName(senderName);
-                    kTrans2.setSentAmount(amountToCredit.toString());
-                    kTrans2.setTheNarration(getnarration);
-                    //processKuleanPaymentTransactionLedger(kTrans2);
-
+                  
                     FinWealthPaymentTransaction kTrans2b = new FinWealthPaymentTransaction();
                     kTrans2b.setAmmount(new BigDecimal(rq.getAmount()));
                     kTrans2b.setCreatedDate(Instant.now().plusSeconds(1));
@@ -1947,14 +1934,17 @@ public class LocalTransferService {
                     kTrans2b.setTransactionId(rq.getProcessId());
                     kTrans2b.setSenderTransactionType("Withdrawal");
                     kTrans2b.setReceiverTransactionType("Deposit");
-
+                    kTrans2b.setReceiverBankName(rq.getReceiverName());
                     kTrans2b.setWalletNo(getDecoded.phoneNumber);
                     kTrans2b.setReceiverName(rq.getReceiverName());
                     kTrans2b.setSenderName(senderName);
                     kTrans2b.setSentAmount(amountToCredit.toString());
                     kTrans2b.setTheNarration(getnarration);
+                    kTrans2b.setCurrencyCode(CCY);
 
-                    finWealthPaymentTransactionRepo.save(kTrans2b);
+                   // finWealthPaymentTransactionRepo.save(kTrans2b);
+                   
+                   transactionHistoryClientLocalT.publishFromTxn(kTrans2b);
 
                     //save to wallet to wallet log
                     WToWaletTransfer saveWalletT = new WToWaletTransfer(
@@ -2331,6 +2321,11 @@ public class LocalTransferService {
                 getK.setReceiverTransactionType(getKul.getReceiverTransactionType());
                 getK.setSenderTransactionType(getKul.getSenderTransactionType());
                 getK.setCurrencyCode(getKul.getCurrencyCode());
+                getK.setReceiverBankCode(getKul.getReceiverBankCode());
+                getK.setReceiverBankName(getKul.getReceiverBankName());
+                getK.setReceiverName(getKul.getReceiverName());
+                getK.setReceiver(getKul.getReceiver());
+                getK.setTheNarration(getKul.getTheNarration());
                 mapAll.add(getK);
 
             }

@@ -67,7 +67,7 @@ public class OrderController {
             @PathVariable long offerId,
             @RequestBody @Valid BuyNowRq rq) throws NoSuchAlgorithmException, NoSuchPaddingException, InvalidKeyException, IllegalBlockSizeException, BadPaddingException {
         //Order ord = orderService.buyNow(offerId, rq.amount(), buyerId, rq.lockTtlSeconds());
-        Order ord = orderService.buyNow(offerId, rq.amount(), String.valueOf(buyerId), 600, "", "", "", "", "");
+        Order ord = orderService.buyNow("","",offerId, rq.amount(), String.valueOf(buyerId), 600, "", "", "", "", "");
 
         return ResponseEntity.ok(ord);
     }

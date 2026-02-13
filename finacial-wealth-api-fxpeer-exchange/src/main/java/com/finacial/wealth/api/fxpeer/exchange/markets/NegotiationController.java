@@ -70,7 +70,7 @@ public class NegotiationController {
         }
         n.setStatus(NegotiationStatus.ACCEPTED);
         repo.save(n);
-        Order ord = orders.buyNow(n.getOfferId(), n.getProposedAmount(), String.valueOf(buyerId), 600, "", "", "", "", "");
+        Order ord = orders.buyNow("","",n.getOfferId(), n.getProposedAmount(), String.valueOf(buyerId), 600, "", "", "", "", "");
         /*
                  buyNow(long offerId, BigDecimal amount, long buyerId, long lockTtlSeconds,
             String correlId, String sellerId, String fees, String transactionId)

@@ -13,10 +13,12 @@ import com.finacial.wealth.api.fxpeer.exchange.domain.AddAccountDetails;
 import com.finacial.wealth.api.fxpeer.exchange.domain.AddAccountDetailsRepo;
 import com.finacial.wealth.api.fxpeer.exchange.domain.AppConfig;
 import com.finacial.wealth.api.fxpeer.exchange.domain.AppConfigRepo;
+import com.finacial.wealth.api.fxpeer.exchange.domain.FinWealthPaymentTransaction;
 import com.finacial.wealth.api.fxpeer.exchange.feign.ProfilingProxies;
 import com.finacial.wealth.api.fxpeer.exchange.feign.TransactionServiceProxies;
 import com.finacial.wealth.api.fxpeer.exchange.fx.p.p.wallet.WalletTransactionsDetails;
 import com.finacial.wealth.api.fxpeer.exchange.fx.p.p.wallet.WalletTransactionsDetailsRepo;
+import com.finacial.wealth.api.fxpeer.exchange.investment.service.TransactionHistoryClientLocalT;
 import com.finacial.wealth.api.fxpeer.exchange.ledger.LedgerClient;
 
 import com.finacial.wealth.api.fxpeer.exchange.model.AddAccountObj;
@@ -82,6 +84,7 @@ public class OfferService {
     private String fxEnableRunFxTradeEpiredListingsCron;
     @Value("${fx.trade.expired.listings.cron}")
     private String fxTradeExpiredListingsCron;
+    private final TransactionHistoryClientLocalT transactionHistoryClientLocalT;
 
     private static final ZoneId LAGOS = ZoneId.of("Africa/Lagos");
     private static final DateTimeFormatter EXPIRY_DMY
@@ -94,7 +97,8 @@ public class OfferService {
             AddAccountDetailsRepo addAccountDetailsRepo,
             ProfilingProxies profilingProxies,
             TransactionServiceProxies transactionServiceProxies,
-            AppConfigRepo appConfigRepo, WalletTransactionsDetailsRepo walletTransactionsDetailsRepo) {
+            AppConfigRepo appConfigRepo, WalletTransactionsDetailsRepo walletTransactionsDetailsRepo,
+            TransactionHistoryClientLocalT transactionHistoryClientLocalT) {
         this.repo = repo;
         this.ledger = ledger;
         this.utilService = utilService;
@@ -104,6 +108,7 @@ public class OfferService {
         this.transactionServiceProxies = transactionServiceProxies;
         this.appConfigRepo = appConfigRepo;
         this.walletTransactionsDetailsRepo = walletTransactionsDetailsRepo;
+        this.transactionHistoryClientLocalT = transactionHistoryClientLocalT;
     }
 
     @Transactional(readOnly = true)
@@ -637,7 +642,8 @@ public class OfferService {
 
             // 3) Build domain request and delegate
             CreateOfferRq coreRq = new CreateOfferRq(currencySell, currencyReceive, rate, qtyTotal, expiryAt);
-            ApiResponseModel created = createOffer(coreRq, Long.valueOf(sellerId), setMin, setMax, rq.isShowInTopDeals(), getRec.get().getFirstName(), auth, phoneNumber);
+            ApiResponseModel created = createOffer(coreRq, Long.valueOf(sellerId), setMin, setMax, rq.isShowInTopDeals(),
+                    getRec.get().getFirstName(), getRec.get().getLastName(), auth, phoneNumber);
 
             // 4) Success
             res.setStatusCode(200);
@@ -655,7 +661,8 @@ public class OfferService {
 
     @Transactional
     public ApiResponseModel createOffer(CreateOfferRq rq, long sellerId, BigDecimal minAmt,
-            BigDecimal maxAmt, boolean showInTopDeals, String creators, String auth, String cusCadAccountNo) {
+            BigDecimal maxAmt, boolean showInTopDeals, String creators,
+            String creatorLastName, String auth, String cusCadAccountNo) {
         final ApiResponseModel res = new ApiResponseModel();
 
         try {
@@ -673,6 +680,7 @@ public class OfferService {
             List<AddAccountDetails> getAdDe = addAccountDetailsRepo.findByWalletIdrData1(String.valueOf(sellerId));
 
             String accountToDebit;
+            String senderName;
 
             WalletInfoValAcct wSend = new WalletInfoValAcct();
             wSend.setCorrelationId(correlationId);
@@ -680,10 +688,12 @@ public class OfferService {
             if ("CAD".equals(rq.getCurrencySell().toString())) {
                 wSend.setAccountNumber(cusCadAccountNo);
                 accountToDebit = wSend.getAccountNumber();
+                senderName = creatorLastName;
 
             } else {
                 wSend.setAccountNumber(getAdDe.get(0).getAccountNumber());
                 accountToDebit = wSend.getAccountNumber();
+                senderName = creatorLastName;
 
             }
             wSend.setCurrencyToSell(rq.getCurrencySell().toString());
@@ -719,6 +729,26 @@ public class OfferService {
             System.out.println(" debitBuyerAcct RESPONSE ::::::::::::::::  %S  " + new Gson().toJson(debitBuyerAcct));
 
             if (debitBuyerAcct.getStatusCode() == 200) {
+
+                FinWealthPaymentTransaction kTrans2b = new FinWealthPaymentTransaction();
+                kTrans2b.setAmmount(new BigDecimal(rqD.getFinalCHarges()));
+                kTrans2b.setCreatedDate(Instant.now().plusSeconds(1));
+                kTrans2b.setFees(new BigDecimal(rqD.getFees()));
+                kTrans2b.setPaymentType("FxPeer Transfer");
+                kTrans2b.setReceiver("FxPeer");
+                kTrans2b.setSender(accountToDebit);
+                kTrans2b.setTransactionId(rqD.getTransactionId());
+                kTrans2b.setSenderTransactionType("Withdrawal");
+                kTrans2b.setReceiverTransactionType("Deposit");
+                kTrans2b.setReceiverBankName("FxPeer");
+                kTrans2b.setWalletNo(accountToDebit);
+                kTrans2b.setReceiverName("FxPeer");
+                kTrans2b.setSenderName(senderName);
+                kTrans2b.setSentAmount(rqD.getFinalCHarges());
+                kTrans2b.setTheNarration("Fx Peer-Peer listing.");
+                kTrans2b.setCurrencyCode(rq.getCurrencySell().toString());
+
+                transactionHistoryClientLocalT.publishFromTxn(kTrans2b);
 
                 System.out.println("sellerId" + "  ::::::::::::::::::::: >>>>>>>>>>>>>>>>>>  " + sellerId);
 
@@ -1002,7 +1032,7 @@ public class OfferService {
             rqC.setFinalCHarges(availableQuantity.toString());
             rqC.setNarration(getWalDeupdate.getCurrencyToSell() + "_Reversal");
             rqC.setTransAmount(availableQuantity.toString());
-            rqC.setTransactionId(rq.getCorrelationId()+"CREDIT-REVERSAL");
+            rqC.setTransactionId(rq.getCorrelationId() + "CREDIT-REVERSAL");
 
             System.out.println(" creditSellerAcct for Reversal REQ  ::::::::::::::::  %S  " + new Gson().toJson(rqC));
 
@@ -1037,6 +1067,27 @@ public class OfferService {
                 BaseResponse creditAcct_GL = transactionServiceProxies.creditCustomerWithType(GLCredit, getWalDeupdate.getCurrencyToSell(), auth);
 
                 System.out.println(" credit GL for seller for Reversal Response from core ::::::::::::::::  %S  " + new Gson().toJson(creditAcct_GL));
+
+                FinWealthPaymentTransaction kTrans2b = new FinWealthPaymentTransaction();
+                kTrans2b.setAmmount(new BigDecimal(rqC.getFinalCHarges()));
+                kTrans2b.setCreatedDate(Instant.now().plusSeconds(1));
+                kTrans2b.setFees(new BigDecimal(rqC.getFees()));
+                kTrans2b.setPaymentType("FxPeer Reversal Transfer");
+                kTrans2b.setReceiver(rqC.getPhoneNumber());
+                kTrans2b.setSender("FxPeer");
+                kTrans2b.setTransactionId(rqC.getTransactionId());
+                kTrans2b.setSenderTransactionType("Withdrawal");
+                kTrans2b.setReceiverTransactionType("Deposit");
+                kTrans2b.setReceiverBankName("FxPeer");
+                kTrans2b.setWalletNo("FxPeer");
+                kTrans2b.setReceiverName(getWalDeupdate.getSellerName());
+                kTrans2b.setSenderName("FxPeer");
+                kTrans2b.setSentAmount(rqC.getFinalCHarges());
+                kTrans2b.setTheNarration("Fx Peer-Peer listing.");
+                kTrans2b.setCurrencyCode(getWalDeupdate.getCurrencyToSell());
+
+                // finWealthPaymentTransactionRepo.save(kTrans2b);
+                transactionHistoryClientLocalT.publishFromTxn(kTrans2b);
 
             }
 

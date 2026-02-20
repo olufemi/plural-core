@@ -6,41 +6,59 @@
 package com.financial.wealth.api.transactions.repo;
 
 import com.financial.wealth.api.transactions.domain.FinWealthPaymentTransaction;
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.CrudRepository;
 import org.springframework.data.repository.query.Param;
+import org.springframework.stereotype.Repository;
 
 /**
  *
  * @author olufemioshin
  */
-public interface FinWealthPaymentTransactionRepo extends
-        CrudRepository<FinWealthPaymentTransaction, String> {
+@Repository
+public interface FinWealthPaymentTransactionRepo
+        extends JpaRepository<FinWealthPaymentTransaction, String> {
 
-    @Query("SELECT o FROM FinWealthPaymentTransaction o where o.sender = :walletNo OR o.receiver = :walletNo")
+    @Query("SELECT o FROM FinWealthPaymentTransaction o WHERE o.sender = :walletNo OR o.receiver = :walletNo")
     List<FinWealthPaymentTransaction> findByWalletNoList(@Param("walletNo") String walletNo);
 
-    @Query("select bs from FinWealthPaymentTransaction bs where bs.walletNo=:walletNo")
-    FinWealthPaymentTransaction findByWalletNoDe(String walletNo);
+    @Query("SELECT bs FROM FinWealthPaymentTransaction bs WHERE bs.walletNo = :walletNo")
+    FinWealthPaymentTransaction findByWalletNoDe(@Param("walletNo") String walletNo);
 
     Optional<FinWealthPaymentTransaction> findByWalletNo(String walletNo);
 
-    @Query("SELECT o FROM FinWealthPaymentTransaction o where o.paymentType = :paymentType order by o.id desc")
-    List<FinWealthPaymentTransaction> findByWalletNoListPage(Pageable pageable, String paymentType);
+    // paging by paymentType (recommended)
+    Page<FinWealthPaymentTransaction> findByPaymentTypeOrderByIdDesc(String paymentType, Pageable pageable);
 
-    @Query("select bs from FinWealthPaymentTransaction bs where bs.transactionId=:transactionId")
-    List<FinWealthPaymentTransaction> findByTransationidNoDe(String transactionId);
+    @Query("SELECT bs FROM FinWealthPaymentTransaction bs WHERE bs.transactionId = :transactionId")
+    List<FinWealthPaymentTransaction> findByTransationidNoDe(@Param("transactionId") String transactionId);
 
-    @Query("select bs from FinWealthPaymentTransaction bs where bs.transactionId=:transactionId")
-    FinWealthPaymentTransaction findByTransationId(String transactionId);
+    @Query("SELECT bs FROM FinWealthPaymentTransaction bs WHERE bs.transactionId = :transactionId")
+    FinWealthPaymentTransaction findByTransationId(@Param("transactionId") String transactionId);
 
-    @Query("SELECT SUM(m.sentAmount) FROM FinWealthPaymentTransaction m where m.paymentType = :paymentType and m.reversals =:reversals")
-    List<FinWealthPaymentTransaction> getGrandTotalReversals(String paymentType, String reversals);
+    @Query("SELECT COALESCE(SUM(m.sentAmount), 0) FROM FinWealthPaymentTransaction m " +
+           "WHERE m.paymentType = :paymentType AND m.reversals = :reversals")
+    BigDecimal getGrandTotalReversals(@Param("paymentType") String paymentType,
+                                     @Param("reversals") String reversals);
 
-    @Query("SELECT SUM(m.sentAmount) FROM FinWealthPaymentTransaction m where m.paymentType = :paymentType and m.reversals =:reversals and month(m.lastModifiedDate) = month(current_date)")
-    List<FinWealthPaymentTransaction> getTotalCurrentMonthReversal(String paymentType, String reversals);
+    @Query("SELECT COALESCE(SUM(m.sentAmount), 0) FROM FinWealthPaymentTransaction m " +
+           "WHERE m.paymentType = :paymentType AND m.reversals = :reversals " +
+           "AND FUNCTION('month', m.lastModifiedDate) = FUNCTION('month', CURRENT_DATE)")
+    BigDecimal getTotalCurrentMonthReversal(@Param("paymentType") String paymentType,
+                                           @Param("reversals") String reversals);
 
+    Page<FinWealthPaymentTransaction> findByWalletNoOrderByCreatedDateDesc(String walletNo, Pageable pageable);
+
+    boolean existsByTransactionId(String transactionId);
+
+    Optional<FinWealthPaymentTransaction> findFirstByWalletNoOrderByCreatedDateDesc(String walletNo);
+
+    List<FinWealthPaymentTransaction> findByTransactionId(String transactionId);
 }
+

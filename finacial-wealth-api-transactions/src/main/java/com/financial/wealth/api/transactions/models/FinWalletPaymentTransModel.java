@@ -35,5 +35,9 @@ public class FinWalletPaymentTransModel {
     private String senderTransactionType;
     private String receiverTransactionType;
     private String currencyCode;
+    private String status;           // add this (SUCCESS/FAILED/PENDING/REVERSED)
+    private String receiptKid;       // add this
+    private String receiptSignature; // add this
+  
 
 }

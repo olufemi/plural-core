@@ -18,6 +18,7 @@ import com.financial.wealth.api.transactions.models.PushNotificationFireBase;
 import com.financial.wealth.api.transactions.repo.DeviceDetailsRepo;
 import com.financial.wealth.api.transactions.repo.FinWealthPaymentTransactionRepo;
 import com.financial.wealth.api.transactions.repo.RegWalletInfoRepository;
+import com.financial.wealth.api.transactions.services.TransactionHistoryClientLocalT;
 import com.financial.wealth.api.transactions.services.grp.sav.fulfil.WalletFacade;
 import com.financial.wealth.api.transactions.services.notify.MessageCenterService;
 import static com.financial.wealth.api.transactions.tranfaar.services.WebhookKeyService.pushNotifyCreditWalletForWalletTransfer;
@@ -57,6 +58,7 @@ public class GroupSavingWalletFacadeImpl implements WalletFacade {
     private final MessageCenterService messageCenterService;
     private final DeviceDetailsRepo deviceDetailsRepo;
     private static final String CCY = "CAD";
+    private final TransactionHistoryClientLocalT transactionHistoryClientLocalT;
 
     public GroupSavingWalletFacadeImpl(
             //WalletRepository walletRepo, 
@@ -65,7 +67,8 @@ public class GroupSavingWalletFacadeImpl implements WalletFacade {
             UttilityMethods utilMeth,
             FinWealthPaymentTransactionRepo finWealthPaymentTransactionRepo,
             MessageCenterService messageCenterService,
-            DeviceDetailsRepo deviceDetailsRepo) {
+            DeviceDetailsRepo deviceDetailsRepo,
+          TransactionHistoryClientLocalT transactionHistoryClientLocalT) {
         //this.walletRepo = walletRepo;
         this.txnRepo = txnRepo;
         this.regWalletInfoRepository = regWalletInfoRepository;
@@ -73,6 +76,7 @@ public class GroupSavingWalletFacadeImpl implements WalletFacade {
         this.finWealthPaymentTransactionRepo = finWealthPaymentTransactionRepo;
         this.messageCenterService = messageCenterService;
         this.deviceDetailsRepo = deviceDetailsRepo;
+        this.transactionHistoryClientLocalT = transactionHistoryClientLocalT;
     }
 
     @Override
@@ -167,9 +171,11 @@ public class GroupSavingWalletFacadeImpl implements WalletFacade {
             kTrans2b.setReceiverName(getReceiverName.get(0).getFullName());
             kTrans2b.setSenderName(getReceiverName.get(0).getFullName());
             kTrans2b.setSentAmount(amount.toString());
-            kTrans2b.setTheNarration("Withdrawal");
+            kTrans2b.setTheNarration("Group savings debit.");
+            
+            transactionHistoryClientLocalT.publishFromTxn(kTrans2b);
 
-            finWealthPaymentTransactionRepo.save(kTrans2b);
+            //finWealthPaymentTransactionRepo.save(kTrans2b);
 
             PushNotificationFireBase puFireSender = new PushNotificationFireBase();
             puFireSender.setBody(pushNotifyDebitWalletForWalletTransferGroupSaving(amount, "", "" + " " + ""));
@@ -288,9 +294,11 @@ public class GroupSavingWalletFacadeImpl implements WalletFacade {
             kTrans2b.setReceiverName(getReceiverName.get(0).getFullName());
             kTrans2b.setSenderName(getReceiverName.get(0).getFullName());
             kTrans2b.setSentAmount(amount.toString());
-            kTrans2b.setTheNarration("Deposit");
+            kTrans2b.setTheNarration("Group savings settlement.");
+            
+            transactionHistoryClientLocalT.publishFromTxn(kTrans2b);
 
-            finWealthPaymentTransactionRepo.save(kTrans2b);
+            //finWealthPaymentTransactionRepo.save(kTrans2b);
 
             PushNotificationFireBase puFireSender = new PushNotificationFireBase();
             puFireSender.setBody(pushNotifyCreditWalletForWalletTransferGroupSavings(amount,

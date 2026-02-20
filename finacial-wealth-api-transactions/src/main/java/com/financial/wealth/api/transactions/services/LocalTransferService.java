@@ -5,6 +5,7 @@
  */
 package com.financial.wealth.api.transactions.services;
 
+import com.financial.wealth.api.transactions.config.LogstashConfig;
 import com.financial.wealth.api.transactions.services.notify.FcmService;
 import com.financial.wealth.api.transactions.domain.CommissionCfg;
 import com.financial.wealth.api.transactions.domain.DeviceChangeLimitConfig;
@@ -58,6 +59,7 @@ import com.financial.wealth.api.transactions.utils.GlobalMethods;
 import com.financial.wealth.api.transactions.utils.StrongAES;
 import com.financial.wealth.api.transactions.utils.UttilityMethods;
 import com.google.gson.Gson;
+import feign.FeignException;
 import java.math.BigDecimal;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
@@ -78,6 +80,8 @@ import javax.crypto.NoSuchPaddingException;
 import javax.servlet.http.HttpServletResponse;
 import org.apache.commons.lang.StringUtils;
 import org.joda.time.DateTime;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
@@ -90,6 +94,8 @@ import org.springframework.web.client.RestTemplate;
  */
 @Service
 public class LocalTransferService {
+    
+     private static final Logger log = LoggerFactory.getLogger(LocalTransferService.class);
 
     private final LocalTransFailedTransInfoRepo localTransFailedTransInfoRepo;
     private final RegWalletInfoRepository regWalletInfoRepository;
@@ -114,6 +120,8 @@ public class LocalTransferService {
     private static final String CCY = "CAD";
     private final TransactionHistoryClientLocalT transactionHistoryClientLocalT;
 
+    private final ReceiptSigningFacade receiptSigningFacade;
+
     @Qualifier("withEureka")
     @Autowired
     private RestTemplate restTemplate;
@@ -121,6 +129,7 @@ public class LocalTransferService {
     @Value("${fin.wealth.otp.encrypt.key}")
     private String encryptionKey;
 
+    @Autowired
     public LocalTransferService(LocalTransFailedTransInfoRepo localTransFailedTransInfoRepo,
             RegWalletInfoRepository regWalletInfoRepository,
             UserLimitConfigRepo userLimitConfigRepo, DeviceChangeLimitConfigRepo deviceChangeLimitConfigRepo,
@@ -136,7 +145,8 @@ public class LocalTransferService {
             FcmService fcmService,
             DeviceDetailsRepo deviceDetailsRepo,
             MessageCenterService messageCenterService,
-            TransactionHistoryClientLocalT transactionHistoryClientLocalT) {
+            TransactionHistoryClientLocalT transactionHistoryClientLocalT,
+            ReceiptSigningFacade receiptSigningFacade) {
 
         this.localTransFailedTransInfoRepo = localTransFailedTransInfoRepo;
         this.regWalletInfoRepository = regWalletInfoRepository;
@@ -157,6 +167,7 @@ public class LocalTransferService {
         this.deviceDetailsRepo = deviceDetailsRepo;
         this.messageCenterService = messageCenterService;
         this.transactionHistoryClientLocalT = transactionHistoryClientLocalT;
+        this.receiptSigningFacade = receiptSigningFacade;
     }
 
     private static int parseDaysSafely(String raw, int fallback) {
@@ -1904,7 +1915,7 @@ public class LocalTransferService {
                 rqC.setNarration(narration);
                 rqC.setPhoneNumber(rq.getReceiver());
                 rqC.setTransAmount(rqq.getTransAmount().toString());
-                rqC.setTransactionId(rq.getProcessId()+ "-CAD_RECV");
+                rqC.setTransactionId(rq.getProcessId() + "-CAD_RECV");
                 BaseResponse creditAcct = utilMeth.creditCustomer(rqC);
 
                 //  System.out.println("Credit Response from core ::::::::::::::::  %S  " + new Gson().toJson(creditAcct));
@@ -1919,11 +1930,10 @@ public class LocalTransferService {
                     cadGLCredit.setNarration("CAD_Deposit");
                     cadGLCredit.setPhoneNumber(decryptData(utilMeth.getSETTING_KEY_WALLET_SYSTEM_SYSTEM_GG_CAD()));
                     cadGLCredit.setTransAmount(amount);
-                    cadGLCredit.setTransactionId(rq.getProcessId()+ "-CAD_GL_RECV");
+                    cadGLCredit.setTransactionId(rq.getProcessId() + "-CAD_GL_RECV");
 
                     utilMeth.creditCustomerWithType(cadGLCredit, "CAD_GL_RECV");
 
-                  
                     FinWealthPaymentTransaction kTrans2b = new FinWealthPaymentTransaction();
                     kTrans2b.setAmmount(new BigDecimal(rq.getAmount()));
                     kTrans2b.setCreatedDate(Instant.now().plusSeconds(1));
@@ -1942,9 +1952,8 @@ public class LocalTransferService {
                     kTrans2b.setTheNarration(getnarration);
                     kTrans2b.setCurrencyCode(CCY);
 
-                   // finWealthPaymentTransactionRepo.save(kTrans2b);
-                   
-                   transactionHistoryClientLocalT.publishFromTxn(kTrans2b);
+                    // finWealthPaymentTransactionRepo.save(kTrans2b);
+                    transactionHistoryClientLocalT.publishFromTxn(kTrans2b);
 
                     //save to wallet to wallet log
                     WToWaletTransfer saveWalletT = new WToWaletTransfer(
@@ -2201,29 +2210,25 @@ public class LocalTransferService {
         ApiResponseModel responseModel = new ApiResponseModel();
         int statusCode = 500;
         String statusMessage = "An error occured,please try again";
+
         try {
             statusCode = 400;
-            DecodedJWTToken getDecoded = DecodedJWTToken.getDecoded(auth);
-            String processId = String.valueOf(GlobalMethods.generateTransactionId());
+            DecodedJWTToken getDecoded = DecodedJWTToken.getDecoded(auth); // keep if you need it
+            String processId = String.valueOf(GlobalMethods.generateTransactionId()); // keep if you need it
+
             boolean isWalletId = true;
             boolean isPhonenUmber = true;
             String userPhoneNumber = null;
 
-            List<RegWalletInfo> getReceiver = null;
+            List<RegWalletInfo> getReceiver;
+
+            // --- your existing validation logic ---
             if (GlobalMethods.isTenDigits(rq.getMemberId().trim()) == false) {
                 isWalletId = false;
                 isPhonenUmber = true;
-
             }
 
-
-            /* if (!GlobalMethods.isElevenDigits(rq.getMemberId().trim()) == true) {
-
-                isPhonenUmber = false;
-
-            }*/
             System.out.println("isWalletIdBool :::::::: " + "     " + isWalletId);
-
             System.out.println("isPhonenUmberBool :::::::: " + "     " + isPhonenUmber);
 
             if (isWalletId == false && isPhonenUmber == false) {
@@ -2239,12 +2244,10 @@ public class LocalTransferService {
 
                 localTransFailedTransInfoRepo.save(procFailedTrans);
                 return responseModel;
-
             }
+
             if (isWalletId) {
-
                 System.out.println("isWalletId :::::::: " + "     ");
-
                 getReceiver = regWalletInfoRepository.findByWalletIdList(rq.getMemberId());
 
                 if (getReceiver.size() <= 0) {
@@ -2260,15 +2263,12 @@ public class LocalTransferService {
 
                     localTransFailedTransInfoRepo.save(procFailedTrans);
                     return responseModel;
-
                 }
                 userPhoneNumber = getReceiver.get(0).getPhoneNumber();
             }
 
             if (isPhonenUmber) {
-
                 System.out.println("isPhonenUmber :::::::: " + "     ");
-
                 getReceiver = regWalletInfoRepository.findByPhoneNumberData(rq.getMemberId());
 
                 if (getReceiver.size() <= 0) {
@@ -2284,14 +2284,14 @@ public class LocalTransferService {
 
                     localTransFailedTransInfoRepo.save(procFailedTrans);
                     return responseModel;
-
                 }
 
                 userPhoneNumber = getReceiver.get(0).getPhoneNumber();
-
             }
 
-            List<FinWealthPaymentTransaction> getKulTrans = finWealthPaymentTransactionRepo.findByWalletNoList(userPhoneNumber);
+            List<FinWealthPaymentTransaction> getKulTrans
+                    = finWealthPaymentTransactionRepo.findByWalletNoList(userPhoneNumber);
+
             if (getKulTrans.size() <= 0) {
 
                 LocalTransFailedTransInfo procFailedTrans = new LocalTransFailedTransInfo(
@@ -2307,16 +2307,21 @@ public class LocalTransferService {
                 return responseModel;
             }
 
-            List<Object> mapAll = new ArrayList<Object>();
+            // --------------------------------------------------------------------
+            // ✅ YOUR NEW PART: build DTOs, populate createdDate + status, sign receipt
+            // --------------------------------------------------------------------
+            List<Object> mapAll = new ArrayList<>();
+
             for (FinWealthPaymentTransaction getKul : getKulTrans) {
 
                 FinWalletPaymentTransModel getK = new FinWalletPaymentTransModel();
                 getK.setAmmount(getKul.getAmmount());
-                getK.setTransactionDate(formDate(getKul.getCreatedDate()));
+                getK.setTransactionDate(formDate(getKul.getCreatedDate())); // display only
+                getK.setCreatedDate(getKul.getCreatedDate());               // ✅ MUST be set (Instant)
                 getK.setFees(getKul.getFees());
                 getK.setPaymentType(getKul.getPaymentType());
-                getK.setReceiver(getKul.getReceiver());
-                getK.setSender(getKul.getSender());
+                getK.setReceiver(getKul.getReceiver());                     // receiverId = receiver
+                getK.setSender(getKul.getSender());                         // senderId = sender
                 getK.setTransactionId(getKul.getTransactionId());
                 getK.setReceiverTransactionType(getKul.getReceiverTransactionType());
                 getK.setSenderTransactionType(getKul.getSenderTransactionType());
@@ -2324,33 +2329,54 @@ public class LocalTransferService {
                 getK.setReceiverBankCode(getKul.getReceiverBankCode());
                 getK.setReceiverBankName(getKul.getReceiverBankName());
                 getK.setReceiverName(getKul.getReceiverName());
-                getK.setReceiver(getKul.getReceiver());
                 getK.setTheNarration(getKul.getTheNarration());
-                mapAll.add(getK);
+                getK.setTransactionType(getKul.getTransactionType());
+                getK.setCurrencyCode(getKul.getCurrencyCode() == null ? CCY : getKul.getCurrencyCode());
 
+                // ✅ MUST: status included in canonical string.
+                // BEST: If entity has status, use it:
+                // getK.setStatus(getKul.getStatus());
+                // If you don't have it yet, fallback (NOT ideal, replace asap):
+                getK.setStatus(resolveStatusFallback(getKul));
+
+                // ✅ SIGN: calls utility-service /api/v1/crypto/receipt/sign
+                // attaches receiptKid + receiptSignature to this DTO
+                receiptSigningFacade.attachReceipt(getK);
+
+                mapAll.add(getK);
             }
 
             responseModel.setData(mapAll);
             responseModel.setDescription("Customer transactions pulled successfully.");
             responseModel.setStatusCode(200);
 
-        } catch (Exception ex) {
-            responseModel.setDescription(statusMessage);
-            responseModel.setStatusCode(statusCode);
+        } catch (FeignException ex) {
 
-            ex.printStackTrace();
+            log.error("fxpeer sign failed status={} body={}", ex.status(), ex.contentUTF8(), ex);
+
+            responseModel.setStatusCode(ex.status());
+            responseModel.setDescription("FXPeer error: " + ex.contentUTF8());
+
+        } catch (Exception ex) {
+
+            log.error("Unexpected error", ex);
+
+            responseModel.setStatusCode(500);
+            responseModel.setDescription("Internal error: " + ex.getMessage());
         }
 
         return responseModel;
     }
 
+    private String resolveStatusFallback(FinWealthPaymentTransaction tx) {
+        // Replace with your real mapping ASAP.
+        // If you have a responseCode / reversal flag / actual status column, use that.
+        return "SUCCESS";
+    }
+
     private String formDate(Instant datte) {
-
         LocalDateTime datetime = LocalDateTime.ofInstant(datte, ZoneOffset.UTC);
-        String formatted = DateTimeFormatter.ofPattern("MMM dd, yyyy").format(datetime);
-        //System.out.println(formatted);
-
-        return formatted;
+        return DateTimeFormatter.ofPattern("MMM dd, yyyy").format(datetime);
     }
 
 }

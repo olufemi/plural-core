@@ -5,6 +5,14 @@
  */
 package com.finacial.wealth.api.profiling.config;
 
+import ch.qos.logback.classic.pattern.MessageConverter;
+
+import org.springframework.amqp.rabbit.connection.ConnectionFactory;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
+
+import org.springframework.amqp.support.converter.Jackson2JsonMessageConverter;
+
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 /**
@@ -13,7 +21,24 @@ import org.springframework.context.annotation.Configuration;
  */
 @Configuration
 public class RabbitMQConfig {
-    
 
+    @Bean
+    public org.springframework.amqp.support.converter.MessageConverter jacksonConverter() {
+
+        return new Jackson2JsonMessageConverter();
+    }
+
+    @Bean
+    public RabbitTemplate rabbitTemplate(
+            ConnectionFactory connectionFactory,
+            org.springframework.amqp.support.converter.MessageConverter jacksonConverter) {
+
+        RabbitTemplate template
+                = new RabbitTemplate(connectionFactory);
+
+        template.setMessageConverter(jacksonConverter);
+
+        return template;
+    }
 
 }

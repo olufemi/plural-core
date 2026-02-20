@@ -31,6 +31,7 @@ import com.financial.wealth.api.transactions.repo.RegWalletInfoRepository;
 import com.financial.wealth.api.transactions.repo.SettlementFailureLogRepo;
 import com.financial.wealth.api.transactions.services.notify.FcmService;
 import static com.financial.wealth.api.transactions.services.LocalTransferService.pushNotifyDebitWalletForWalletTransferSender;
+import com.financial.wealth.api.transactions.services.TransactionHistoryClientLocalT;
 import com.financial.wealth.api.transactions.services.notify.MessageCenterService;
 import com.financial.wealth.api.transactions.utils.DecodedJWTToken;
 import com.financial.wealth.api.transactions.utils.StrongAES;
@@ -71,11 +72,12 @@ public class WebhookKeyService {
     private final AcceptQuoteResponseFailedRepo acceptQuoteResponseFailedRepo;
     private final UttilityMethods utilMeth;
     private final RegWalletInfoRepository regWalletInfoRepository;
-    private final FinWealthPaymentTransactionRepo finWealthPaymentTransactionRepo;
+   // private final FinWealthPaymentTransactionRepo finWealthPaymentTransactionRepo;
     private final DeviceDetailsRepo deviceDetailsRepo;
     private final FcmService fcmService;
     private final MessageCenterService messageCenterService;
     private static final String CCY = "CAD";
+    private final TransactionHistoryClientLocalT transactionHistoryClientLocalT;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -95,10 +97,11 @@ public class WebhookKeyService {
             SettlementFailureLogRepo settlementFailureLogRepo,
             AcceptQuoteResponseFailedRepo acceptQuoteResponseFailedRepo,
             UttilityMethods utilMeth, RegWalletInfoRepository regWalletInfoRepository,
-            FinWealthPaymentTransactionRepo finWealthPaymentTransactionRepo,
+           // FinWealthPaymentTransactionRepo finWealthPaymentTransactionRepo,
             DeviceDetailsRepo deviceDetailsRepo,
             FcmService fcmService,
-            MessageCenterService messageCenterService) {
+            MessageCenterService messageCenterService,
+            TransactionHistoryClientLocalT transactionHistoryClientLocalT) {
         // Example: pre-provision one key
         keys.put(transfaarClient, generateBase64Secret());
         this.createQuoteResLogRepo = createQuoteResLogRepo;
@@ -106,10 +109,11 @@ public class WebhookKeyService {
         this.acceptQuoteResponseFailedRepo = acceptQuoteResponseFailedRepo;
         this.regWalletInfoRepository = regWalletInfoRepository;
         this.utilMeth = utilMeth;
-        this.finWealthPaymentTransactionRepo = finWealthPaymentTransactionRepo;
+       // this.finWealthPaymentTransactionRepo = finWealthPaymentTransactionRepo;
         this.deviceDetailsRepo = deviceDetailsRepo;
         this.fcmService = fcmService;
         this.messageCenterService = messageCenterService;
+        this.transactionHistoryClientLocalT = transactionHistoryClientLocalT;
     }
 
     /*@PostConstruct
@@ -283,9 +287,12 @@ public class WebhookKeyService {
                 kTrans2b.setReceiverName(getReceiverName.get(0).getFullName());
                 kTrans2b.setSenderName(getReceiverName.get(0).getFullName());
                 kTrans2b.setSentAmount(rqq.getAmount());
-                kTrans2b.setTheNarration("Withdrawal");
+                kTrans2b.setTheNarration("Withdrawal from CAD account");
+                
+                 transactionHistoryClientLocalT.publishFromTxn(kTrans2b);
 
-                finWealthPaymentTransactionRepo.save(kTrans2b);
+
+               // finWealthPaymentTransactionRepo.save(kTrans2b);
 
                 PushNotificationFireBase puFireSender = new PushNotificationFireBase();
                 puFireSender.setBody(pushNotifyDebitWalletForWalletTransfer(new BigDecimal(rqq.getAmount()),
@@ -525,9 +532,11 @@ public class WebhookKeyService {
                 kTrans2b.setReceiverName(getReceiverName.get(0).getFullName());
                 kTrans2b.setSenderName(getReceiverName.get(0).getFullName());
                 kTrans2b.setSentAmount(amount);
-                kTrans2b.setTheNarration("Deposit");
+                kTrans2b.setTheNarration("Deposit to CAD account");
 
-                finWealthPaymentTransactionRepo.save(kTrans2b);
+               // finWealthPaymentTransactionRepo.save(kTrans2b);
+                
+                transactionHistoryClientLocalT.publishFromTxn(kTrans2b);
 
                 PushNotificationFireBase puFireSender = new PushNotificationFireBase();
                 puFireSender.setBody(pushNotifyCreditWalletForWalletTransfer(new BigDecimal(amount),

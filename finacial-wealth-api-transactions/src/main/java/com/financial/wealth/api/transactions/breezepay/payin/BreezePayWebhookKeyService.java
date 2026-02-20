@@ -20,6 +20,7 @@ import com.financial.wealth.api.transactions.repo.AppConfigRepo;
 import com.financial.wealth.api.transactions.repo.DeviceDetailsRepo;
 import com.financial.wealth.api.transactions.repo.FinWealthPaymentTransactionRepo;
 import com.financial.wealth.api.transactions.repo.RegWalletInfoRepository;
+import com.financial.wealth.api.transactions.services.TransactionHistoryClientLocalT;
 import com.financial.wealth.api.transactions.services.notify.MessageCenterService;
 
 import static com.financial.wealth.api.transactions.tranfaar.services.WebhookKeyService.pushNotifyCreditWalletForWalletTransfer;
@@ -52,7 +53,7 @@ public class BreezePayWebhookKeyService {
 
     private final UttilityMethods utilMeth;
     private final RegWalletInfoRepository regWalletInfoRepository;
-    private final FinWealthPaymentTransactionRepo finWealthPaymentTransactionRepo;
+   // private final FinWealthPaymentTransactionRepo finWealthPaymentTransactionRepo;
     private final DeviceDetailsRepo deviceDetailsRepo;
     private final MessageCenterService messageCenterService;
     private final AddAccountDetailsRepo addAccountDetailsRepo;
@@ -60,6 +61,7 @@ public class BreezePayWebhookKeyService {
     private static final String CCY = "NGN";
     @Value("${fin.wealth.otp.encrypt.key}")
     private String encryptionKey;
+    private final TransactionHistoryClientLocalT transactionHistoryClientLocalT;
 
     public BaseResponse processPayment(WebHookRequest rq, String auth) {
 
@@ -132,9 +134,11 @@ public class BreezePayWebhookKeyService {
                 kTrans2b.setReceiverName(regWalletInfo.get(0).getFullName());
                 kTrans2b.setSenderName(getAcct.get(0).getVirtualAccountName());
                 kTrans2b.setSentAmount(rq.getAmount());
-                kTrans2b.setTheNarration("Deposit");
+                kTrans2b.setTheNarration("Deposit to Naira account");
 
-                finWealthPaymentTransactionRepo.save(kTrans2b);
+                //finWealthPaymentTransactionRepo.save(kTrans2b);
+                
+                transactionHistoryClientLocalT.publishFromTxn(kTrans2b);
 
                 PushNotificationFireBase puFireSender = new PushNotificationFireBase();
                 puFireSender.setBody(pushNotifyCreditWalletForWalletTransfer(new BigDecimal(rq.getAmount()),

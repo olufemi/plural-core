@@ -63,12 +63,12 @@ public class TransactionHistoryClientLocalT {
 
        // e.setEventTime(Instant.now());                // ✅ IMPORTANT
 
-        publish(e);
+        sendToQueue(e);
 
         return e;
     }
 
-    public void publish(TransactionHistoryEvent event) {
+    public void sendToQueue(TransactionHistoryEvent event) {
         rabbitTemplate.convertAndSend(EXCHANGE, ROUTING_KEY, event);
     }
 }

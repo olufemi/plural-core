@@ -217,7 +217,7 @@ public class WalletSystemProxyService {
             if (resEntity != null && resEntity.hasBody()) {
 
                 WalletSystemResponse userStatus = resEntity.getBody();
-                log.info("userStatus :: {}", userStatus);
+               // log.info("userStatus :: {}", userStatus);
                 if (userStatus.getStatusCode() == 200) {
 
                     AppConfig setApp = new AppConfig();
@@ -336,7 +336,7 @@ public class WalletSystemProxyService {
             if (walletSystemResponse != null && walletSystemResponse.hasBody()) {
 
                 WalletSystemResponse userStatus = walletSystemResponse.getBody();
-                log.info("userStatus :: {}", userStatus);
+                //log.info("userStatus :: {}", userStatus);
                 if (userStatus.getStatusCode() != 200) {
 
                     responseModel.setDescription("Wallet Info:, " + userStatus.getDescription());
@@ -392,7 +392,7 @@ public class WalletSystemProxyService {
 
                 WalletSystemResponse userStatus = walletSystemResponse.getBody();
                 if (environment.equals("dev")) {
-                    log.info("userStatus :: {}", userStatus);
+               //     log.info("userStatus :: {}", userStatus);
                 }
                 if (userStatus.getStatusCode() != 200) {
 
@@ -401,7 +401,7 @@ public class WalletSystemProxyService {
                     return responseModel;
                 }
                 if (environment.equals("dev")) {
-                    log.info("authenticateUser response ::::: {} ", userStatus);
+                  //  log.info("authenticateUser response ::::: {} ", userStatus);
                 }
 
                 token = userStatus.getData().getIdToken();
@@ -444,7 +444,7 @@ public class WalletSystemProxyService {
             }
 
             WalletSystemResponse authBody = authResp.getBody();
-            log.info("Wallet system auth response: {}", authBody);
+            //log.info("Wallet system auth response: {}", authBody);
 
             if (authBody.getStatusCode() != 200 || authBody.getData() == null) {
                 String msg = authBody.getDescription() != null ? authBody.getDescription() : "Wallet system auth failed";
@@ -497,12 +497,14 @@ public class WalletSystemProxyService {
             log.info("LedgerSummary status  : {}", resp.getStatusCode());
             log.info("LedgerSummary headers : {}", resp.getHeaders());
             log.info("LedgerSummary body    : {}", resp.getBody());
-            ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
-
+           
             LedgerSummaryResponse body = resp.getBody();
+            /*
+             ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
+
             log.info("LedgerSummaryResponse JSON:\n{}",
                     mapper.writerWithDefaultPrettyPrinter()
-                            .writeValueAsString(body));
+                            .writeValueAsString(body));*/
             if (body == null) {
                 return failure("Ledger service returned empty response", 400);
             }

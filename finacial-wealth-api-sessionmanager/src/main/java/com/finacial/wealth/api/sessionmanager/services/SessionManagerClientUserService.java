@@ -1,5 +1,6 @@
 package com.finacial.wealth.api.sessionmanager.services;
 
+import com.finacial.wealth.api.sessionmanager.email.EmailPublisher;
 import com.finacial.wealth.api.sessionmanager.entities.AddAccountDetails;
 import com.finacial.wealth.api.sessionmanager.entities.DeviceDetails;
 import com.finacial.wealth.api.sessionmanager.entities.PeerToPeerFxReferral;
@@ -9,6 +10,7 @@ import com.finacial.wealth.api.sessionmanager.entities.RegWalletInfo;
 import com.finacial.wealth.api.sessionmanager.entities.SessionServiceLog;
 import com.finacial.wealth.api.sessionmanager.entities.WalletIndivTransactionsDetails;
 import com.finacial.wealth.api.sessionmanager.exceptions.CustomApplicationException;
+import com.finacial.wealth.api.sessionmanager.proxy.ReceiptKeysClient;
 import com.finacial.wealth.api.sessionmanager.repository.AuthenticationLogRepository;
 import com.finacial.wealth.api.sessionmanager.repository.RegWalletCheckLogRepo;
 import com.finacial.wealth.api.sessionmanager.request.AuthUserRequestCustomerUuid;
@@ -63,6 +65,7 @@ import com.finacial.wealth.api.sessionmanager.repository.DeviceDetailsRepo;
 import com.finacial.wealth.api.sessionmanager.repository.PeerToPeerFxReferralRepo;
 import com.finacial.wealth.api.sessionmanager.repository.RegWalletInfoRepository;
 import com.finacial.wealth.api.sessionmanager.repository.WalletIndivTransactionsDetailsRepo;
+import com.finacial.wealth.api.sessionmanager.response.ReceiptKeysResponse;
 import com.finacial.wealth.api.sessionmanager.utils.GlobalMethods;
 import com.finacial.wealth.api.sessionmanager.utils.UttilityMethods;
 
@@ -120,6 +123,8 @@ public class SessionManagerClientUserService {
     private final WalletIndivTransactionsDetailsRepo walletIndivTransactionsDetailsRepo;
     private final AddAccountDetailsRepo addAccountDetailsRepo;
     private final UttilityMethods uttilityMethods;
+    private final EmailPublisher emailPublisher;
+    private final ReceiptKeysClient receiptKeysClient;
 
     @Autowired
     private final UtilityProxy utilityServiceFeignService;
@@ -212,8 +217,11 @@ public class SessionManagerClientUserService {
                 res.setBvn(bvn);
                 res.setWalletId(walletId);
                 // BaseResponse baseResponse2 = new BaseResponse();
-                baseResponse.setStatusCode(200);
                 baseResponse.addData("pinCreated", pinCreated);
+                ReceiptKeysResponse keys = receiptKeysClient.getReceiptKeys();
+
+                baseResponse.addData("canonicalKeys", keys);
+                baseResponse.setStatusCode(200);
 
                 System.out.println(" >>>>>>>>>>>>>>>>>> ::::::::::::::::::::: " + res.getVirtualWalletNo());
 
@@ -280,6 +288,17 @@ public class SessionManagerClientUserService {
 
                     }
 
+                    Map<String, Object> data = new HashMap<>();
+                    data.put("email", rq.getEmailAddress());
+                    data.put("firstName", cumLog.get(0).getFirstName());
+
+                    /*emailPublisher.publish(
+                            "AUTHENTICATION",
+                            "LOGIN",
+                            rq.getEmailAddress(),
+                            cumLog.get(0).getFirstName(),
+                            data
+                    );*/
                     logger.info(String.format("uttilityMethods.getIfAppExist(appVersion) >>>>>>=>%s", uttilityMethods.getIfAppExist(appVersion)));
 
                     if (uttilityMethods.getIfAppExist(appVersion) == true) {

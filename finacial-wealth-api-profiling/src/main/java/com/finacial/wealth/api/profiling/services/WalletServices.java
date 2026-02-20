@@ -36,6 +36,7 @@ import com.finacial.wealth.api.profiling.domain.UserDetails;
 import com.finacial.wealth.api.profiling.domain.UserLimitConfig;
 import com.finacial.wealth.api.profiling.domain.VerifyEmailAddLog;
 import com.finacial.wealth.api.profiling.domain.VerifyReqIdDetailsAuth;
+import com.finacial.wealth.api.profiling.email.EmailPublisher;
 import com.finacial.wealth.api.profiling.fx.p.p.wallet.WalletTransactionsDetailsRepo;
 import com.finacial.wealth.api.profiling.models.AddNewUserToLimit;
 import com.finacial.wealth.api.profiling.models.ApiResponseModel;
@@ -194,6 +195,7 @@ public class WalletServices {
     private final InvestmentOrderRepository investmentOrderRepository;
     private final InvestmentProductRepository investmentProductRepository;
     private final InvestmentPositionRepository investmentPositionRepository;
+    private final EmailPublisher emailPublisher;
 
     @Value("${fin.wealth.foot.print.key}")
     private String secretKeyConfoged;
@@ -234,7 +236,7 @@ public class WalletServices {
             WalletTransactionsDetailsRepo walletTransactionsDetailsRepo,
             InvestmentOrderRepository investmentOrderRepository,
             InvestmentProductRepository investmentProductRepository,
-            InvestmentPositionRepository investmentPositionRepository) {
+            InvestmentPositionRepository investmentPositionRepository, EmailPublisher emailPublisher) {
         this.footprintResponseLogRepo = footprintResponseLogRepo;
         this.footprintValidationFailedRepo = footprintValidationFailedRepo;
         this.footprintValidationRepository = footprintValidationRepository;
@@ -267,6 +269,7 @@ public class WalletServices {
         this.investmentOrderRepository = investmentOrderRepository;
         this.investmentProductRepository = investmentProductRepository;
         this.investmentPositionRepository = investmentPositionRepository;
+        this.emailPublisher = emailPublisher;
 
     }
 
@@ -1508,6 +1511,19 @@ public class WalletServices {
             responseModel.setDescription(
                     "Customer onboarded successfully, kindly login to create PIN. Thank you.");
             responseModel.setStatusCode(200);
+
+            Map<String, Object> data = new HashMap<>();
+            data.put("email", rq.getEmailAddress());
+            data.put("firstName", resultOnboard.getFirstName());
+
+            /*emailPublisher.publish(
+                    "ONBOARDING",
+                    "SUCCESSFUL_SIGNUP",
+                    rq.getEmailAddress(),
+                    resultOnboard.getFirstName(),
+                    data
+            );
+            */
             // responseModel.setStatusCode(STANDARD_SUCESS_CODE);
             // return responseModel;
 
@@ -1723,7 +1739,7 @@ public class WalletServices {
         String token = null;
 
         if (walletSystemResponse != null && walletSystemResponse.getStatusCode() == 200) {
-            log.info("authenticateUser response :: {}", walletSystemResponse);
+           // log.info("authenticateUser response :: {}", walletSystemResponse);
             WalletSystemUserDetails data = walletSystemResponse.getData();
             String productCode = data.getProductCode();
             if (data != null) {
@@ -1733,14 +1749,14 @@ public class WalletServices {
                     ResponseEntity<WalletSystemResponse> userStatusEntity = walletSystemProxyService.checkIfWalletNoExists(walletUserRequest);
                     if (userStatusEntity != null && userStatusEntity.hasBody()) {
                         WalletSystemResponse userStatus = userStatusEntity.getBody();
-                        log.info("userStatus :: {}", userStatus);
+                        //log.info("userStatus :: {}", userStatus);
                         if (userStatus.getStatusCode() == 200) {
                             return new WalletSystemResponse(200, "Wallet user: " + walletNo + " exists already!");
                         } else {
                             ResponseEntity<WalletSystemResponse> addWalletStatusEntity = walletSystemProxyService.addWalletNo(walletUserRequest);
                             if (addWalletStatusEntity != null && addWalletStatusEntity.hasBody()) {
                                 WalletSystemResponse addWalletStatus = addWalletStatusEntity.getBody();
-                                log.info("addWalletStatus :: {}", addWalletStatus);
+                             //   log.info("addWalletStatus :: {}", addWalletStatus);
                                 if (addWalletStatus.getStatusCode() == 200) {
                                     return new WalletSystemResponse(200, "Wallet user: " + walletNo + " added successfully!");
                                 } else {

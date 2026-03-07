@@ -17,9 +17,15 @@ import com.financial.wealth.api.transactions.models.OtherBankTransferRequest;
 import com.financial.wealth.api.transactions.models.SaveBeneficiary;
 import com.financial.wealth.api.transactions.models.WalletNoReq;
 import com.financial.wealth.api.transactions.models.local.trans.NameLookUp;
+import com.financial.wealth.api.transactions.services.HashDebugUtil;
+import com.financial.wealth.api.transactions.services.LocalTransferCanon;
 import com.financial.wealth.api.transactions.services.LocalTransferService;
+import com.financial.wealth.api.transactions.utils.UttilityMethods;
+import javax.servlet.http.HttpServletRequest;
 import javax.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -36,9 +42,13 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 public class TransferServicesControllers {
 
+    private static final Logger log = LoggerFactory.getLogger(TransferServicesControllers.class);
+
     private final LocalTransferService localTransferService;
     private final NipBankService nipService;
     private final BreezePayWebhookKeyService breezePayWebhookKeyService;
+    private final LocalTransferCanon localTransferCanon;
+    private final UttilityMethods uttilityMethods;
 
     @GetMapping("/interbank/get-banks")
     public ApiResponseModel getAllBanks(@RequestHeader(value = "authorization", required = true) String auth) throws ApiClientException {
@@ -79,7 +89,45 @@ public class TransferServicesControllers {
 
     @PostMapping("/localtransfer/transfer")
     public ResponseEntity<BaseResponse> processTransfer(@RequestHeader(value = "authorization", required = true) String auth,
-            @RequestBody @Valid LocalTransferRequest rq) {
+            @RequestBody @Valid LocalTransferRequest rq, HttpServletRequest http) {
+
+        BaseResponse baseResponse = localTransferService.processTransfer(rq, "", auth);
+        return new ResponseEntity<>(baseResponse, HttpStatus.OK);
+    }
+
+    @PostMapping("/localtransfer/transfer/non-pin")
+    public ResponseEntity<BaseResponse> processTransferNonPin(@RequestHeader(value = "authorization", required = true) String auth,
+            @RequestBody @Valid LocalTransferRequest rq, HttpServletRequest http) {
+
+        String userId = uttilityMethods.getClaimFromJwt(auth, "emailAddress");
+        String refId = rq.getProcessId();
+        String transferCanonical = LocalTransferCanon.canonicalPayloadV1(rq);
+        String transferHashB64 = HashDebugUtil.sha256B64(transferCanonical);
+
+        log.info("[CONSENT] transferCanonical='{}'", transferCanonical);
+        log.info("[CONSENT] transferCanonical.length={}", transferCanonical.length());
+        log.info("[CONSENT] transferCanonical.hashB64={}", transferHashB64);
+        //String payloadHashB64 = localTransferCanon.payloadHashB64(rq);
+
+//        BaseResponse consentCheck = localTransferCanon.requireConsent(
+//                http,
+//                "POST",
+//                refId,
+//                payloadHashB64,
+//                userId
+//        );
+        BaseResponse consentCheck = localTransferCanon.requireConsent(
+                http,
+                "POST",
+                rq.getProcessId(),
+                LocalTransferCanon.payloadHashB64(rq),
+                userId,
+                rq
+        );
+
+        if (consentCheck.getStatusCode() != 200) {
+            return ResponseEntity.status(consentCheck.getStatusCode()).body(consentCheck);
+        }
 
         BaseResponse baseResponse = localTransferService.processTransfer(rq, "", auth);
         return new ResponseEntity<>(baseResponse, HttpStatus.OK);

@@ -24,6 +24,8 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -130,4 +132,27 @@ public interface InvestmentOrderRepository extends JpaRepository<InvestmentOrder
             List<InvestmentOrderStatus> statuses
     );
 
+    @Query("""
+       SELECT o
+       FROM InvestmentOrder o
+       WHERE o.emailAddress = :email
+         AND o.status = :status
+         AND o.type = :type
+         AND (:parentOrderRef IS NULL OR o.parentOrderRef = :parentOrderRef)
+       ORDER BY o.updatedAt DESC
+       """)
+    Page<InvestmentOrder> findSettledLiquidationsByEmail(
+            @Param("email") String email,
+            @Param("status") InvestmentOrderStatus status,
+            @Param("type") InvestmentOrderType type,
+            @Param("parentOrderRef") String parentOrderRef,
+            Pageable pageable
+    );
+    
+    boolean existsByEmailAddressAndParentOrderRefAndTypeAndStatus(
+        String emailAddress,
+        String parentOrderRef,
+        InvestmentOrderType type,
+        InvestmentOrderStatus status
+);
 }

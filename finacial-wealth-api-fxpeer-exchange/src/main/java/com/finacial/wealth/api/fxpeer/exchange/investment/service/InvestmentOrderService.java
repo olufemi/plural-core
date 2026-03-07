@@ -44,6 +44,7 @@ import com.finacial.wealth.api.fxpeer.exchange.investment.record.CreateSubscript
 import com.finacial.wealth.api.fxpeer.exchange.investment.record.InvestmentOrderPojo;
 import com.finacial.wealth.api.fxpeer.exchange.investment.record.InvestmentOrderResponse;
 import com.finacial.wealth.api.fxpeer.exchange.investment.record.InvestmentProductRecord;
+import com.finacial.wealth.api.fxpeer.exchange.investment.record.InvestmentRedemptionDTO;
 import com.finacial.wealth.api.fxpeer.exchange.investment.record.InvestmentTopupRequest;
 import com.finacial.wealth.api.fxpeer.exchange.investment.record.InvestmentTopupRequestCaller;
 import com.finacial.wealth.api.fxpeer.exchange.investment.record.InvestmentTopupResponse;
@@ -51,6 +52,7 @@ import com.finacial.wealth.api.fxpeer.exchange.investment.record.LiquidateInvest
 import com.finacial.wealth.api.fxpeer.exchange.investment.record.PartnerSubscriptionResponse;
 import com.finacial.wealth.api.fxpeer.exchange.investment.record.PreDebitInvestmentResult;
 import com.finacial.wealth.api.fxpeer.exchange.investment.record.ProcessDebitWalletForInvestment;
+import com.finacial.wealth.api.fxpeer.exchange.investment.record.RedemptionInvestmentRequest;
 import com.finacial.wealth.api.fxpeer.exchange.investment.repo.InvestmentOrderRepository;
 import com.finacial.wealth.api.fxpeer.exchange.investment.repo.InvestmentPositionHistoryRepository;
 import com.finacial.wealth.api.fxpeer.exchange.investment.repo.InvestmentPositionRepository;
@@ -101,6 +103,8 @@ import java.time.Instant;
 import java.util.Collections;
 import java.util.Optional;
 import java.util.function.Consumer;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.repository.query.Param;
 
 /**
@@ -403,8 +407,7 @@ public class InvestmentOrderService {
             kTrans2b.setTheNarration("Investment purchase.");
             kTrans2b.setCurrencyCode(rq.getCurrencyCode());
 
-            transactionHistoryClientLocalT.publishFromTxn(kTrans2b);
-
+            // transactionHistoryClientLocalT.publishFromTxn(kTrans2b);
             return out;
 
         } catch (Exception e) {
@@ -765,6 +768,81 @@ public class InvestmentOrderService {
                 // 8) Activity + notification
                 activityService.logInvestmentSubscription(order, position, grossDebit);
             }
+        }
+    }
+
+    @Transactional()
+    public BaseResponse getInvestmentRedemption(RedemptionInvestmentRequest rq, String auth) {
+
+        BaseResponse res = new BaseResponse();
+
+        try {
+            String email = utilService.getClaimFromJwt(auth, "emailAddress");
+            if (email == null || email.isBlank()) {
+                res.setStatusCode(401);
+                res.setDescription("Invalid token");
+                res.setData(Collections.emptyMap());
+                return res;
+            }
+
+            int page = rq.page() != null ? rq.page() : 0;
+            int size = rq.size() != null ? rq.size() : 20;
+
+            if (rq.parentOrderId() != null) {
+                boolean exists = orderRepo.existsByEmailAddressAndParentOrderRefAndTypeAndStatus(
+                        email,
+                        rq.parentOrderId(),
+                        InvestmentOrderType.LIQUIDATION,
+                        InvestmentOrderStatus.SETTLED
+                );
+
+                if (!exists) {
+                    res.setStatusCode(400);
+                    res.setDescription("Invalid parentOrderRef");
+                    res.setData(Collections.emptyMap());
+                    return res;
+                }
+            }
+
+            Page<InvestmentOrder> orders
+                    = orderRepo.findSettledLiquidationsByEmail(
+                            email,
+                            InvestmentOrderStatus.SETTLED,
+                            InvestmentOrderType.LIQUIDATION,
+                            rq.parentOrderId(), // assuming your request field is named parentOrderId
+                            PageRequest.of(page, size)
+                    );
+
+            var content = orders.getContent().stream().map(o -> Map.<String, Object>of(
+                    "orderRef", o.getOrderRef(),
+                    "orderParentRef", o.getParentOrderRef(),
+                    "amount", o.getAmount(),
+                    "currency", o.getProduct().getCurrency(),
+                    "requestedAt", o.getCreatedAt(),
+                    "settledAt", o.getUpdatedAt(),
+                    "status", o.getStatus().name(),
+                    "productName", o.getProduct().getName(), // if available; else from o.getPosition().getProduct().getName()
+                    "positionId", o.getPosition() != null ? o.getPosition().getId() : null
+            )).toList();
+
+            Map<String, Object> data = new HashMap<>();
+            data.put("content", content);
+            data.put("page", orders.getNumber());
+            data.put("size", orders.getSize());
+            data.put("totalElements", orders.getTotalElements());
+            data.put("totalPages", orders.getTotalPages());
+
+            res.setStatusCode(200);
+            res.setDescription("Redemptions fetched successfully");
+            res.setData(data);
+            return res;
+
+        } catch (Exception ex) {
+            ex.printStackTrace();
+            res.setStatusCode(500);
+            res.setDescription("Something went wrong");
+            res.setData(Collections.emptyMap());
+            return res;
         }
     }
 
@@ -1207,8 +1285,7 @@ public class InvestmentOrderService {
             kTrans2b.setTheNarration("Investment Liquidation.");
             kTrans2b.setCurrencyCode(order.getProduct().getCurrency());
 
-            transactionHistoryClientLocalT.publishFromTxn(kTrans2b);
-
+            // transactionHistoryClientLocalT.publishFromTxn(kTrans2b);
         } catch (Exception ex) {
             ex.printStackTrace();
             res.setStatusCode(statusCode);

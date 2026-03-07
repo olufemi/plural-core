@@ -5,7 +5,11 @@
  */
 package com.finacial.wealth.api.profiling.models;
 
+import com.google.gson.annotations.Expose;
+import io.swagger.annotations.ApiModelProperty;
+import javax.validation.constraints.NotNull;
 import lombok.Data;
+import org.hibernate.validator.constraints.NotBlank;
 
 /**
  *
@@ -18,5 +22,10 @@ public class ChangePinInApp {
     private int oldPin;
     private int newPin;
     private String uuid;
+    @ApiModelProperty(notes = "The DeviceId")
+    @NotNull(message = "the field \"deviceId\" is not nillable")
+    @NotBlank
+    @Expose
+    private String deviceId;
 
 }

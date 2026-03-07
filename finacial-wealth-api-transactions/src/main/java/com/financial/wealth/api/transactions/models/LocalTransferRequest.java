@@ -22,5 +22,6 @@ public class LocalTransferRequest {
     private String processId;
     private String transactionType;
     private String fees;
+    private String theNarration;
 
 }

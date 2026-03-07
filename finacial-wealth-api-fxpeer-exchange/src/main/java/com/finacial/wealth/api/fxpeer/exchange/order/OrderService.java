@@ -643,9 +643,13 @@ public class OrderService {
                 kTrans2b.setTheNarration("Fx Peer-Peer Transfer");
                 kTrans2b.setCurrencyCode(off.get(0).getCurrencyReceive().toString());
 
-                // finWealthPaymentTransactionRepo.save(kTrans2b);
-                transactionHistoryClientLocalT.publishFromTxn(kTrans2b);
+                //finWealthPaymentTransactionRepo.save(kTrans2b);
+                System.out.println("ABOUT TO PUBLISH TXN HISTORY txId=" + kTrans2b.getTransactionId()
+                        + " walletNo=" + kTrans2b.getWalletNo()
+                        + " paymentType=" + kTrans2b.getPaymentType()
+                        + " amount=" + kTrans2b.getAmmount());
 
+                // transactionHistoryClientLocalT.publishFromTxn(kTrans2b);
                 //augument WalletTransactionsDetails
                 WalletTransactionsDetails getWalDeupdate = walletTransactionsDetailsRepo.findByCorrelationIdUpdated(rq.getOfferCorrelationId());
                 BigDecimal availableQuantity = getWalDeupdate.getAvailableQuantity();
@@ -898,7 +902,7 @@ public class OrderService {
         rqC.setNarration(off.get(0).getCurrencySell() + "_Deposit");
         rqC.setPhoneNumber(getBuyyAcctAcct);
         rqC.setTransAmount(amount.toString());
-        rqC.setTransactionId(transactionId + "-DEPOSIT");
+        rqC.setTransactionId(transactionId + "-DEPOSIT" + "2");
 
         System.out.println(" creditBuyerAcct REQ  ::::::::::::::::  %S  " + new Gson().toJson(rqC));
 
@@ -916,7 +920,7 @@ public class OrderService {
             //GLCredit.setPhoneNumber(utilService.decryptData(utilService.getSETTING_KEY_WALLET_SYSTEM_SYSTEM_GG_CAD()));
             GLCredit.setPhoneNumber(utilService.decryptData(GGL_ACCOUNT));
             GLCredit.setTransAmount(rqC.getFinalCHarges());
-            GLCredit.setTransactionId(rqC.getTransactionId() + "-DEPOSIT-GL");
+            GLCredit.setTransactionId(rqC.getTransactionId() + "-DEPOSIT-GL" + "2");
 
             System.out.println(" creditAcct_GL buyer legCredit REQ  ::::::::::::::::  %S  " + new Gson().toJson(GLCredit));
 
@@ -945,8 +949,7 @@ public class OrderService {
         kTrans2b.setTheNarration("Fx Peer-Peer Transfer");
         kTrans2b.setCurrencyCode(off.get(0).getCurrencyReceive().toString());
 
-        transactionHistoryClientLocalT.publishFromTxn(kTrans2b);
-
+        //  transactionHistoryClientLocalT.publishFromTxn(kTrans2b);
         Order ord = new Order();
         ord.setOfferId(off.get(0).getId());
         ord.setSellerUserId(off.get(0).getSellerUserId());

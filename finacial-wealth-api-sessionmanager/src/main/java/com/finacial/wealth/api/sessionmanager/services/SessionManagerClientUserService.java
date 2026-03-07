@@ -10,7 +10,6 @@ import com.finacial.wealth.api.sessionmanager.entities.RegWalletInfo;
 import com.finacial.wealth.api.sessionmanager.entities.SessionServiceLog;
 import com.finacial.wealth.api.sessionmanager.entities.WalletIndivTransactionsDetails;
 import com.finacial.wealth.api.sessionmanager.exceptions.CustomApplicationException;
-import com.finacial.wealth.api.sessionmanager.proxy.ReceiptKeysClient;
 import com.finacial.wealth.api.sessionmanager.repository.AuthenticationLogRepository;
 import com.finacial.wealth.api.sessionmanager.repository.RegWalletCheckLogRepo;
 import com.finacial.wealth.api.sessionmanager.request.AuthUserRequestCustomerUuid;
@@ -68,6 +67,9 @@ import com.finacial.wealth.api.sessionmanager.repository.WalletIndivTransactions
 import com.finacial.wealth.api.sessionmanager.response.ReceiptKeysResponse;
 import com.finacial.wealth.api.sessionmanager.utils.GlobalMethods;
 import com.finacial.wealth.api.sessionmanager.utils.UttilityMethods;
+import com.finacial.wealth.api.sessionmanager.proxy.FxPeerClient;
+import com.finacial.wealth.api.sessionmanager.request.DeviceBindingResponse;
+import com.finacial.wealth.api.sessionmanager.request.DeviceLoginKeyRequest;
 
 @Service
 @RequiredArgsConstructor
@@ -124,7 +126,7 @@ public class SessionManagerClientUserService {
     private final AddAccountDetailsRepo addAccountDetailsRepo;
     private final UttilityMethods uttilityMethods;
     private final EmailPublisher emailPublisher;
-    private final ReceiptKeysClient receiptKeysClient;
+    private final FxPeerClient receiptKeysClient;
 
     @Autowired
     private final UtilityProxy utilityServiceFeignService;
@@ -158,7 +160,8 @@ public class SessionManagerClientUserService {
 
         try {
 
-            System.out.println(" " + new Gson().toJson(rq));
+            // System.out.println(" " + new Gson().toJson(rq));
+            logger.info(String.format("rq>>>>>> +++++++++++++ =>%s", rq.getDevicePublicSpkiB64()));
 
             logger.info(String.format("rq.getPushNotificationToken()>>>>>> +++++++++++++ =>%s", rq.getPushNotificationToken()));
 
@@ -203,7 +206,7 @@ public class SessionManagerClientUserService {
                 res.setPhoneNumberVerification(phoneNumberVerification);
                 res.setPhoneNumber(mobile);
                 res.setCustomerAccountNo(accountNumber);
-                res.setUserDeviceId(rq.getUserDeviceId());
+                res.setUserDeviceId(rq.getDeviceId());
                 res.setBrowserType(rq.getBrowserType());
                 res.setDeviceType(rq.getDeviceType());
                 res.setOsType(rq.getOsType());
@@ -221,6 +224,23 @@ public class SessionManagerClientUserService {
                 ReceiptKeysResponse keys = receiptKeysClient.getReceiptKeys();
 
                 baseResponse.addData("canonicalKeys", keys);
+
+                DeviceLoginKeyRequest getdevKe = new DeviceLoginKeyRequest();
+                getdevKe.setEmailAddress(email);
+                getdevKe.setDeviceId(rq.getDeviceId());
+                getdevKe.setDevicePublicSpkiB64(rq.getDevicePublicSpkiB64());
+
+                DeviceBindingResponse getDevBind = receiptKeysClient.loginKey(getdevKe);
+
+                System.out.println("DeviceBindingResponse getDevBind   " + getDevBind);
+
+                Map mp = new HashMap();
+                mp.put("deviceId", getDevBind.getDeviceId());
+                mp.put("activeKid", getDevBind.getActiveKid());
+                mp.put("status", getDevBind.getStatus());
+
+                baseResponse.addData("deviceBinding", mp);
+
                 baseResponse.setStatusCode(200);
 
                 System.out.println(" >>>>>>>>>>>>>>>>>> ::::::::::::::::::::: " + res.getVirtualWalletNo());

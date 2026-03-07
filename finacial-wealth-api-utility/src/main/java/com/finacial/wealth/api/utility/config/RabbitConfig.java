@@ -14,9 +14,12 @@ import org.springframework.amqp.rabbit.config.SimpleRabbitListenerContainerFacto
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import java.util.HashMap;
+import java.util.Map;
 
 import org.springframework.amqp.rabbit.connection.ConnectionFactory;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.amqp.support.converter.DefaultJackson2JavaTypeMapper;
 
 import org.springframework.amqp.support.converter.Jackson2JsonMessageConverter;
 import org.springframework.amqp.support.converter.MessageConverter;
@@ -163,27 +166,56 @@ public class RabbitConfig {
 
     @Bean
     public MessageConverter jacksonConverter(ObjectMapper rabbitObjectMapper) {
-        return new Jackson2JsonMessageConverter(rabbitObjectMapper);
+
+        Jackson2JsonMessageConverter converter = new Jackson2JsonMessageConverter(rabbitObjectMapper);
+
+        DefaultJackson2JavaTypeMapper typeMapper = new DefaultJackson2JavaTypeMapper();
+        typeMapper.setTrustedPackages(
+                "com.finacial.wealth.api.utility.domains",
+                "com.financial.wealth.api.transactions.domain",
+                "com.finacial.wealth.api.fxpeer.exchange.investment.record"
+        );
+
+        Map<String, Class<?>> map = new HashMap<String, Class<?>>();
+
+        // from transaction-service
+        map.put(
+                "com.financial.wealth.api.transactions.domain.TransactionHistoryEvent",
+                com.finacial.wealth.api.utility.domains.TransactionHistoryEvent.class
+        );
+
+        // ✅ from fxpeer-service
+        map.put(
+                "com.finacial.wealth.api.fxpeer.exchange.investment.record.TransactionHistoryEvent",
+                com.finacial.wealth.api.utility.domains.TransactionHistoryEvent.class
+        );
+
+        typeMapper.setIdClassMapping(map);
+        converter.setJavaTypeMapper(typeMapper);
+
+        return converter;
     }
 
-   
-@Bean
-public SimpleRabbitListenerContainerFactory rabbitListenerContainerFactory(ConnectionFactory connectionFactory) {
+    @Bean
+    public SimpleRabbitListenerContainerFactory rabbitListenerContainerFactory(
+            ConnectionFactory connectionFactory,
+            MessageConverter jacksonConverter) {
 
-    SimpleRabbitListenerContainerFactory factory = new SimpleRabbitListenerContainerFactory();
-    factory.setConnectionFactory(connectionFactory);
+        SimpleRabbitListenerContainerFactory factory = new SimpleRabbitListenerContainerFactory();
+        factory.setConnectionFactory(connectionFactory);
 
-    // For Option 2: we want raw bytes via Message.getBody()
-    factory.setMessageConverter(new SimpleMessageConverter());
+        // ✅ must be Jackson converter (not SimpleMessageConverter)
+        factory.setMessageConverter(jacksonConverter);
 
-    // reject (no infinite requeue). DLQ if DLX configured.
-    factory.setDefaultRequeueRejected(false);
+        // reject (no infinite requeue). DLQ if configured.
+        factory.setDefaultRequeueRejected(false);
 
-    return factory;
-}
+        return factory;
+    }
 
     @Bean
-    public RabbitTemplate rabbitTemplate(ConnectionFactory connectionFactory,
+    public RabbitTemplate rabbitTemplate(
+            ConnectionFactory connectionFactory,
             MessageConverter jacksonConverter) {
 
         RabbitTemplate template = new RabbitTemplate(connectionFactory);

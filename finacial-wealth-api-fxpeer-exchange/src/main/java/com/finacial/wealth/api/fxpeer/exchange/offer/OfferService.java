@@ -748,7 +748,7 @@ public class OfferService {
                 kTrans2b.setTheNarration("Fx Peer-Peer listing.");
                 kTrans2b.setCurrencyCode(rq.getCurrencySell().toString());
 
-                transactionHistoryClientLocalT.publishFromTxn(kTrans2b);
+              //  transactionHistoryClientLocalT.publishFromTxn(kTrans2b);
 
                 System.out.println("sellerId" + "  ::::::::::::::::::::: >>>>>>>>>>>>>>>>>>  " + sellerId);
 
@@ -1087,7 +1087,7 @@ public class OfferService {
                 kTrans2b.setCurrencyCode(getWalDeupdate.getCurrencyToSell());
 
                 // finWealthPaymentTransactionRepo.save(kTrans2b);
-                transactionHistoryClientLocalT.publishFromTxn(kTrans2b);
+               // transactionHistoryClientLocalT.publishFromTxn(kTrans2b);
 
             }
 

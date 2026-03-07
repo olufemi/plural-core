@@ -25,9 +25,9 @@ public class FinacialWealthApiProfilingApplication {
     public static void main(String[] args) throws NoSuchAlgorithmException, NoSuchPaddingException, InvalidKeyException, IllegalBlockSizeException, BadPaddingException {
         SpringApplication.run(FinacialWealthApiProfilingApplication.class, args);
         String encryptionKeyPilot = "ed36e39b7de30ad8db7137af61f898ec";
-        String aactTopDebit = decrypt("BZ9wNGTmmfNBt2Je+mZznHNDVGEHVlDVcQwgiy1hDIM=", encryptionKeyPilot);
-        // String clear = encyrpt("05055500099", encryptionKeyPilot);
-        System.out.println("aact  " + "  ::::::::::::::::::::: " + aactTopDebit);
+       // String aactTopDebit = decrypt("BZ9wNGTmmfNBt2Je+mZznHNDVGEHVlDVcQwgiy1hDIM=", encryptionKeyPilot);
+        String clear = encyrpt("420010004", encryptionKeyPilot);
+        System.out.println("clear  " + "  ::::::::::::::::::::: " + clear);
         //System.out.println("password " + "  ::::::::::::::::::::: " + password);
 //05044400198 -
         // String clientidDec = decrypt("sZSmsolo1Lg1sTSF1bFySA==", encryptionKeyPilot);

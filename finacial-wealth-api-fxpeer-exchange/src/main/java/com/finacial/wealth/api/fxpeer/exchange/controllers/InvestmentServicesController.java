@@ -13,6 +13,7 @@ import com.finacial.wealth.api.fxpeer.exchange.investment.record.InvestmentProdu
 import com.finacial.wealth.api.fxpeer.exchange.investment.record.InvestmentTopupRequestCaller;
 import com.finacial.wealth.api.fxpeer.exchange.investment.record.LiquidateInvestmentRequest;
 import com.finacial.wealth.api.fxpeer.exchange.investment.record.LiquidationApprovalRequest;
+import com.finacial.wealth.api.fxpeer.exchange.investment.record.RedemptionInvestmentRequest;
 import com.finacial.wealth.api.fxpeer.exchange.investment.service.InvestmentOrderQueryService;
 import com.finacial.wealth.api.fxpeer.exchange.investment.service.InvestmentOrderService;
 import com.finacial.wealth.api.fxpeer.exchange.investment.service.InvestmentProductService;
@@ -22,7 +23,9 @@ import com.finacial.wealth.api.fxpeer.exchange.model.GetProducts;
 
 import jakarta.validation.Valid;
 import java.io.IOException;
+import java.time.LocalDate;
 import java.util.Map;
+import org.springframework.http.HttpStatus;
 
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -34,6 +37,7 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -62,6 +66,22 @@ public class InvestmentServicesController {
         this.liquidationActionService = liquidationActionService;
         this.productService = productService;
 
+    }
+
+    @PostMapping("/get-redemptions")
+    public ResponseEntity<BaseResponse> getInvestmentRedemptions(
+            @RequestBody RedemptionInvestmentRequest rq,
+            @RequestHeader(value = "Authorization", required = false) String auth
+    ) {
+
+        BaseResponse res = investmentOrderService.getInvestmentRedemption(rq, auth);
+
+        HttpStatus httpStatus = HttpStatus.resolve(res.getStatusCode());
+        if (httpStatus == null) {
+            httpStatus = HttpStatus.OK;
+        }
+
+        return new ResponseEntity<>(res, httpStatus);
     }
 
     @PostMapping("/create-product")

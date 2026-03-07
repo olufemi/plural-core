@@ -48,6 +48,8 @@ import com.finacial.wealth.api.profiling.models.ComputeInvestmentBalance;
 import com.finacial.wealth.api.profiling.models.CreatePinOtp;
 import com.finacial.wealth.api.profiling.models.DecryptRequest;
 import com.finacial.wealth.api.profiling.models.DecryptResponse;
+import com.finacial.wealth.api.profiling.models.DeviceBindingResponse;
+import com.finacial.wealth.api.profiling.models.DeviceConfirmOtp;
 import com.finacial.wealth.api.profiling.models.FootprintDecryptRequest;
 import com.finacial.wealth.api.profiling.models.FootprintDecryptResponse;
 import com.finacial.wealth.api.profiling.models.GetCustomerDetails;
@@ -61,6 +63,7 @@ import com.finacial.wealth.api.profiling.models.UserDeviceReqChange;
 import com.finacial.wealth.api.profiling.models.WalletNo;
 import com.finacial.wealth.api.profiling.proxies.FootprintValidationProxy;
 import com.finacial.wealth.api.profiling.proxies.FrontPrintProxy;
+import com.finacial.wealth.api.profiling.proxies.FxPeerClient;
 import com.finacial.wealth.api.profiling.proxies.UtilitiesProxy;
 import com.finacial.wealth.api.profiling.repo.AddAccountDetailsRepo;
 import com.finacial.wealth.api.profiling.repo.ChangeDeviceLogFailedRepo;
@@ -172,6 +175,7 @@ public class WalletServices {
     private static final String NO_DEVICE_REGISTERED = "You dont have any device registered";
     private static final String OTP_SUCCESSFULLY_SENT = "Otp Sent SuccessFully.";
     private final UtilitiesProxy utilitiesProxy;
+    private final FxPeerClient fxPeerClient;
 
     private static final int USER_EXISTS_BUT_NOT_YET_PHONE_VERIFIED_STATUS_CODE = 50;
 
@@ -236,7 +240,8 @@ public class WalletServices {
             WalletTransactionsDetailsRepo walletTransactionsDetailsRepo,
             InvestmentOrderRepository investmentOrderRepository,
             InvestmentProductRepository investmentProductRepository,
-            InvestmentPositionRepository investmentPositionRepository, EmailPublisher emailPublisher) {
+            InvestmentPositionRepository investmentPositionRepository, EmailPublisher emailPublisher,
+            FxPeerClient fxPeerClient) {
         this.footprintResponseLogRepo = footprintResponseLogRepo;
         this.footprintValidationFailedRepo = footprintValidationFailedRepo;
         this.footprintValidationRepository = footprintValidationRepository;
@@ -270,6 +275,7 @@ public class WalletServices {
         this.investmentProductRepository = investmentProductRepository;
         this.investmentPositionRepository = investmentPositionRepository;
         this.emailPublisher = emailPublisher;
+        this.fxPeerClient = fxPeerClient;
 
     }
 
@@ -535,6 +541,19 @@ public class WalletServices {
             updateVeri.setProcessId(processId);
             //updateVeri.setRequestId(otpReqId);
             verifyReqIdDetailsAuthRepo.save(updateVeri);
+            DeviceConfirmOtp getdevKe = new DeviceConfirmOtp();
+
+            getdevKe.setDeviceId(rq.getDeviceId());
+            getdevKe.setEmailAddress(getInitAcPin.get(0).getEmailAddress());
+
+            DeviceBindingResponse getDevBind = fxPeerClient.checkIfDeviceBelongsToUser(getdevKe);
+
+            Map mp = new HashMap();
+            mp.put("deviceId", getDevBind.getDeviceId());
+            mp.put("activeKid", getDevBind.getActiveKid());
+            mp.put("status", getDevBind.getStatus());
+
+            responseModel.addData("deviceBinding", mp);
 
             responseModel.setDescription("Wallet PIN reset was successful, Thank you.");
             responseModel.setStatusCode(200);
@@ -1523,10 +1542,9 @@ public class WalletServices {
                     resultOnboard.getFirstName(),
                     data
             );
-            */
+             */
             // responseModel.setStatusCode(STANDARD_SUCESS_CODE);
             // return responseModel;
-
         } catch (Exception ex) {
             responseModel.setDescription(statusMessage);
             responseModel.setStatusCode(statusCode);
@@ -1739,7 +1757,7 @@ public class WalletServices {
         String token = null;
 
         if (walletSystemResponse != null && walletSystemResponse.getStatusCode() == 200) {
-           // log.info("authenticateUser response :: {}", walletSystemResponse);
+            // log.info("authenticateUser response :: {}", walletSystemResponse);
             WalletSystemUserDetails data = walletSystemResponse.getData();
             String productCode = data.getProductCode();
             if (data != null) {
@@ -1756,7 +1774,7 @@ public class WalletServices {
                             ResponseEntity<WalletSystemResponse> addWalletStatusEntity = walletSystemProxyService.addWalletNo(walletUserRequest);
                             if (addWalletStatusEntity != null && addWalletStatusEntity.hasBody()) {
                                 WalletSystemResponse addWalletStatus = addWalletStatusEntity.getBody();
-                             //   log.info("addWalletStatus :: {}", addWalletStatus);
+                                //   log.info("addWalletStatus :: {}", addWalletStatus);
                                 if (addWalletStatus.getStatusCode() == 200) {
                                     return new WalletSystemResponse(200, "Wallet user: " + walletNo + " added successfully!");
                                 } else {
@@ -2436,6 +2454,21 @@ public class WalletServices {
 
             responseModel.setDescription("Wallet PIN Activation was successful, Thank you.");
             responseModel.setStatusCode(200);
+
+            DeviceConfirmOtp getdevKe = new DeviceConfirmOtp();
+
+            getdevKe.setDeviceId(rq.getDeviceId());
+            getdevKe.setEmailAddress(getInitAcPin.get(0).getEmailAddress());
+
+            DeviceBindingResponse getDevBind = fxPeerClient.checkIfDeviceBelongsToUser(getdevKe);
+
+            Map mp = new HashMap();
+            mp.put("deviceId", getDevBind.getDeviceId());
+            mp.put("activeKid", getDevBind.getActiveKid());
+            mp.put("status", getDevBind.getStatus());
+
+            responseModel.addData("deviceBinding", mp);
+
             responseModel.addData("processId", processId);
         } catch (InvalidKeyException | NoSuchAlgorithmException | BadPaddingException | IllegalBlockSizeException | NoSuchPaddingException ex) {
             responseModel.setDescription(statusMessage);
@@ -2961,6 +2994,20 @@ public class WalletServices {
 
                 resultWallet.setPersonId(newPin);
                 regWalletInfoRepo.save(resultWallet);
+                
+                  DeviceConfirmOtp getdevKe = new DeviceConfirmOtp();
+
+            getdevKe.setDeviceId(rq.getDeviceId());
+            getdevKe.setEmailAddress(getDecoded.emailAddress);
+
+                DeviceBindingResponse getDevBind = fxPeerClient.checkIfDeviceBelongsToUser(getdevKe);
+
+                Map mp = new HashMap();
+                mp.put("deviceId", getDevBind.getDeviceId());
+                mp.put("activeKid", getDevBind.getActiveKid());
+                mp.put("status", getDevBind.getStatus());
+
+                responseModel.addData("deviceBinding", mp);
 
                 responseModel.setDescription("Pin changed successfully.");
                 responseModel.setStatusCode(200);

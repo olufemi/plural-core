@@ -38,11 +38,17 @@ public class AuthUserRequestCustomerUuid {
     @Expose*/
     private String deviceType;
 
-    /*@ApiModelProperty(notes = "The userDeviceId")
-    @NotNull(message = "the field \"userDeviceId\" is not nillable")
+    @ApiModelProperty(notes = "The DeviceId")
+    @NotNull(message = "the field \"deviceId\" is not nillable")
     @NotBlank
-    @Expose*/
-    private String userDeviceId;
+    @Expose
+    private String deviceId;
+
+    @ApiModelProperty(notes = "The DevicePublicSpkiB64")
+    @NotNull(message = "the field \"devicePublicSpkiB64\" is not nillable")
+    @NotBlank
+    @Expose
+    private String devicePublicSpkiB64;
 
     @ApiModelProperty(notes = "The browserType")
     /* @NotNull(message = "the field \"browserType\" is not nillable")

@@ -20,13 +20,18 @@ public class TransactionHistoryPublisher {
 
     private final RabbitTemplate rabbitTemplate;
 
-    public void publish(TransactionHistoryEvent event) {
+   public void publish(TransactionHistoryEvent event) {
 
-        rabbitTemplate.convertAndSend(
-                RabbitConfig.EXCHANGE,
-                RabbitConfig.ROUTING_KEY,
-                event
-        );
-    }
+    rabbitTemplate.convertAndSend(
+            RabbitConfig.EXCHANGE,
+            RabbitConfig.ROUTING_KEY,
+            event,
+            msg -> {
+                msg.getMessageProperties().setCorrelationId(event.getTransactionId());
+                msg.getMessageProperties().setMessageId(event.getTransactionId());
+                return msg;
+            }
+    );
+}
 }
 

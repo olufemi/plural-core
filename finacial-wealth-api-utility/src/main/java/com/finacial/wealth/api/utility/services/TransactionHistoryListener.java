@@ -13,11 +13,16 @@ import com.finacial.wealth.api.utility.domains.FinWealthPaymentTransaction;
 import com.finacial.wealth.api.utility.domains.TransactionHistoryEvent;
 import com.finacial.wealth.api.utility.repository.FinWealthPaymentTransactionRepo;
 import java.time.Instant;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.stereotype.Service;
+import org.springframework.amqp.core.Message;
 
 @Service
 public class TransactionHistoryListener {
+
+    private static final Logger log = LoggerFactory.getLogger(TransactionHistoryListener.class);
 
     private final FinWealthPaymentTransactionRepo repo;
 
@@ -29,7 +34,14 @@ public class TransactionHistoryListener {
             queues = RabbitConfig.QUEUE,
             containerFactory = "rabbitListenerContainerFactory"
     )
-    public void receive(TransactionHistoryEvent e) {
+    public void receive(TransactionHistoryEvent e, Message message) {
+
+        String messageId = message.getMessageProperties().getMessageId();
+        long deliveryTag = message.getMessageProperties().getDeliveryTag();
+        String correlationId = message.getMessageProperties().getCorrelationId();
+
+        log.info("CONSUMED messageId={} correlationId={} deliveryTag={} txId={}",
+                messageId, correlationId, deliveryTag, e.getTransactionId());
 
         System.out.println("Consumed txnId=" + e.getTransactionId()
                 + " eventTime=" + e.getEventTime());
@@ -41,9 +53,6 @@ public class TransactionHistoryListener {
             return;
         }
 
-        if (repo.existsByTransactionId(e.getTransactionId())) {
-            return;
-        }
 
         FinWealthPaymentTransaction t = new FinWealthPaymentTransaction();
 
@@ -84,8 +93,8 @@ public class TransactionHistoryListener {
         t.setCurrencyCode(e.getCurrencyCode());
 
         // timestamp
-       // t.setCreatedDate(e.getEventTime() != null ? e.getEventTime() : Instant.now());
-       t.setCreatedDate(Instant.now());
+        // t.setCreatedDate(e.getEventTime() != null ? e.getEventTime() : Instant.now());
+        t.setCreatedDate(Instant.now());
 
         repo.save(t);
 

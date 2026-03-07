@@ -23,9 +23,11 @@ import com.financial.wealth.api.transactions.repo.FailedDebitLogRepo;
 import com.financial.wealth.api.transactions.repo.SuccessDebitLogRepo;
 import com.google.common.collect.Range;
 import com.google.gson.Gson;
+import com.google.gson.JsonObject;
 import com.google.gson.JsonSyntaxException;
 import java.math.BigDecimal;
 import java.net.MalformedURLException;
+import java.nio.charset.StandardCharsets;
 
 import java.security.InvalidKeyException;
 import java.security.Key;
@@ -300,7 +302,6 @@ public class UttilityMethods {
             statusCode = 400;
 
             //creLog = createDebitLogRepository.save(creLog);
-
             BaseResponse response = restTemplate.postForObject("http://" + "utilities-service" + "/walletmgt/account/debit-Wallet-phone",
                     rq, BaseResponse.class);
             System.out.println("debitCustomer Response from core ::::::::::::::::  %S  " + new Gson().toJson(response));
@@ -349,8 +350,7 @@ public class UttilityMethods {
 
         try {
 
-           // creLog = createCreditLogRepository.save(creLog);
-
+            // creLog = createCreditLogRepository.save(creLog);
             BaseResponse response = restTemplate.postForObject("http://" + "utilities-service" + "/walletmgt/account/credit-Wallet-phone",
                     caller, BaseResponse.class);
 
@@ -472,8 +472,7 @@ public class UttilityMethods {
         creLog.setCreatedAt(Instant.now());
         creLog.setCreatedDate(Instant.now());
 
-       // creLog = createCreditLogRepository.save(creLog);
-
+        // creLog = createCreditLogRepository.save(creLog);
         try {
 
             BaseResponse response = restTemplate.postForObject("http://" + "utilities-service" + "/walletmgt/account/credit-Wallet-phone",
@@ -813,6 +812,31 @@ public class UttilityMethods {
             return a.compareTo(new BigDecimal(b.trim())) == 0;
         } catch (NumberFormatException e) {
             return false; // or throw
+        }
+    }
+
+    public String getClaimFromJwt(String authorization, String claimName) {
+        try {
+            if (authorization == null) {
+                return null;
+            }
+            String token = authorization.replaceFirst("(?i)^Bearer\\s+", "").trim();
+            String[] parts = token.split("\\.");
+            if (parts.length < 2) {
+                return null;
+            }
+
+            // Base64URL decode payload
+            byte[] payload = Base64.getUrlDecoder().decode(parts[1]);
+            String json = new String(payload, StandardCharsets.UTF_8);
+
+            JsonObject obj = new Gson().fromJson(json, JsonObject.class);
+            return obj.has(claimName) && !obj.get(claimName).isJsonNull()
+                    ? obj.get(claimName).getAsString()
+                    : null;
+        } catch (Exception e) {
+            e.printStackTrace();
+            return null;
         }
     }
 }

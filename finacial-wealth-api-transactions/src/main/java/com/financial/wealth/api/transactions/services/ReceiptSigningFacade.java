@@ -11,18 +11,18 @@ package com.financial.wealth.api.transactions.services;
 import com.financial.wealth.api.transactions.models.FinWalletPaymentTransModel;
 import com.financial.wealth.api.transactions.models.ReceiptSignRequest;
 import com.financial.wealth.api.transactions.models.ReceiptSignResponse;
-import com.financial.wealth.api.transactions.proxies.ReceiptCryptoClient;
 import com.google.gson.Gson;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.time.format.DateTimeFormatter;
+import com.financial.wealth.api.transactions.proxies.FxPeerClient;
 
 @Service
 @RequiredArgsConstructor
 public class ReceiptSigningFacade {
 
-    private final ReceiptCryptoClient cryptoClient;
+    private final FxPeerClient cryptoClient;
 
     public void attachReceipt(FinWalletPaymentTransModel tx) {
 

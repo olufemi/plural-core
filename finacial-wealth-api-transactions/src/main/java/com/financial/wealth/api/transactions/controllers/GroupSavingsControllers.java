@@ -19,9 +19,19 @@ import com.financial.wealth.api.transactions.models.LeaveGroupRequest;
 import com.financial.wealth.api.transactions.models.ReByEmailAddress;
 import com.financial.wealth.api.transactions.models.ReByInvitationCode;
 import com.financial.wealth.api.transactions.models.SwapSlotReq;
+import com.financial.wealth.api.transactions.security.consent.ConsentVerificationCoordinator;
+import com.financial.wealth.api.transactions.security.consent.hasher.AcceptDeclineSwapSlotHasher;
+import com.financial.wealth.api.transactions.security.consent.hasher.GroupSavingsActivationHasher;
+import com.financial.wealth.api.transactions.security.consent.hasher.GroupSavingsConfirmCreateHasher;
+import com.financial.wealth.api.transactions.security.consent.hasher.GroupSavingsSwapSlotRequestHasher;
+import com.financial.wealth.api.transactions.security.consent.hasher.JoinGroupPayloadHasher;
+import com.financial.wealth.api.transactions.security.consent.hasher.LeaveGroupPayloadHasher;
 import com.financial.wealth.api.transactions.services.GroupSavingsService;
+import com.financial.wealth.api.transactions.utils.UttilityMethods;
+import javax.servlet.http.HttpServletRequest;
 import javax.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.BindingResult;
@@ -42,29 +52,34 @@ import org.springframework.web.bind.annotation.RestController;
 public class GroupSavingsControllers {
 
     private final GroupSavingsService groupSavingsService;
+    private final JoinGroupPayloadHasher joinGroupPayloadHasher;
 
-   /* @PostMapping("/leave-group")
-    public ResponseEntity<BaseResponse> leaveGroup(
-            @Valid @RequestBody LeaveGroupRequest request,
-            BindingResult bindingResult,
-            @RequestHeader(value = "channel", required = false) String channel,
-            @RequestHeader(value = "authorization") String auth) {
-
-        BaseResponse response = new BaseResponse();
-
-        if (bindingResult.hasErrors()) {
-            response.setStatusCode(400);
-            response.setDescription(bindingResult.getFieldError().getDefaultMessage());
-            return ResponseEntity.badRequest().body(response);
-        }
-
-        BaseResponse result = groupSavingsService.leaveGroup(request, "", auth);
-        return ResponseEntity.status(result.getStatusCode()).body(result);
-    }*/
+    private final ConsentVerificationCoordinator consentVerificationCoordinator;
+    private final UttilityMethods uttilityMethods;
+    private final LeaveGroupPayloadHasher leaveGroupPayloadHasher;
+    private final GroupSavingsConfirmCreateHasher groupSavingsConfirmCreateHasher;
+    private final GroupSavingsActivationHasher groupSavingsActivationHasher;
+    private final GroupSavingsSwapSlotRequestHasher groupSavingsSwapSlotRequestHasher;
+    private final AcceptDeclineSwapSlotHasher acceptDeclineSwapSlotHasher;
 
     @PostMapping("/leave-group")
     public ResponseEntity<BaseResponse> leaveGroup(@RequestHeader(value = "authorization", required = true) String auth,
-            @RequestBody @Valid LeaveGroupRequest rq) {
+            @RequestBody @Valid LeaveGroupRequest rq, HttpServletRequest http) {
+
+        String userId = uttilityMethods.getClaimFromJwt(auth, "emailAddress");
+
+        BaseResponse consentRes = consentVerificationCoordinator.requireConsent(
+                http,
+                "POST",
+                rq.getInvitationCodeReqId(),
+                userId,
+                rq,
+                leaveGroupPayloadHasher
+        );
+
+        if (consentRes.getStatusCode() != 200) {
+            return ResponseEntity.status(consentRes.getStatusCode()).body(consentRes);
+        }
 
         BaseResponse baseResponse = groupSavingsService.leaveGroup(rq, "", auth);
         return new ResponseEntity<>(baseResponse, HttpStatus.OK);
@@ -72,7 +87,21 @@ public class GroupSavingsControllers {
 
     @PostMapping("/delete-group-saving")
     public ResponseEntity<BaseResponse> deleteGroupSaving(@RequestHeader(value = "authorization", required = true) String auth,
-            @RequestBody @Valid GroupSavingConf rq) {
+            @RequestBody @Valid GroupSavingConf rq, HttpServletRequest http) {
+        String userId = uttilityMethods.getClaimFromJwt(auth, "emailAddress");
+
+        BaseResponse consentRes = consentVerificationCoordinator.requireConsent(
+                http,
+                "POST",
+                rq.getInvitationCodeReqId(),
+                userId,
+                rq,
+                groupSavingsConfirmCreateHasher
+        );
+
+        if (consentRes.getStatusCode() != 200) {
+            return ResponseEntity.status(consentRes.getStatusCode()).body(consentRes);
+        }
 
         BaseResponse baseResponse = groupSavingsService.deleteGroupSaving(rq, "", auth);
         return new ResponseEntity<>(baseResponse, HttpStatus.OK);
@@ -95,7 +124,21 @@ public class GroupSavingsControllers {
 
     @PostMapping("/confirm-create-transaction")
     public ResponseEntity<BaseResponse> confirmCreateTransaction(@RequestHeader(value = "authorization", required = true) String auth,
-            @RequestBody @Valid GroupSavingConf rq) {
+            @RequestBody @Valid GroupSavingConf rq, HttpServletRequest http) {
+        String userId = uttilityMethods.getClaimFromJwt(auth, "emailAddress");
+
+        BaseResponse consentRes = consentVerificationCoordinator.requireConsent(
+                http,
+                "POST",
+                rq.getInvitationCodeReqId(),
+                userId,
+                rq,
+                groupSavingsConfirmCreateHasher
+        );
+
+        if (consentRes.getStatusCode() != 200) {
+            return ResponseEntity.status(consentRes.getStatusCode()).body(consentRes);
+        }
 
         BaseResponse baseResponse = groupSavingsService.confirmCreateTransaction(rq, "", auth);
         return new ResponseEntity<>(baseResponse, HttpStatus.OK);
@@ -103,7 +146,22 @@ public class GroupSavingsControllers {
 
     @PostMapping("/activate-group")
     public ResponseEntity<BaseResponse> activateGroup(@RequestHeader(value = "authorization", required = true) String auth,
-            @RequestBody @Valid GroupSavingActivation rq) {
+            @RequestBody @Valid GroupSavingActivation rq, HttpServletRequest http) {
+
+        String userId = uttilityMethods.getClaimFromJwt(auth, "emailAddress");
+
+        BaseResponse consentRes = consentVerificationCoordinator.requireConsent(
+                http,
+                "POST",
+                rq.getInvitationCodeReqId(),
+                userId,
+                rq,
+                groupSavingsActivationHasher
+        );
+
+        if (consentRes.getStatusCode() != 200) {
+            return ResponseEntity.status(consentRes.getStatusCode()).body(consentRes);
+        }
 
         BaseResponse baseResponse = groupSavingsService.activateGroup(rq, "", auth);
         return new ResponseEntity<>(baseResponse, HttpStatus.OK);
@@ -165,7 +223,22 @@ public class GroupSavingsControllers {
 
     @PostMapping("/send-swap-slot-request")
     public ResponseEntity<BaseResponse> sendSwapRequest(@RequestHeader(value = "authorization", required = true) String auth,
-            @RequestBody @Valid SwapSlotReq rq) {
+            @RequestBody @Valid SwapSlotReq rq, HttpServletRequest http) {
+
+        String userId = uttilityMethods.getClaimFromJwt(auth, "emailAddress");
+
+        BaseResponse consentRes = consentVerificationCoordinator.requireConsent(
+                http,
+                "POST",
+                rq.getInvitationCodeReqId(),
+                userId,
+                rq,
+                groupSavingsSwapSlotRequestHasher
+        );
+
+        if (consentRes.getStatusCode() != 200) {
+            return ResponseEntity.status(consentRes.getStatusCode()).body(consentRes);
+        }
 
         BaseResponse baseResponse = groupSavingsService.sendSwapRequest(rq, "", auth);
         return new ResponseEntity<>(baseResponse, HttpStatus.OK);
@@ -173,7 +246,22 @@ public class GroupSavingsControllers {
 
     @PostMapping("/accept-or-decline-swap-slot-request")
     public ResponseEntity<BaseResponse> acceptDeclineSwap(@RequestHeader(value = "authorization", required = true) String auth,
-            @RequestBody @Valid AcceptDeclineSwapSlotReq rq) {
+            @RequestBody @Valid AcceptDeclineSwapSlotReq rq, HttpServletRequest http) {
+
+        String userId = uttilityMethods.getClaimFromJwt(auth, "emailAddress");
+
+        BaseResponse consentRes = consentVerificationCoordinator.requireConsent(
+                http,
+                "POST",
+                rq.getInvitationCodeReqId(),
+                userId,
+                rq,
+                acceptDeclineSwapSlotHasher
+        );
+
+        if (consentRes.getStatusCode() != 200) {
+            return ResponseEntity.status(consentRes.getStatusCode()).body(consentRes);
+        }
 
         BaseResponse baseResponse = groupSavingsService.acceptDeclineSwap(rq, "", auth);
         return new ResponseEntity<>(baseResponse, HttpStatus.OK);
@@ -181,7 +269,22 @@ public class GroupSavingsControllers {
 
     @PostMapping("/join-group")
     public ResponseEntity<BaseResponse> joinGroup(@RequestHeader(value = "authorization", required = true) String auth,
-            @RequestBody @Valid JoinGroupRequest rq) {
+            @RequestBody @Valid JoinGroupRequest rq, HttpServletRequest http) {
+
+        String userId = uttilityMethods.getClaimFromJwt(auth, "emailAddress");
+
+        BaseResponse consentRes = consentVerificationCoordinator.requireConsent(
+                http,
+                "POST",
+                rq.getInvitationCodeReqId(),
+                userId,
+                rq,
+                joinGroupPayloadHasher
+        );
+
+        if (consentRes.getStatusCode() != 200) {
+            return ResponseEntity.status(consentRes.getStatusCode()).body(consentRes);
+        }
 
         BaseResponse baseResponse = groupSavingsService.joinGroup(rq, "", auth);
         return new ResponseEntity<>(baseResponse, HttpStatus.OK);

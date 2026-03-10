@@ -546,12 +546,14 @@ public class WalletServices {
             getdevKe.setDeviceId(rq.getDeviceId());
             getdevKe.setEmailAddress(getInitAcPin.get(0).getEmailAddress());
 
-            DeviceBindingResponse getDevBind = fxPeerClient.checkIfDeviceBelongsToUser(getdevKe);
+            DeviceBindingResponse getDevBind = fxPeerClient.bindConfirmOtp(getdevKe);
 
             Map mp = new HashMap();
             mp.put("deviceId", getDevBind.getDeviceId());
             mp.put("activeKid", getDevBind.getActiveKid());
             mp.put("status", getDevBind.getStatus());
+            mp.put("publicKeySpki", getDevBind.getDevicePublicSpkiB64());
+            mp.put("keyType", "DEVICE_SIGNING");
 
             responseModel.addData("deviceBinding", mp);
 
@@ -2460,12 +2462,14 @@ public class WalletServices {
             getdevKe.setDeviceId(rq.getDeviceId());
             getdevKe.setEmailAddress(getInitAcPin.get(0).getEmailAddress());
 
-            DeviceBindingResponse getDevBind = fxPeerClient.checkIfDeviceBelongsToUser(getdevKe);
+            DeviceBindingResponse getDevBind = fxPeerClient.bindConfirmOtp(getdevKe);
 
             Map mp = new HashMap();
             mp.put("deviceId", getDevBind.getDeviceId());
             mp.put("activeKid", getDevBind.getActiveKid());
             mp.put("status", getDevBind.getStatus());
+            mp.put("publicKeySpki", getDevBind.getDevicePublicSpkiB64());
+            mp.put("keyType", "DEVICE_SIGNING");
 
             responseModel.addData("deviceBinding", mp);
 
@@ -2994,18 +2998,20 @@ public class WalletServices {
 
                 resultWallet.setPersonId(newPin);
                 regWalletInfoRepo.save(resultWallet);
-                
-                  DeviceConfirmOtp getdevKe = new DeviceConfirmOtp();
 
-            getdevKe.setDeviceId(rq.getDeviceId());
-            getdevKe.setEmailAddress(getDecoded.emailAddress);
+                DeviceConfirmOtp getdevKe = new DeviceConfirmOtp();
 
-                DeviceBindingResponse getDevBind = fxPeerClient.checkIfDeviceBelongsToUser(getdevKe);
+                getdevKe.setDeviceId(rq.getDeviceId());
+                getdevKe.setEmailAddress(getDecoded.emailAddress);
+
+                DeviceBindingResponse getDevBind = fxPeerClient.bindConfirmOtp(getdevKe);
 
                 Map mp = new HashMap();
                 mp.put("deviceId", getDevBind.getDeviceId());
                 mp.put("activeKid", getDevBind.getActiveKid());
                 mp.put("status", getDevBind.getStatus());
+                mp.put("publicKeySpki", getDevBind.getDevicePublicSpkiB64());
+                mp.put("keyType", "DEVICE_SIGNING");
 
                 responseModel.addData("deviceBinding", mp);
 

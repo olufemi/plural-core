@@ -21,15 +21,19 @@ import com.finacial.wealth.api.profiling.models.UserDeviceReqChange;
 import com.finacial.wealth.api.profiling.models.WalletNo;
 import com.finacial.wealth.api.profiling.models.accounts.AddAccountObj;
 import com.finacial.wealth.api.profiling.response.BaseResponse;
+import com.finacial.wealth.api.profiling.security.consent.ConsentVerificationCoordinator;
+import com.finacial.wealth.api.profiling.security.hasher.ChangePasswordPayloadHasher;
 import com.finacial.wealth.api.profiling.services.AddAccountService;
 import com.finacial.wealth.api.profiling.services.CountryService;
 import com.finacial.wealth.api.profiling.services.WalletServices;
 import com.finacial.wealth.api.profiling.services.WalletSystemProxyService;
 import com.finacial.wealth.api.profiling.utilities.models.OtpResendRequest;
+import com.finacial.wealth.api.profiling.utils.UttilityMethods;
 import io.swagger.annotations.ApiOperation;
 import io.swagger.annotations.ApiResponse;
 import io.swagger.annotations.ApiResponses;
 import java.io.UnsupportedEncodingException;
+import javax.servlet.http.HttpServletRequest;
 import javax.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -57,6 +61,9 @@ public class WalletMgtController {
     private final AddAccountService addAccountService;
     private final BvnService bvnService;
     private final CountryService countryService;
+    private final ConsentVerificationCoordinator consentVerificationCoordinator;
+    private final UttilityMethods uttilityMethods;
+    private final ChangePasswordPayloadHasher changePasswordPayloadHasher;
 
     /*@PostMapping("/create-user-old")
     public ResponseEntity<BaseResponse> onboardUser(
@@ -223,7 +230,23 @@ public class WalletMgtController {
     @PostMapping("/change-password-in-app")
     public ResponseEntity<BaseResponse> changePasswordInApp(
             @RequestHeader(value = "authorization", required = true) String auth,
-            @RequestBody @Valid ChangePasswordInApp rq) throws UnsupportedEncodingException {
+            @RequestBody @Valid ChangePasswordInApp rq,
+            HttpServletRequest http) throws UnsupportedEncodingException {
+
+        String userId = uttilityMethods.getClaimFromJwt(auth, "emailAddress");
+
+        BaseResponse consentRes = consentVerificationCoordinator.requireConsent(
+                http,
+                "POST",
+                rq.getEmailAddress(),
+                userId,
+                rq,
+                changePasswordPayloadHasher
+        );
+
+        if (consentRes.getStatusCode() != 200) {
+            return ResponseEntity.status(consentRes.getStatusCode()).body(consentRes);
+        }
 
         BaseResponse baseResponse = walletServices.changePasswordInApp(rq, "", auth);
         return new ResponseEntity<>(baseResponse, HttpStatus.OK);

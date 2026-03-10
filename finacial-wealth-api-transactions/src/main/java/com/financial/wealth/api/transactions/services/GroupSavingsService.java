@@ -201,7 +201,7 @@ public class GroupSavingsService {
                 return responseModel;
             }
 
-            String encyrptedPin = utilMeth.encyrpt(String.valueOf(rq.getPin()), encryptionKey);
+            /*String encyrptedPin = utilMeth.encyrpt(String.valueOf(rq.getPin()), encryptionKey);
             String pin = senderWalletdetails.get(0).getPersonId();
             if (!encyrptedPin.equals(pin)) {
 
@@ -214,7 +214,7 @@ public class GroupSavingsService {
 
                 return responseModel;
 
-            }
+            }*/
 
             List<GroupSavingsData> chkPendId = groupSavingsDataRepo.findByInviteCode(rq.getInvitationCodeReqId());
             boolean itsId = false;
@@ -1164,7 +1164,7 @@ public class GroupSavingsService {
                 return responseModel;
             }
 
-            String encyrptedPin = utilMeth.encyrpt(String.valueOf(rq.getPin()), encryptionKey);
+            /*String encyrptedPin = utilMeth.encyrpt(String.valueOf(rq.getPin()), encryptionKey);
             String pin = getWallDe.get(0).getPersonId();
             if (!encyrptedPin.equals(pin)) {
 
@@ -1177,7 +1177,7 @@ public class GroupSavingsService {
 
                 return responseModel;
 
-            }
+            }*/
 
             List<GroupSavingsData> chkPendId = groupSavingsDataRepo.findByInviteCodeAndEmailAddress(rq.getInvitationCodeReqId(), rq.getEmailAddress());
             boolean itsId = false;
@@ -1400,7 +1400,7 @@ public class GroupSavingsService {
                 return responseModel;
             }
 
-            String encyrptedPin = utilMeth.encyrpt(String.valueOf(rq.getPin()), encryptionKey);
+            /*String encyrptedPin = utilMeth.encyrpt(String.valueOf(rq.getPin()), encryptionKey);
             String pin = getWallDe.get(0).getPersonId();
             if (!encyrptedPin.equals(pin)) {
 
@@ -1413,7 +1413,7 @@ public class GroupSavingsService {
 
                 return responseModel;
 
-            }
+            }*/
 
             boolean valFormatD1 = utilMeth.isValidFormat(utilMeth.getSETTING_DATE_FORMATT(), rq.getActivationDate(), Locale.ENGLISH);
 
@@ -2793,7 +2793,7 @@ public class GroupSavingsService {
                 return responseModel;
             }
 
-            String encyrptedPin = utilMeth.encyrpt(String.valueOf(rq.getPin()), encryptionKey);
+            /*String encyrptedPin = utilMeth.encyrpt(String.valueOf(rq.getPin()), encryptionKey);
             String pin = getWallDe.get(0).getPersonId();
             if (!encyrptedPin.equals(pin)) {
 
@@ -2806,7 +2806,7 @@ public class GroupSavingsService {
 
                 return responseModel;
 
-            }
+            }*/
 
             SwapSlotDetails sw = new SwapSlotDetails();
             ValidateReqReq rqq = new ValidateReqReq();
@@ -2982,7 +2982,7 @@ public class GroupSavingsService {
                 return responseModel;
             }
 
-            String encyrptedPin = utilMeth.encyrpt(String.valueOf(rq.getPin()), encryptionKey);
+            /*String encyrptedPin = utilMeth.encyrpt(String.valueOf(rq.getPin()), encryptionKey);
             String pin = getWallDe.get(0).getPersonId();
             if (!encyrptedPin.equals(pin)) {
 
@@ -2995,7 +2995,7 @@ public class GroupSavingsService {
 
                 return responseModel;
 
-            }
+            }*/
 
             rr.setEmailAddress(rq.getMemberEmailAddress());
 
@@ -3149,7 +3149,7 @@ public class GroupSavingsService {
                 return responseModel;
             }
 
-            String encyrptedPin = utilMeth.encyrpt(String.valueOf(rq.getPin()), encryptionKey);
+            /*String encyrptedPin = utilMeth.encyrpt(String.valueOf(rq.getPin()), encryptionKey);
             String pin = getWallDe.get(0).getPersonId();
             if (!encyrptedPin.equals(pin)) {
 
@@ -3162,7 +3162,7 @@ public class GroupSavingsService {
 
                 return responseModel;
 
-            }
+            }*/
 
             GroupSavingsData group = groupSavingsDataRepo.findByInviteCodeDe(rq.getInvitationCodeReqId());
             if (group == null || "1".equals(group.getIsTrnsactionDeleted())) {
@@ -3614,7 +3614,7 @@ public class GroupSavingsService {
                     return responseModel;
                 }
 
-                String encyrptedPin = utilMeth.encyrpt(String.valueOf(rq.getPin()), encryptionKey);
+                /*String encyrptedPin = utilMeth.encyrpt(String.valueOf(rq.getPin()), encryptionKey);
                 String pin = getWallDe.get(0).getPersonId();
                 if (!encyrptedPin.equals(pin)) {
 
@@ -3627,7 +3627,7 @@ public class GroupSavingsService {
 
                     return responseModel;
 
-                }
+                }*/
 
             } else {
                 isAccepted = false;

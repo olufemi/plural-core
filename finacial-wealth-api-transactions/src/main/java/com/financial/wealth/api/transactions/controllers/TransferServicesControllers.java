@@ -17,6 +17,10 @@ import com.financial.wealth.api.transactions.models.OtherBankTransferRequest;
 import com.financial.wealth.api.transactions.models.SaveBeneficiary;
 import com.financial.wealth.api.transactions.models.WalletNoReq;
 import com.financial.wealth.api.transactions.models.local.trans.NameLookUp;
+import com.financial.wealth.api.transactions.security.consent.ConsentVerificationCoordinator;
+import com.financial.wealth.api.transactions.security.consent.hasher.AcceptQuotePayloadHasher;
+import com.financial.wealth.api.transactions.security.consent.hasher.BreezePayInterbankPaymentPayloadHasher;
+import com.financial.wealth.api.transactions.security.consent.hasher.LocalTransferPayloadHasher;
 import com.financial.wealth.api.transactions.services.HashDebugUtil;
 import com.financial.wealth.api.transactions.services.LocalTransferCanon;
 import com.financial.wealth.api.transactions.services.LocalTransferService;
@@ -50,6 +54,12 @@ public class TransferServicesControllers {
     private final LocalTransferCanon localTransferCanon;
     private final UttilityMethods uttilityMethods;
 
+    private final ConsentVerificationCoordinator consentVerificationCoordinator;
+
+    private final LocalTransferPayloadHasher localTransferPayloadHasher;
+    private final BreezePayInterbankPaymentPayloadHasher interbankPaymentPayloadHasher;
+    private final AcceptQuotePayloadHasher acceptQuotePayloadHasher;
+
     @GetMapping("/interbank/get-banks")
     public ApiResponseModel getAllBanks(@RequestHeader(value = "authorization", required = true) String auth) throws ApiClientException {
         return nipService.getAllBanks();
@@ -73,7 +83,21 @@ public class TransferServicesControllers {
 
     @PostMapping("/interbank/make-payment")
     public ResponseEntity<BaseResponse> makePayment(@RequestHeader(value = "authorization", required = true) String auth,
-            @RequestBody @Valid OtherBankTransferRequest rq) {
+            @RequestBody @Valid OtherBankTransferRequest rq, HttpServletRequest http) {
+        String userId = uttilityMethods.getClaimFromJwt(auth, "emailAddress");
+
+        BaseResponse consentRes = consentVerificationCoordinator.requireConsent(
+                http,
+                "POST",
+                rq.getProcessId(),
+                userId,
+                rq,
+                interbankPaymentPayloadHasher
+        );
+
+        if (consentRes.getStatusCode() != 200) {
+            return ResponseEntity.status(consentRes.getStatusCode()).body(consentRes);
+        }
 
         BaseResponse baseResponse = nipService.processTransfer(rq, "", auth);
         return new ResponseEntity<>(baseResponse, HttpStatus.OK);
@@ -91,8 +115,23 @@ public class TransferServicesControllers {
     public ResponseEntity<BaseResponse> processTransfer(@RequestHeader(value = "authorization", required = true) String auth,
             @RequestBody @Valid LocalTransferRequest rq, HttpServletRequest http) {
 
+        String userId = uttilityMethods.getClaimFromJwt(auth, "emailAddress");
+        BaseResponse consentRes = consentVerificationCoordinator.requireConsent(
+                http,
+                "POST",
+                rq.getProcessId(),
+                userId,
+                rq,
+                localTransferPayloadHasher
+        );
+
+        if (consentRes.getStatusCode() != 200) {
+            return ResponseEntity.status(consentRes.getStatusCode()).body(consentRes);
+        }
+
         BaseResponse baseResponse = localTransferService.processTransfer(rq, "", auth);
         return new ResponseEntity<>(baseResponse, HttpStatus.OK);
+
     }
 
     @PostMapping("/localtransfer/transfer/non-pin")
@@ -100,37 +139,29 @@ public class TransferServicesControllers {
             @RequestBody @Valid LocalTransferRequest rq, HttpServletRequest http) {
 
         String userId = uttilityMethods.getClaimFromJwt(auth, "emailAddress");
-        String refId = rq.getProcessId();
         String transferCanonical = LocalTransferCanon.canonicalPayloadV1(rq);
         String transferHashB64 = HashDebugUtil.sha256B64(transferCanonical);
 
         log.info("[CONSENT] transferCanonical='{}'", transferCanonical);
         log.info("[CONSENT] transferCanonical.length={}", transferCanonical.length());
         log.info("[CONSENT] transferCanonical.hashB64={}", transferHashB64);
-        //String payloadHashB64 = localTransferCanon.payloadHashB64(rq);
 
-//        BaseResponse consentCheck = localTransferCanon.requireConsent(
-//                http,
-//                "POST",
-//                refId,
-//                payloadHashB64,
-//                userId
-//        );
-        BaseResponse consentCheck = localTransferCanon.requireConsent(
+        BaseResponse consentRes = consentVerificationCoordinator.requireConsent(
                 http,
                 "POST",
                 rq.getProcessId(),
-                LocalTransferCanon.payloadHashB64(rq),
                 userId,
-                rq
+                rq,
+                localTransferPayloadHasher
         );
 
-        if (consentCheck.getStatusCode() != 200) {
-            return ResponseEntity.status(consentCheck.getStatusCode()).body(consentCheck);
+        if (consentRes.getStatusCode() != 200) {
+            return ResponseEntity.status(consentRes.getStatusCode()).body(consentRes);
         }
 
         BaseResponse baseResponse = localTransferService.processTransfer(rq, "", auth);
         return new ResponseEntity<>(baseResponse, HttpStatus.OK);
+
     }
 
     @PostMapping("/localtransfer/save-beneficiary")

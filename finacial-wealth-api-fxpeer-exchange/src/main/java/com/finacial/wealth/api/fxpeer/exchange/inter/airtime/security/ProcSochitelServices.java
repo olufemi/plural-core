@@ -827,7 +827,7 @@ public class ProcSochitelServices {
                 resp.setDescription("Recipients is required");
                 return resp;
             }
-            BaseResponse bResPin = new BaseResponse();
+            /*BaseResponse bResPin = new BaseResponse();
             WalletNo wSend = new WalletNo();
             wSend.setPin(rq.getPin());
 
@@ -837,7 +837,7 @@ public class ProcSochitelServices {
                 resp.setStatusCode(bResPin.getStatusCode());
                 resp.setDescription(bResPin.getDescription());
                 return resp;
-            }
+            }*/
 
             if (rq == null || rq.getCurrencyCode() == null || rq.getCurrencyCode().trim().isEmpty()) {
                 resp.setStatusCode(400);

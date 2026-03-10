@@ -20,6 +20,12 @@ import com.finacial.wealth.api.fxpeer.exchange.investment.service.InvestmentProd
 import com.finacial.wealth.api.fxpeer.exchange.investment.service.InvestmentValuationScheduler;
 import com.finacial.wealth.api.fxpeer.exchange.investment.service.LiquidationActionService;
 import com.finacial.wealth.api.fxpeer.exchange.model.GetProducts;
+import com.finacial.wealth.api.fxpeer.exchange.security.consent.ConsentVerificationCoordinator;
+import com.finacial.wealth.api.fxpeer.exchange.security.consent.harsher.CreateSubscriptionPayloadHasher;
+import com.finacial.wealth.api.fxpeer.exchange.security.consent.harsher.InvestmentTopupPayloadHasher;
+import com.finacial.wealth.api.fxpeer.exchange.security.consent.harsher.LiquidateInvestmentPayloadHasher;
+import com.finacial.wealth.api.fxpeer.exchange.util.UttilityMethods;
+import jakarta.servlet.http.HttpServletRequest;
 
 import jakarta.validation.Valid;
 import java.io.IOException;
@@ -52,6 +58,11 @@ public class InvestmentServicesController {
     private final InvestmentValuationScheduler investmentValuationScheduler;
     private final LiquidationActionService liquidationActionService;
     private final InvestmentProductService productService;
+    private final UttilityMethods uttilityMethods;
+    private final ConsentVerificationCoordinator consentVerificationCoordinator;
+    private final CreateSubscriptionPayloadHasher createSubscriptionPayloadHasher;
+    private final LiquidateInvestmentPayloadHasher liquidateInvestmentPayloadHasher;
+    private final InvestmentTopupPayloadHasher investmentTopupPayloadHasher;
 
     private final InvestmentOrderQueryService queryService;
 
@@ -59,12 +70,22 @@ public class InvestmentServicesController {
             InvestmentValuationScheduler investmentValuationScheduler,
             InvestmentOrderQueryService queryService,
             LiquidationActionService liquidationActionService,
-            InvestmentProductService productService) {
+            InvestmentProductService productService,
+            UttilityMethods uttilityMethods,
+            ConsentVerificationCoordinator consentVerificationCoordinator,
+            CreateSubscriptionPayloadHasher createSubscriptionPayloadHasher,
+            LiquidateInvestmentPayloadHasher liquidateInvestmentPayloadHasher,
+            InvestmentTopupPayloadHasher investmentTopupPayloadHasher) {
         this.investmentOrderService = investmentOrderService;
         this.investmentValuationScheduler = investmentValuationScheduler;
         this.queryService = queryService;
         this.liquidationActionService = liquidationActionService;
         this.productService = productService;
+        this.uttilityMethods = uttilityMethods;
+        this.consentVerificationCoordinator = consentVerificationCoordinator;
+        this.createSubscriptionPayloadHasher = createSubscriptionPayloadHasher;
+        this.liquidateInvestmentPayloadHasher = liquidateInvestmentPayloadHasher;
+        this.investmentTopupPayloadHasher = investmentTopupPayloadHasher;
 
     }
 
@@ -144,25 +165,57 @@ public class InvestmentServicesController {
 
     @PostMapping(
             path = "/create-subscription",
-            //           consumes = MediaType.APPLICATION_JSON_VALUE,
             produces = MediaType.APPLICATION_JSON_VALUE
     )
     public BaseResponse createSubscription(
             @RequestHeader(name = "authorization", required = true) String auth,
-            @RequestBody @Valid CreateSubscriptionReq rq
+            @RequestBody @Valid CreateSubscriptionReq rq,
+            HttpServletRequest http
     ) throws IOException {
+
+        String userId = uttilityMethods.getClaimFromJwt(auth, "emailAddress");
+
+        BaseResponse consentRes = consentVerificationCoordinator.requireConsent(
+                http,
+                "POST",
+                rq.getProductId(),
+                userId,
+                rq,
+                createSubscriptionPayloadHasher
+        );
+
+        if (consentRes.getStatusCode() != 200) {
+            return consentRes;
+        }
+
         return investmentOrderService.createSubscriptionCaller(rq, auth);
     }
 
     @PostMapping(
             path = "/request-liquidation",
-            //     consumes = MediaType.APPLICATION_JSON_VALUE,
             produces = MediaType.APPLICATION_JSON_VALUE
     )
     public BaseResponse reqLiquidation(
             @RequestHeader(name = "authorization", required = true) String auth,
-            @RequestBody @Valid LiquidateInvestmentRequest rq
+            @RequestBody @Valid LiquidateInvestmentRequest rq,
+            HttpServletRequest http
     ) throws IOException {
+
+        String userId = uttilityMethods.getClaimFromJwt(auth, "emailAddress");
+
+        BaseResponse consentRes = consentVerificationCoordinator.requireConsent(
+                http,
+                "POST",
+                rq.orderId(),
+                userId,
+                rq,
+                liquidateInvestmentPayloadHasher
+        );
+
+        if (consentRes.getStatusCode() != 200) {
+            return consentRes;
+        }
+
         return investmentOrderService.requestLiquidation(rq, auth);
     }
 
@@ -188,13 +241,29 @@ public class InvestmentServicesController {
 
     @PostMapping(
             path = "/request-top-up",
-            //   consumes = MediaType.APPLICATION_JSON_VALUE,
             produces = MediaType.APPLICATION_JSON_VALUE
     )
-    public BaseResponse reqLiquidation(
+    public BaseResponse requestTopup(
             @RequestHeader(name = "authorization", required = true) String auth,
-            @RequestBody @Valid InvestmentTopupRequestCaller rq
+            @RequestBody @Valid InvestmentTopupRequestCaller rq,
+            HttpServletRequest http
     ) throws IOException {
+
+        String userId = uttilityMethods.getClaimFromJwt(auth, "emailAddress");
+
+        BaseResponse consentRes = consentVerificationCoordinator.requireConsent(
+                http,
+                "POST",
+                rq.getOrderRef(),
+                userId,
+                rq,
+                investmentTopupPayloadHasher
+        );
+
+        if (consentRes.getStatusCode() != 200) {
+            return consentRes;
+        }
+
         return investmentOrderService.createTopUpCaller(rq, auth);
     }
 

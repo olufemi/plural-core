@@ -12,10 +12,14 @@ import com.financial.wealth.api.transactions.models.WalletNo;
 import com.financial.wealth.api.transactions.models.tranfaar.inflow.CreateQuoteFE;
 import com.financial.wealth.api.transactions.models.tranfaar.inflow.GetPendingQuotes;
 import com.financial.wealth.api.transactions.models.tranfaar.outflow.CreateQuoteWithdrawalFE;
+import com.financial.wealth.api.transactions.security.consent.ConsentVerificationCoordinator;
+import com.financial.wealth.api.transactions.security.consent.hasher.AcceptQuotePayloadHasher;
 
 import com.financial.wealth.api.transactions.tranfaar.services.CreateQuoteClient;
 import com.financial.wealth.api.transactions.tranfaar.services.QuoteLookupService;
+import com.financial.wealth.api.transactions.utils.UttilityMethods;
 import java.io.UnsupportedEncodingException;
+import javax.servlet.http.HttpServletRequest;
 import javax.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -42,6 +46,13 @@ public class QuoteController {
     private CreateQuoteClient quoteService;
     @Autowired
     private QuoteLookupService qservice;
+
+    @Autowired
+    AcceptQuotePayloadHasher acceptQuotePayloadHasher;
+    @Autowired
+    private UttilityMethods uttilityMethods;
+    @Autowired
+    ConsentVerificationCoordinator consentVerificationCoordinator;
 
     @PostMapping("/validate-pin")
     public ResponseEntity<BaseResponse> validatePin(@RequestHeader(value = "authorization", required = true) String auth,
@@ -79,7 +90,22 @@ public class QuoteController {
 
     @PostMapping("/accept-quote")
     public ResponseEntity<BaseResponse> acceptQuote(@RequestHeader(value = "authorization", required = true) String auth,
-            @RequestBody @Valid AcceptQuoteFE rq) throws Exception {
+            @RequestBody @Valid AcceptQuoteFE rq, HttpServletRequest http) throws Exception {
+
+        String userId = uttilityMethods.getClaimFromJwt(auth, "emailAddress");
+
+        BaseResponse consentRes = consentVerificationCoordinator.requireConsent(
+                http,
+                "POST",
+                rq.getQuoteId(),
+                userId,
+                rq,
+                acceptQuotePayloadHasher
+        );
+
+        if (consentRes.getStatusCode() != 200) {
+            return ResponseEntity.status(consentRes.getStatusCode()).body(consentRes);
+        }
 
         BaseResponse baseResponse = quoteService.acceptQuote(rq, auth);
         return new ResponseEntity<>(baseResponse, HttpStatus.OK);
@@ -95,7 +121,22 @@ public class QuoteController {
 
     @PostMapping("/accept-quote-withdrawal")
     public ResponseEntity<BaseResponse> acceptQuoteWithdrawal(@RequestHeader(value = "authorization", required = true) String auth,
-            @RequestBody @Valid AcceptQuoteFE rq) throws Exception {
+            @RequestBody @Valid AcceptQuoteFE rq, HttpServletRequest http) throws Exception {
+
+        String userId = uttilityMethods.getClaimFromJwt(auth, "emailAddress");
+
+        BaseResponse consentRes = consentVerificationCoordinator.requireConsent(
+                http,
+                "POST",
+                rq.getQuoteId(),
+                userId,
+                rq,
+                acceptQuotePayloadHasher
+        );
+
+        if (consentRes.getStatusCode() != 200) {
+            return ResponseEntity.status(consentRes.getStatusCode()).body(consentRes);
+        }
 
         BaseResponse baseResponse = quoteService.acceptQuoteWithdrawal(rq, auth);
         return new ResponseEntity<>(baseResponse, HttpStatus.OK);

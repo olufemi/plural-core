@@ -13,6 +13,10 @@ import com.finacial.wealth.api.fxpeer.exchange.inter.airtime.security.ValidatePh
 import com.finacial.wealth.api.fxpeer.exchange.model.GetProducts;
 import com.finacial.wealth.api.fxpeer.exchange.model.GetProductsByCatId;
 import com.finacial.wealth.api.fxpeer.exchange.model.ValidateAccount;
+import com.finacial.wealth.api.fxpeer.exchange.security.consent.ConsentVerificationCoordinator;
+import com.finacial.wealth.api.fxpeer.exchange.security.consent.harsher.IntUtilitiesFulfilmentPayloadHasher;
+import com.finacial.wealth.api.fxpeer.exchange.util.UttilityMethods;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import java.io.IOException;
 import org.springframework.http.HttpStatus;
@@ -35,9 +39,17 @@ import org.springframework.web.bind.annotation.RestController;
 public class FxOtherServicesController {
 
     private final ProcSochitelServices procSochitelServices;
+    private final UttilityMethods uttilityMethods;
+    private final ConsentVerificationCoordinator consentVerificationCoordinator;
+    private final IntUtilitiesFulfilmentPayloadHasher intUtilitiesFulfilmentPayloadHasher;
 
-    public FxOtherServicesController(ProcSochitelServices procSochitelServices) {
+    public FxOtherServicesController(ProcSochitelServices procSochitelServices,
+            UttilityMethods uttilityMethods, ConsentVerificationCoordinator consentVerificationCoordinator,
+            IntUtilitiesFulfilmentPayloadHasher intUtilitiesFulfilmentPayloadHasher) {
         this.procSochitelServices = procSochitelServices;
+        this.uttilityMethods = uttilityMethods;
+        this.consentVerificationCoordinator = consentVerificationCoordinator;
+        this.intUtilitiesFulfilmentPayloadHasher = intUtilitiesFulfilmentPayloadHasher;
 
     }
 
@@ -110,9 +122,34 @@ public class FxOtherServicesController {
     )
     public ResponseEntity<ApiResponseModel> processTrnsaction(
             @RequestHeader(value = "authorization", required = true) String auth,
-            @RequestBody @Valid ProcessTrnsactionReq rq) throws IOException {
+            @RequestBody @Valid ProcessTrnsactionReq rq,
+            HttpServletRequest http) throws IOException {
+
+        String userId = uttilityMethods.getClaimFromJwt(auth, "emailAddress");
+
+        BaseResponse consentRes = consentVerificationCoordinator.requireConsent(
+                http,
+                "POST",
+                rq.getRecipient(), // reference for this transaction
+                userId,
+                rq,
+                intUtilitiesFulfilmentPayloadHasher
+        );
+
+        if (consentRes.getStatusCode() != 200) {
+
+            ApiResponseModel errorResponse = new ApiResponseModel();
+            errorResponse.setStatusCode(consentRes.getStatusCode());
+            errorResponse.setDescription(consentRes.getDescription());
+            errorResponse.setData(consentRes.getData());
+
+            return ResponseEntity
+                    .status(consentRes.getStatusCode())
+                    .body(errorResponse);
+        }
 
         ApiResponseModel baseResponse = procSochitelServices.processTrnsaction(rq, auth);
+
         return new ResponseEntity<>(baseResponse, HttpStatus.OK);
     }
 

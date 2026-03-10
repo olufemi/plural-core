@@ -32,7 +32,7 @@ public class DeviceBindingController {
        String userId = req.emailAddress();
 
         var r = deviceKeyService.upsertOnLogin(userId, req.deviceId(), req.devicePublicSpkiB64());
-        return new DeviceBindingResponse(r.deviceId(), r.status(), r.activeKid());
+        return new DeviceBindingResponse(r.deviceId(), r.status(), r.activeKid(),r.publicKeySpki());
     }
 
     // OTP confirm endpoint (OTP validation should happen before calling confirmOtpActivate)
@@ -42,6 +42,6 @@ public class DeviceBindingController {
         String userId = req.emailAddress(); // preferred if your JWT has sellerId
 
         var r = deviceKeyService.confirmOtpActivate(userId, req.deviceId());
-        return new DeviceBindingResponse(r.deviceId(), r.status(), r.activeKid());
+        return new DeviceBindingResponse(r.deviceId(), r.status(), r.activeKid(),r.publicKeySpki());
     }
 }

@@ -32,10 +32,10 @@ public class ReceiptSigningService {
         var active = repo.findFirstByStatusOrderByCreatedAtDesc(ReceiptSigningKeyEntity.KeyStatus.ACTIVE)
                 .orElseThrow(() -> new IllegalStateException("No ACTIVE receipt signing key"));
 
-        System.out.println("[receipt] ACTIVE kid=" + active.getKid()
+        /*System.out.println("[receipt] ACTIVE kid=" + active.getKid()
                 + " pubSpkiLen=" + safeLen(active.getPublicSpkiBase64())
                 + " encPrivLen=" + safeLen(active.getPrivatePkcs8EncryptedBase64()));
-        System.out.println("[receipt] encPriv head=" + safeHead(active.getPrivatePkcs8EncryptedBase64()));
+        System.out.println("[receipt] encPriv head=" + safeHead(active.getPrivatePkcs8EncryptedBase64()));*/
 
         var privateKey = keyMaterialService.loadPrivateKey(active.getPrivatePkcs8EncryptedBase64());
 
@@ -48,7 +48,7 @@ public class ReceiptSigningService {
     @Transactional(readOnly = true)
     public ReceiptSignResponse sign(ReceiptSignRequest req) {
         try {
-            System.out.println("[receipt] sign req=" + new Gson().toJson(req));
+           // System.out.println("[receipt] sign req=" + new Gson().toJson(req));
 
             validate(req);
 
@@ -58,15 +58,15 @@ public class ReceiptSigningService {
             var privateKey = keyMaterialService.loadPrivateKey(active.getPrivatePkcs8EncryptedBase64());
 
             String canonical = ReceiptSignatureUtil.canonicalV1(req);
-            System.out.println("[receipt] canonical=" + canonical); // temporarily
+           // System.out.println("[receipt] canonical=" + canonical); // temporarily
 
             String sigB64 = ReceiptSignatureUtil.signRawRsBase64(privateKey, canonical);
-            System.out.println("[receipt] sign OK kid=" + active.getKid() + " sigLen=" + sigB64.length());
+           // System.out.println("[receipt] sign OK kid=" + active.getKid() + " sigLen=" + sigB64.length());
 
             return new ReceiptSignResponse(1, active.getKid(), sigB64, "ES256", "R||S");
 
         } catch (Exception e) {
-            System.out.println("[receipt] SIGN FAILED: " + e.getClass().getName() + ": " + e.getMessage());
+          //  System.out.println("[receipt] SIGN FAILED: " + e.getClass().getName() + ": " + e.getMessage());
             e.printStackTrace(); // TEMP: so you see the real line
             throw e; // keep behavior for now
         }

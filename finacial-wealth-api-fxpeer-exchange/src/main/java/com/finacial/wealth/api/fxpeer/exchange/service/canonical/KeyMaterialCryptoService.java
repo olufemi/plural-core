@@ -33,11 +33,11 @@ public class KeyMaterialCryptoService {
         }
         this.masterKey = new SecretKeySpec(key, "AES");
         
-          System.out.println("[receipt] KeyMaterialCryptoService initialized. masterKeyLen="
-                + key.length + " sha256=" + sha256Hex(key));
+         /* System.out.println("[receipt] KeyMaterialCryptoService initialized. masterKeyLen="
+                + key.length + " sha256=" + sha256Hex(key));*/
 
-        System.out.println("[receipt] KeyMaterialCryptoService initialized. masterKeyLen="
-                + key.length + " sha256=" + sha256Hex(key));
+        /*System.out.println("[receipt] KeyMaterialCryptoService initialized. masterKeyLen="
+                + key.length + " sha256=" + sha256Hex(key));*/
     }
 
     private String sha256Hex(byte[] b) {
@@ -100,19 +100,19 @@ public class KeyMaterialCryptoService {
             }
 
             String cleaned = encB64.replaceAll("\\s", "");
-            System.out.println("[receipt][" + trace + "] decrypt inputLen=" + encB64.length()
+            /*System.out.println("[receipt][" + trace + "] decrypt inputLen=" + encB64.length()
                     + " cleanedLen=" + cleaned.length()
-                    + " head=" + cleaned.substring(0, Math.min(16, cleaned.length())));
+                    + " head=" + cleaned.substring(0, Math.min(16, cleaned.length())));*/
 
             byte[] in;
             try {
                 in = Base64.getDecoder().decode(cleaned);
             } catch (IllegalArgumentException badB64) {
-                System.out.println("[receipt][" + trace + "] Base64 decode FAILED: " + badB64.getMessage());
+               // System.out.println("[receipt][" + trace + "] Base64 decode FAILED: " + badB64.getMessage());
                 throw badB64;
             }
 
-            System.out.println("[receipt][" + trace + "] Base64 decode OK bytes=" + in.length);
+           // System.out.println("[receipt][" + trace + "] Base64 decode OK bytes=" + in.length);
 
             if (in.length < IV_LEN + 16) {
                 throw new IllegalArgumentException("Invalid encrypted data (too short): " + in.length);
@@ -128,12 +128,12 @@ public class KeyMaterialCryptoService {
             try {
                 return c.doFinal(ct);
             } catch (javax.crypto.AEADBadTagException badTag) {
-                System.out.println("[receipt][" + trace + "] AES/GCM BAD TAG (wrong master key or corrupted ciphertext)");
+               // System.out.println("[receipt][" + trace + "] AES/GCM BAD TAG (wrong master key or corrupted ciphertext)");
                 throw badTag;
             }
 
         } catch (Exception e) {
-            System.out.println("[receipt][" + trace + "] decrypt ERROR type=" + e.getClass().getName() + " msg=" + e.getMessage());
+           // System.out.println("[receipt][" + trace + "] decrypt ERROR type=" + e.getClass().getName() + " msg=" + e.getMessage());
             throw new IllegalStateException("Decrypt failed", e);
         }
     }

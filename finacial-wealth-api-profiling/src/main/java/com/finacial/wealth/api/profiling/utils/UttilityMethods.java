@@ -14,7 +14,10 @@ import com.finacial.wealth.api.profiling.repo.VerifyReqIdDetailsAuthRepo;
 import com.finacial.wealth.api.profiling.response.BaseResponse;
 import com.finacial.wealth.api.profiling.utilities.models.OtpRequest;
 import com.google.common.collect.Range;
+import com.google.gson.Gson;
+import com.google.gson.JsonObject;
 import com.google.gson.JsonSyntaxException;
+import java.nio.charset.StandardCharsets;
 
 import java.security.InvalidKeyException;
 import java.security.Key;
@@ -306,5 +309,30 @@ public class UttilityMethods {
             return false;
         }
         return Check4Digits.matcher(strNum).matches();
+    }
+
+    public String getClaimFromJwt(String authorization, String claimName) {
+        try {
+            if (authorization == null) {
+                return null;
+            }
+            String token = authorization.replaceFirst("(?i)^Bearer\\s+", "").trim();
+            String[] parts = token.split("\\.");
+            if (parts.length < 2) {
+                return null;
+            }
+
+            // Base64URL decode payload
+            byte[] payload = Base64.getUrlDecoder().decode(parts[1]);
+            String json = new String(payload, StandardCharsets.UTF_8);
+
+            JsonObject obj = new Gson().fromJson(json, JsonObject.class);
+            return obj.has(claimName) && !obj.get(claimName).isJsonNull()
+                    ? obj.get(claimName).getAsString()
+                    : null;
+        } catch (Exception e) {
+            e.printStackTrace();
+            return null;
+        }
     }
 }

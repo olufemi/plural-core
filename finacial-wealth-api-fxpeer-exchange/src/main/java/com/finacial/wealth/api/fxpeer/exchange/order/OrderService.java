@@ -22,6 +22,7 @@ import com.finacial.wealth.api.fxpeer.exchange.domain.RegWalletInfo;
 import com.finacial.wealth.api.fxpeer.exchange.domain.RegWalletInfoRepository;
 import com.finacial.wealth.api.fxpeer.exchange.feign.ProfilingProxies;
 import com.finacial.wealth.api.fxpeer.exchange.feign.TransactionServiceProxies;
+import com.finacial.wealth.api.fxpeer.exchange.fx.p.p.wallet.FinWealthPaymentTransactionRepo;
 import com.finacial.wealth.api.fxpeer.exchange.model.AddAccountObj;
 import com.finacial.wealth.api.fxpeer.exchange.model.ApiResponseModel;
 import com.finacial.wealth.api.fxpeer.exchange.model.BaseResponse;
@@ -85,8 +86,9 @@ public class OrderService {
     private final PeerToPeerFxReferralRepo peerToPeerFxReferralRepo;
     private final ObjectMapper mapper;
     private final TransactionHistoryClientLocalT transactionHistoryClientLocalT;
+    private final FinWealthPaymentTransactionRepo finWealthPaymentTransactionRepo;
 
-    public OrderService(OrderRepository orders, OfferRepository offers,
+    public OrderService(FinWealthPaymentTransactionRepo finWealthPaymentTransactionRepo, OrderRepository orders, OfferRepository offers,
             TransactionServiceProxies transactionServiceProxies,
             UttilityMethods utilService, RegWalletInfoRepository regWalletInfoRepository,
             AddAccountDetailsRepo addAccountDetailsRepo,
@@ -94,6 +96,7 @@ public class OrderService {
             WalletIndivTransactionsDetailsRepo walletIndivTransactionsDetailsRepo,
             AppConfigRepo appConfigRepo, PeerToPeerFxReferralRepo peerToPeerFxReferralRepo,
             ObjectMapper mapper, TransactionHistoryClientLocalT transactionHistoryClientLocalT) {
+        this.finWealthPaymentTransactionRepo = finWealthPaymentTransactionRepo;
         this.orders = orders;
         this.offers = offers;
         this.transactionServiceProxies = transactionServiceProxies;
@@ -292,7 +295,7 @@ public class OrderService {
             }
 
             //validate pin
-            BaseResponse bResPin = new BaseResponse();
+            /*BaseResponse bResPin = new BaseResponse();
             WalletNo wSend = new WalletNo();
             wSend.setPin(rq.getPin());
 
@@ -300,7 +303,7 @@ public class OrderService {
             bResPin = transactionServiceProxies.validatePin(wSend, auth);
             if (bResPin.getStatusCode() != 200) {
                 return bad(res, bResPin.getDescription(), bResPin.getStatusCode());
-            }
+            }*/
 
             //check if cus has currency currency
             List<AddAccountDetails> getAdDe = addAccountDetailsRepo.findByEmailAddressrData(getRec.get().getEmail());
@@ -641,9 +644,10 @@ public class OrderService {
                 kTrans2b.setSenderName(getRec.get().getFullName());
                 kTrans2b.setSentAmount(rqC.getFinalCHarges());
                 kTrans2b.setTheNarration("Fx Peer-Peer Transfer");
-                kTrans2b.setCurrencyCode(off.get(0).getCurrencyReceive().toString());
+                kTrans2b.setCurrencyCode(off.get(0).getCurrencySell().toString());
 
-                //finWealthPaymentTransactionRepo.save(kTrans2b);
+                finWealthPaymentTransactionRepo.save(kTrans2b);
+
                 System.out.println("ABOUT TO PUBLISH TXN HISTORY txId=" + kTrans2b.getTransactionId()
                         + " walletNo=" + kTrans2b.getWalletNo()
                         + " paymentType=" + kTrans2b.getPaymentType()
@@ -948,6 +952,7 @@ public class OrderService {
         kTrans2b.setSentAmount(rqC.getFinalCHarges());
         kTrans2b.setTheNarration("Fx Peer-Peer Transfer");
         kTrans2b.setCurrencyCode(off.get(0).getCurrencyReceive().toString());
+        finWealthPaymentTransactionRepo.save(kTrans2b);
 
         //  transactionHistoryClientLocalT.publishFromTxn(kTrans2b);
         Order ord = new Order();

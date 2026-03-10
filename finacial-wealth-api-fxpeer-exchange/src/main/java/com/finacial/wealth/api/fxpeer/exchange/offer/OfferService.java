@@ -16,6 +16,7 @@ import com.finacial.wealth.api.fxpeer.exchange.domain.AppConfigRepo;
 import com.finacial.wealth.api.fxpeer.exchange.domain.FinWealthPaymentTransaction;
 import com.finacial.wealth.api.fxpeer.exchange.feign.ProfilingProxies;
 import com.finacial.wealth.api.fxpeer.exchange.feign.TransactionServiceProxies;
+import com.finacial.wealth.api.fxpeer.exchange.fx.p.p.wallet.FinWealthPaymentTransactionRepo;
 import com.finacial.wealth.api.fxpeer.exchange.fx.p.p.wallet.WalletTransactionsDetails;
 import com.finacial.wealth.api.fxpeer.exchange.fx.p.p.wallet.WalletTransactionsDetailsRepo;
 import com.finacial.wealth.api.fxpeer.exchange.investment.service.TransactionHistoryClientLocalT;
@@ -85,6 +86,7 @@ public class OfferService {
     @Value("${fx.trade.expired.listings.cron}")
     private String fxTradeExpiredListingsCron;
     private final TransactionHistoryClientLocalT transactionHistoryClientLocalT;
+    private final FinWealthPaymentTransactionRepo finWealthPaymentTransactionRepo;
 
     private static final ZoneId LAGOS = ZoneId.of("Africa/Lagos");
     private static final DateTimeFormatter EXPIRY_DMY
@@ -98,7 +100,9 @@ public class OfferService {
             ProfilingProxies profilingProxies,
             TransactionServiceProxies transactionServiceProxies,
             AppConfigRepo appConfigRepo, WalletTransactionsDetailsRepo walletTransactionsDetailsRepo,
-            TransactionHistoryClientLocalT transactionHistoryClientLocalT) {
+            TransactionHistoryClientLocalT transactionHistoryClientLocalT,
+            FinWealthPaymentTransactionRepo finWealthPaymentTransactionRepo) {
+        this.finWealthPaymentTransactionRepo = finWealthPaymentTransactionRepo;
         this.repo = repo;
         this.ledger = ledger;
         this.utilService = utilService;
@@ -109,6 +113,7 @@ public class OfferService {
         this.appConfigRepo = appConfigRepo;
         this.walletTransactionsDetailsRepo = walletTransactionsDetailsRepo;
         this.transactionHistoryClientLocalT = transactionHistoryClientLocalT;
+
     }
 
     @Transactional(readOnly = true)
@@ -441,7 +446,7 @@ public class OfferService {
             String phoneNumber = utilService.getClaimFromJwt(auth, "phoneNumber"); // preferred if your JWT has sellerId
             Optional<RegWalletInfo> getRec = regWalletInfoRepository.findByPhoneNumber(phoneNumber);
             //validate pin
-            BaseResponse bResPin = new BaseResponse();
+            /*BaseResponse bResPin = new BaseResponse();
             WalletNo wSend = new WalletNo();
             wSend.setPin(rq.getPin());
 
@@ -449,7 +454,7 @@ public class OfferService {
             bResPin = transactionServiceProxies.validatePin(wSend, auth);
             if (bResPin.getStatusCode() != 200) {
                 return bad(res, bResPin.getDescription(), bResPin.getStatusCode());
-            }
+            }*/
 
             List<Offer> offerDe = repo.findByCorrelationIdData(rq.getCorrelationId());
             if (offerDe.size() <= 0) {
@@ -498,9 +503,9 @@ public class OfferService {
 
             Optional<RegWalletInfo> getRec = regWalletInfoRepository.findByPhoneNumber(phoneNumber);
             //validate pin
-            BaseResponse bResPin = new BaseResponse();
+            /*BaseResponse bResPin = new BaseResponse();
             WalletNo wSend = new WalletNo();
-            wSend.setPin(rq.getPin());
+            wSend.setPin(rq.getPin());*/
 
             // 0) Basic request checks
             if (rq == null) {
@@ -511,11 +516,11 @@ public class OfferService {
                 return bad(res, "currencySell, currencyReceive, rate, qtyTotal, expiredAt are required.", 400);
             }
 
-            wSend.setWalletId(getRec.get().getWalletId());
+            /*wSend.setWalletId(getRec.get().getWalletId());
             bResPin = transactionServiceProxies.validatePin(wSend, auth);
             if (bResPin.getStatusCode() != 200) {
                 return bad(res, bResPin.getDescription(), bResPin.getStatusCode());
-            }
+            }*/
             if (rq.getCurrencyReceive().equals(rq.getCurrencySell())) {
                 return bad(res, "Country code mismatch!", 400);
             }
@@ -747,9 +752,9 @@ public class OfferService {
                 kTrans2b.setSentAmount(rqD.getFinalCHarges());
                 kTrans2b.setTheNarration("Fx Peer-Peer listing.");
                 kTrans2b.setCurrencyCode(rq.getCurrencySell().toString());
+                finWealthPaymentTransactionRepo.save(kTrans2b);
 
-              //  transactionHistoryClientLocalT.publishFromTxn(kTrans2b);
-
+                //  transactionHistoryClientLocalT.publishFromTxn(kTrans2b);
                 System.out.println("sellerId" + "  ::::::::::::::::::::: >>>>>>>>>>>>>>>>>>  " + sellerId);
 
                 DebitWalletCaller debGLCredit = new DebitWalletCaller();
@@ -996,7 +1001,7 @@ public class OfferService {
             String phoneNumber = utilService.getClaimFromJwt(auth, "phoneNumber"); // preferred if your JWT has sellerId
             Optional<RegWalletInfo> getRec = regWalletInfoRepository.findByPhoneNumber(phoneNumber);
             //validate pin
-            BaseResponse bResPin = new BaseResponse();
+            /*BaseResponse bResPin = new BaseResponse();
             WalletNo wSend = new WalletNo();
             wSend.setPin(rq.getPin());
 
@@ -1004,7 +1009,7 @@ public class OfferService {
             bResPin = transactionServiceProxies.validatePin(wSend, auth);
             if (bResPin.getStatusCode() != 200) {
                 return bad(res, bResPin.getDescription(), bResPin.getStatusCode());
-            }
+            }*/
 
             List<Offer> offerDe = repo.findByCorrelationIdData(rq.getCorrelationId());
             if (offerDe.size() <= 0) {
@@ -1086,9 +1091,8 @@ public class OfferService {
                 kTrans2b.setTheNarration("Fx Peer-Peer listing.");
                 kTrans2b.setCurrencyCode(getWalDeupdate.getCurrencyToSell());
 
-                // finWealthPaymentTransactionRepo.save(kTrans2b);
-               // transactionHistoryClientLocalT.publishFromTxn(kTrans2b);
-
+                finWealthPaymentTransactionRepo.save(kTrans2b);
+                // transactionHistoryClientLocalT.publishFromTxn(kTrans2b);
             }
 
             getWalDeupdate.setLastModifiedDate(Instant.now());

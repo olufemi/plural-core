@@ -54,7 +54,7 @@ public class DeviceKeyService {
             DeviceKeyEntity e = existingActiveForDevice.get();
             e.setLastSeenAt(Instant.now());
             repo.save(e);
-            return DeviceBindingResult.active(deviceId, e.getKid());
+            return DeviceBindingResult.active(deviceId, e.getKid(), e.getPublicSpkiB64());
         }
 
         // If user has an ACTIVE device (different deviceId), then this is device-change -> PENDING until OTP confirm
@@ -64,7 +64,7 @@ public class DeviceKeyService {
 
             // create/update PENDING record for this device (new device)
             DeviceKeyEntity pending = findOrCreatePending(userId, deviceId, cleanedSpki);
-            return DeviceBindingResult.pending(deviceId, pending.getKid());
+            return DeviceBindingResult.pending(deviceId, pending.getKid(), pending.getPublicSpkiB64());
         }
 
         // No ACTIVE device yet: create ACTIVE immediately (or you can choose PENDING + OTP even for first device)
@@ -86,7 +86,7 @@ public class DeviceKeyService {
                 created.getKid(),
                 created.getStatus());
 
-        return DeviceBindingResult.active(deviceId, created.getKid());
+        return DeviceBindingResult.active(deviceId, created.getKid(), created.getPublicSpkiB64());
     }
 
     @Transactional
@@ -113,7 +113,7 @@ public class DeviceKeyService {
             }
         }
 
-        return DeviceBindingResult.active(deviceId, pending.getKid());
+        return DeviceBindingResult.active(deviceId, pending.getKid(), pending.getPublicSpkiB64());
     }
 
     private DeviceKeyEntity findOrCreatePending(String userId, String deviceId, String publicSpkiB64) {
@@ -151,18 +151,18 @@ public class DeviceKeyService {
         return v;
     }
 
-    public record DeviceBindingResult(String deviceId, String status, String activeKid) {
+    public record DeviceBindingResult(String deviceId, String status, String activeKid, String publicKeySpki) {
 
-        static DeviceBindingResult active(String deviceId, String kid) {
-            return new DeviceBindingResult(deviceId, "ACTIVE", kid);
+        static DeviceBindingResult active(String deviceId, String kid, String publicKeySpki) {
+            return new DeviceBindingResult(deviceId, "ACTIVE", kid, publicKeySpki);
         }
 
-        static DeviceBindingResult pending(String deviceId, String kid) {
-            return new DeviceBindingResult(deviceId, "PENDING", kid);
+        static DeviceBindingResult pending(String deviceId, String kid, String publicKeySpki) {
+            return new DeviceBindingResult(deviceId, "PENDING", kid, publicKeySpki);
         }
 
         static DeviceBindingResult none() {
-            return new DeviceBindingResult(null, "NONE", null);
+            return new DeviceBindingResult(null, "NONE", null, null);
         }
     }
 }

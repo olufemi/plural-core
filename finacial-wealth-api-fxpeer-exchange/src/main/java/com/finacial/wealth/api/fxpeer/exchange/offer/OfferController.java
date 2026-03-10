@@ -11,7 +11,14 @@ package com.finacial.wealth.api.fxpeer.exchange.offer;
 import com.finacial.wealth.api.fxpeer.exchange.common.OfferStatus;
 
 import com.finacial.wealth.api.fxpeer.exchange.model.ApiResponseModel;
+import com.finacial.wealth.api.fxpeer.exchange.model.BaseResponse;
 import com.finacial.wealth.api.fxpeer.exchange.model.GetProducts;
+import com.finacial.wealth.api.fxpeer.exchange.security.consent.ConsentVerificationCoordinator;
+import com.finacial.wealth.api.fxpeer.exchange.security.consent.harsher.CancelOfferPayloadHasher;
+import com.finacial.wealth.api.fxpeer.exchange.security.consent.harsher.CreateOfferPayloadHasher;
+import com.finacial.wealth.api.fxpeer.exchange.security.consent.harsher.UpdateOfferPayloadHasher;
+import com.finacial.wealth.api.fxpeer.exchange.util.UttilityMethods;
+import jakarta.servlet.http.HttpServletRequest;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMin;
@@ -31,13 +38,26 @@ import org.springframework.http.HttpStatus;
 public class OfferController {
 
     private final OfferService service;
-  //  private final ProcSochitelServices procSochitelServices;
+    private final CreateOfferPayloadHasher createOfferPayloadHasher;
+    private final UttilityMethods uttilityMethods;
+    private final ConsentVerificationCoordinator consentVerificationCoordinator;
+    private final UpdateOfferPayloadHasher updateOfferPayloadHasher;
+    private final CancelOfferPayloadHasher cancelOfferPayloadHasher;
 
-    public OfferController(OfferService service
-           // ProcSochitelServices procSochitelServices
+    public OfferController(OfferService service, CreateOfferPayloadHasher createOfferPayloadHasher,
+            UttilityMethods uttilityMethods,
+            ConsentVerificationCoordinator consentVerificationCoordinator,
+            UpdateOfferPayloadHasher updateOfferPayloadHasher,
+            CancelOfferPayloadHasher cancelOfferPayloadHasher
+    // ProcSochitelServices procSochitelServices
     ) {
         this.service = service;
-      //  this.procSochitelServices = procSochitelServices;
+        this.createOfferPayloadHasher = createOfferPayloadHasher;
+        this.uttilityMethods = uttilityMethods;
+        this.consentVerificationCoordinator = consentVerificationCoordinator;
+        this.updateOfferPayloadHasher = updateOfferPayloadHasher;
+        this.cancelOfferPayloadHasher = cancelOfferPayloadHasher;
+        //  this.procSochitelServices = procSochitelServices;
     }
 
     @GetMapping("/get-all-live-offers")
@@ -70,39 +90,99 @@ public class OfferController {
 
     }
 
-  
-
-    /*@PostMapping("/create-offer")
-    public ResponseEntity<ApiResponseModel> createOfferCaller(
-            @RequestHeader(value = "authorization", required = true) String auth,
-            @RequestBody @Valid CreateOfferCaller rq) {
-
-        ResponseEntity<ApiResponseModel> baseResponse = service.createOfferCaller(rq, auth);
-        return baseResponse;
-    }*/
     @PostMapping("/create-offer")
     public ResponseEntity<ApiResponseModel> createOfferCaller(
             @RequestHeader(value = "authorization", required = true) String auth,
-            @RequestBody @Valid CreateOfferCaller rq) {
+            @RequestBody @Valid CreateOfferCaller rq,
+            HttpServletRequest http) {
 
-        ResponseEntity<ApiResponseModel> baseResponse = service.createOfferCaller(rq, auth);
-        return baseResponse;
+        String userId = uttilityMethods.getClaimFromJwt(auth, "emailAddress");
+
+        BaseResponse consentRes = consentVerificationCoordinator.requireConsent(
+                http,
+                "POST",
+                rq.getExpiredAt(), // or use a better reference if available
+                userId,
+                rq,
+                createOfferPayloadHasher
+        );
+
+        if (consentRes.getStatusCode() != 200) {
+            ApiResponseModel errorResponse = new ApiResponseModel();
+            errorResponse.setStatusCode(consentRes.getStatusCode());
+            errorResponse.setDescription(consentRes.getDescription());
+            errorResponse.setData(consentRes.getData());
+
+            return ResponseEntity
+                    .status(consentRes.getStatusCode())
+                    .body(errorResponse);
+        }
+
+        return service.createOfferCaller(rq, auth);
     }
 
     @PostMapping("/update-offer")
-    public ResponseEntity<ApiResponseModel> updateOfferCaller(@RequestHeader(value = "authorization", required = true) String auth,
-            @RequestBody @Valid UpdateOfferCallerReq rq) {
+    public ResponseEntity<ApiResponseModel> updateOfferCaller(
+            @RequestHeader(value = "authorization", required = true) String auth,
+            @RequestBody @Valid UpdateOfferCallerReq rq,
+            HttpServletRequest http) {
 
-        ResponseEntity<ApiResponseModel> baseResponse = service.updateOfferCaller(rq, auth);
-        return baseResponse;
+        String userId = uttilityMethods.getClaimFromJwt(auth, "emailAddress");
+
+        BaseResponse consentRes = consentVerificationCoordinator.requireConsent(
+                http,
+                "POST",
+                rq.getCorrelationId(),
+                userId,
+                rq,
+                updateOfferPayloadHasher
+        );
+
+        if (consentRes.getStatusCode() != 200) {
+
+            ApiResponseModel errorResponse = new ApiResponseModel();
+            errorResponse.setStatusCode(consentRes.getStatusCode());
+            errorResponse.setDescription(consentRes.getDescription());
+            errorResponse.setData(consentRes.getData());
+
+            return ResponseEntity
+                    .status(consentRes.getStatusCode())
+                    .body(errorResponse);
+        }
+
+        return service.updateOfferCaller(rq, auth);
     }
 
     @PostMapping("/cancel-offer")
-    public ResponseEntity<ApiResponseModel> cancelOfferCaller(@RequestHeader(value = "authorization", required = true) String auth,
-            @RequestBody @Valid CancelOfferCallerReq rq) {
+    public ResponseEntity<ApiResponseModel> cancelOffer(
+            @RequestHeader(value = "authorization", required = true) String auth,
+            @RequestBody @Valid CancelOfferCallerReq rq,
+            HttpServletRequest http) {
 
-        ResponseEntity<ApiResponseModel> baseResponse = service.cancelOfferCaller(rq, auth);
-        return baseResponse;
+        String userId = uttilityMethods.getClaimFromJwt(auth, "emailAddress");
+
+        BaseResponse consentRes = consentVerificationCoordinator.requireConsent(
+                http,
+                "POST",
+                rq.getCorrelationId(),
+                userId,
+                rq,
+                cancelOfferPayloadHasher
+        );
+
+        if (consentRes.getStatusCode() != 200) {
+
+            ApiResponseModel errorResponse = new ApiResponseModel();
+            errorResponse.setStatusCode(consentRes.getStatusCode());
+            errorResponse.setDescription(consentRes.getDescription());
+            errorResponse.setData(consentRes.getData());
+
+            return ResponseEntity
+                    .status(consentRes.getStatusCode())
+                    .body(errorResponse);
+        }
+
+        return service.cancelOfferCaller(rq, auth);
     }
 
     @GetMapping("/{id}")

@@ -15,5 +15,5 @@ public class AcceptQuoteFE {
 
     boolean accepted;
     private String quoteId;
-    private String pin;
+   // private String pin;
 }

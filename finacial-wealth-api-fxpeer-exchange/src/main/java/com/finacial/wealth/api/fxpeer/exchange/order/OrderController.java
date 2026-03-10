@@ -7,8 +7,13 @@ package com.finacial.wealth.api.fxpeer.exchange.order;
 import com.finacial.wealth.api.fxpeer.exchange.escrow.Escrow;
 import com.finacial.wealth.api.fxpeer.exchange.escrow.EscrowService;
 import com.finacial.wealth.api.fxpeer.exchange.model.ApiResponseModel;
+import com.finacial.wealth.api.fxpeer.exchange.model.BaseResponse;
+import com.finacial.wealth.api.fxpeer.exchange.security.consent.ConsentVerificationCoordinator;
+import com.finacial.wealth.api.fxpeer.exchange.security.consent.harsher.BuyOfferNowPayloadHasher;
+import com.finacial.wealth.api.fxpeer.exchange.util.UttilityMethods;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotNull;
@@ -35,10 +40,19 @@ public class OrderController {
 
     private final OrderService orderService;
     private final EscrowService escrowService;
+    private final UttilityMethods uttilityMethods;
+    private final ConsentVerificationCoordinator consentVerificationCoordinator;
+    private final BuyOfferNowPayloadHasher buyOfferNowPayloadHasher;
 
-    public OrderController(OrderService orderService, EscrowService escrowService) {
+    public OrderController(OrderService orderService, EscrowService escrowService,
+            UttilityMethods uttilityMethods,
+            ConsentVerificationCoordinator consentVerificationCoordinator,
+            BuyOfferNowPayloadHasher buyOfferNowPayloadHasher) {
         this.orderService = orderService;
         this.escrowService = escrowService;
+        this.uttilityMethods = uttilityMethods;
+        this.consentVerificationCoordinator = consentVerificationCoordinator;
+        this.buyOfferNowPayloadHasher = buyOfferNowPayloadHasher;
     }
 
     @GetMapping("/get-all-customer-transactions")
@@ -55,10 +69,32 @@ public class OrderController {
     @PostMapping("/buy-offer-now")
     public ResponseEntity<ApiResponseModel> createOfferCaller(
             @RequestHeader(value = "authorization", required = true) String auth,
-            @RequestBody @Valid BuyOfferNow rq) {
+            @RequestBody @Valid BuyOfferNow rq,
+            HttpServletRequest http) {
 
-        ResponseEntity<ApiResponseModel> baseResponse = orderService.createOrderCaller(rq, auth);
-        return baseResponse;
+        String userId = uttilityMethods.getClaimFromJwt(auth, "emailAddress");
+
+        BaseResponse consentRes = consentVerificationCoordinator.requireConsent(
+                http,
+                "POST",
+                rq.getOfferCorrelationId(),
+                userId,
+                rq,
+                buyOfferNowPayloadHasher
+        );
+
+        if (consentRes.getStatusCode() != 200) {
+            ApiResponseModel errorResponse = new ApiResponseModel();
+            errorResponse.setStatusCode(consentRes.getStatusCode());
+            errorResponse.setDescription(consentRes.getDescription());
+            errorResponse.setData(consentRes.getData());
+
+            return ResponseEntity
+                    .status(consentRes.getStatusCode())
+                    .body(errorResponse);
+        }
+
+        return orderService.createOrderCaller(rq, auth);
     }
 
     @Operation(summary = "Buy Now: create Order and reserve offer qty")
@@ -67,7 +103,7 @@ public class OrderController {
             @PathVariable long offerId,
             @RequestBody @Valid BuyNowRq rq) throws NoSuchAlgorithmException, NoSuchPaddingException, InvalidKeyException, IllegalBlockSizeException, BadPaddingException {
         //Order ord = orderService.buyNow(offerId, rq.amount(), buyerId, rq.lockTtlSeconds());
-        Order ord = orderService.buyNow("","",offerId, rq.amount(), String.valueOf(buyerId), 600, "", "", "", "", "");
+        Order ord = orderService.buyNow("", "", offerId, rq.amount(), String.valueOf(buyerId), 600, "", "", "", "", "");
 
         return ResponseEntity.ok(ord);
     }

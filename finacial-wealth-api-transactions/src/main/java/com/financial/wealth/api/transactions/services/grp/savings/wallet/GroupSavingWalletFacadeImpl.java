@@ -172,6 +172,7 @@ public class GroupSavingWalletFacadeImpl implements WalletFacade {
             kTrans2b.setSenderName(getReceiverName.get(0).getFullName());
             kTrans2b.setSentAmount(amount.toString());
             kTrans2b.setTheNarration("Group savings debit.");
+            kTrans2b.setCurrencyCode(CCY);
             
             transactionHistoryClientLocalT.publishFromTxn(kTrans2b);
 
@@ -295,6 +296,7 @@ public class GroupSavingWalletFacadeImpl implements WalletFacade {
             kTrans2b.setSenderName(getReceiverName.get(0).getFullName());
             kTrans2b.setSentAmount(amount.toString());
             kTrans2b.setTheNarration("Group savings settlement.");
+            kTrans2b.setCurrencyCode(CCY);
             
             transactionHistoryClientLocalT.publishFromTxn(kTrans2b);
 

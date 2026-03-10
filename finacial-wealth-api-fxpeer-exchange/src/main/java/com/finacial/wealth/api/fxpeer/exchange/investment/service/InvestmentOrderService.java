@@ -406,6 +406,7 @@ public class InvestmentOrderService {
             kTrans2b.setSentAmount(finCharges.toString());
             kTrans2b.setTheNarration("Investment purchase.");
             kTrans2b.setCurrencyCode(rq.getCurrencyCode());
+            finWealthPaymentTransactionRepo.save(kTrans2b);
 
             // transactionHistoryClientLocalT.publishFromTxn(kTrans2b);
             return out;
@@ -439,7 +440,7 @@ public class InvestmentOrderService {
                 return resp;
             }
 
-            BaseResponse bResPin = new BaseResponse();
+            /*BaseResponse bResPin = new BaseResponse();
             WalletNo wSend = new WalletNo();
             wSend.setPin(rq.getPin());
 
@@ -449,7 +450,7 @@ public class InvestmentOrderService {
                 resp.setStatusCode(bResPin.getStatusCode());
                 resp.setDescription(bResPin.getDescription());
                 return resp;
-            }
+            }*/
 
             if (rq == null || rq.getCurrencyCode() == null || rq.getCurrencyCode().trim().isEmpty()) {
                 resp.setStatusCode(400);
@@ -891,7 +892,7 @@ public class InvestmentOrderService {
             }
 
             // Validate PIN
-            WalletNo wSend = new WalletNo();
+            /*WalletNo wSend = new WalletNo();
             wSend.setPin(rq.pin());
             wSend.setWalletId(getRec.get().getWalletId());
 
@@ -901,7 +902,7 @@ public class InvestmentOrderService {
                 res.setDescription(bResPin == null ? "PIN validation failed" : bResPin.getDescription());
                 res.setData(Collections.emptyMap());
                 return res;
-            }
+            }*/
 
             // Find subscription order (must be ACTIVE)
             Optional<InvestmentOrder> optSubOrder
@@ -1284,6 +1285,7 @@ public class InvestmentOrderService {
             }
             kTrans2b.setTheNarration("Investment Liquidation.");
             kTrans2b.setCurrencyCode(order.getProduct().getCurrency());
+            finWealthPaymentTransactionRepo.save(kTrans2b);
 
             // transactionHistoryClientLocalT.publishFromTxn(kTrans2b);
         } catch (Exception ex) {
@@ -1317,7 +1319,7 @@ public class InvestmentOrderService {
                 return resp;
             }
 
-            BaseResponse bResPin = new BaseResponse();
+            /*BaseResponse bResPin = new BaseResponse();
             WalletNo wSend = new WalletNo();
             wSend.setPin(rq.getPin());
 
@@ -1327,7 +1329,7 @@ public class InvestmentOrderService {
                 resp.setStatusCode(bResPin.getStatusCode());
                 resp.setDescription(bResPin.getDescription());
                 return resp;
-            }
+            }*/
 
             if (rq == null || rq.getCurrencyCode() == null || rq.getCurrencyCode().trim().isEmpty()) {
                 resp.setStatusCode(400);

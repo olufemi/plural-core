@@ -238,6 +238,8 @@ public class SessionManagerClientUserService {
                 mp.put("deviceId", getDevBind.getDeviceId());
                 mp.put("activeKid", getDevBind.getActiveKid());
                 mp.put("status", getDevBind.getStatus());
+                mp.put("publicKeySpki", getDevBind.getDevicePublicSpkiB64());
+                mp.put("keyType", "DEVICE_SIGNING");
 
                 baseResponse.addData("deviceBinding", mp);
 

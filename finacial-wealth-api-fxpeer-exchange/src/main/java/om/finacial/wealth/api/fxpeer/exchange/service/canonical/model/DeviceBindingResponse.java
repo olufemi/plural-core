@@ -11,5 +11,7 @@ package om.finacial.wealth.api.fxpeer.exchange.service.canonical.model;
 public record DeviceBindingResponse(
         String deviceId,
         String status,     // NONE|PENDING|ACTIVE
-        String activeKid
+        String activeKid,
+        String devicePublicSpkiB64
+        
 ) {}

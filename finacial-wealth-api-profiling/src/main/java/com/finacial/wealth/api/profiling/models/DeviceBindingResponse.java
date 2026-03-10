@@ -16,5 +16,6 @@ public class DeviceBindingResponse {
     private String deviceId;
     private String status;     // NONE|PENDING|ACTIVE
     private String activeKid;
+    private String devicePublicSpkiB64;
 
 }

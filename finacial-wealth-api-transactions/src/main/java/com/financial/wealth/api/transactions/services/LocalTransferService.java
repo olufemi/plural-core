@@ -1037,7 +1037,7 @@ public class LocalTransferService {
             }
             //validate pin (is pin valid?)
 
-            String encyrptedPin = utilMeth.encyrpt(String.valueOf(rq.getPin()), encryptionKey);
+            /*String encyrptedPin = utilMeth.encyrpt(String.valueOf(rq.getPin()), encryptionKey);
             String pin = senderWalletdetails.get(0).getPersonId();
             if (!encyrptedPin.equals(pin)) {
 
@@ -1053,7 +1053,7 @@ public class LocalTransferService {
                 localTransFailedTransInfoRepo.save(procFailedTrans);
                 return responseModel;
 
-            }
+            }*/
             //check if user has validate emailaddress
             if (!senderWalletdetails.get(0).isEmailVerification()) {
                 LocalTransFailedTransInfo procFailedTrans = new LocalTransFailedTransInfo(

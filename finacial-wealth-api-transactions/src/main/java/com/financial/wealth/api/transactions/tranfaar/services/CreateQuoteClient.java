@@ -133,7 +133,7 @@ public class CreateQuoteClient {
                 return responseModel;
 
             }
-            String encyrptedPin = uttilityMethods.encyrpt(String.valueOf(rq.getPin()), encryptionKey);
+            /*String encyrptedPin = uttilityMethods.encyrpt(String.valueOf(rq.getPin()), encryptionKey);
             String pin = getRegUsr.get(0).getPersonId();
             if (!encyrptedPin.equals(pin)) {
 
@@ -144,7 +144,7 @@ public class CreateQuoteClient {
                 responseModel.setStatusCode(statusCode);
                 return responseModel;
 
-            }
+            }*/
 
             responseModel.setDescription("The pin is valid!");
             responseModel.setStatusCode(200);
@@ -431,7 +431,7 @@ public class CreateQuoteClient {
             }
 
             // Validate PIN
-            String encryptedPin
+            /*String encryptedPin
                     = uttilityMethods.encyrpt(String.valueOf(rq.getPin()), encryptionKey);
 
             String storedPin = senderWalletdetails.get(0).getPersonId();
@@ -445,7 +445,7 @@ public class CreateQuoteClient {
                 responseModel.setDescription("Invalid PIN!");
                 responseModel.setStatusCode(statusCode);
                 return responseModel;
-            }
+            }*/
 
             CreateQuoteResLog logToUpdate
                     = createQuoteResLogRepo.findByQuoteIdUpdate(rq.getQuoteId());
@@ -1046,7 +1046,7 @@ public class CreateQuoteClient {
             }
 
             // validate pin
-            String encryptedPin
+           /* String encryptedPin
                     = uttilityMethods.encyrpt(String.valueOf(rq.getPin()), encryptionKey);
 
             String storedPin = senderWalletdetails.get(0).getPersonId();
@@ -1062,7 +1062,7 @@ public class CreateQuoteClient {
                 responseModel.setStatusCode(statusCode);
 
                 return responseModel;
-            }
+            }*/
 
             // get updateable log
             CreateQuoteResLog getDeeUp

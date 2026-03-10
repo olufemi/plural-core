@@ -18,7 +18,7 @@ public class LocalTransferRequest {
     private String receiverName;
     private String sender;
     private String amount;
-    private String pin;
+   // private String pin;
     private String processId;
     private String transactionType;
     private String fees;

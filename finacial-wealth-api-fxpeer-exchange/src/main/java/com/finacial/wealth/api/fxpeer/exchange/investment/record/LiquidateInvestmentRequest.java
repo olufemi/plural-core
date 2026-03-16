@@ -14,8 +14,9 @@ public record LiquidateInvestmentRequest(
        // Long positionId,
         BigDecimal liquidationAmount, // if null => full liquidation
         String orderId,
-        String pin,
-        boolean fullLiquidation
+       // String pin,
+        boolean fullLiquidation,
+         String processId
         
        
 ) {}

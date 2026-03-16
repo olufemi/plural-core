@@ -23,6 +23,5 @@ public class OtherBankTransferRequest {
     private String fees;
     private String bankCode;
     private String bankName;
-    
 
 }

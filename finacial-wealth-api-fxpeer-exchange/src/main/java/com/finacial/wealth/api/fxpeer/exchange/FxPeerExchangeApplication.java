@@ -31,7 +31,7 @@ public class FxPeerExchangeApplication {
         SpringApplication.run(FxPeerExchangeApplication.class, args);
 
         try {
-            runConsentSignatureDebug();
+           // runConsentSignatureDebug();
         } catch (Exception e) {
             e.printStackTrace();
         }

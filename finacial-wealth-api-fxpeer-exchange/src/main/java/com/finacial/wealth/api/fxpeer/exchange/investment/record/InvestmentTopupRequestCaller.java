@@ -15,7 +15,8 @@ public class InvestmentTopupRequestCaller {
      private String orderRef;        // existing investment position/order ref
         private String amount;       // topup amount
       //  private String idempotencyKey;     // from client
-        private String pin;
+      //  private String pin;
         private String currencyCode;
         private String productId;
+        private String processId;
 }

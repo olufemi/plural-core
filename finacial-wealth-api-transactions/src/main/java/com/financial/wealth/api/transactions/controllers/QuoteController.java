@@ -14,6 +14,7 @@ import com.financial.wealth.api.transactions.models.tranfaar.inflow.GetPendingQu
 import com.financial.wealth.api.transactions.models.tranfaar.outflow.CreateQuoteWithdrawalFE;
 import com.financial.wealth.api.transactions.security.consent.ConsentVerificationCoordinator;
 import com.financial.wealth.api.transactions.security.consent.hasher.AcceptQuotePayloadHasher;
+import com.financial.wealth.api.transactions.security.consent.hasher.raw.DefaultRawConsentPayloadHasher;
 
 import com.financial.wealth.api.transactions.tranfaar.services.CreateQuoteClient;
 import com.financial.wealth.api.transactions.tranfaar.services.QuoteLookupService;
@@ -53,6 +54,9 @@ public class QuoteController {
     private UttilityMethods uttilityMethods;
     @Autowired
     ConsentVerificationCoordinator consentVerificationCoordinator;
+
+    @Autowired
+    DefaultRawConsentPayloadHasher defaultRawConsentPayloadHasher;
 
     @PostMapping("/validate-pin")
     public ResponseEntity<BaseResponse> validatePin(@RequestHeader(value = "authorization", required = true) String auth,
@@ -94,13 +98,20 @@ public class QuoteController {
 
         String userId = uttilityMethods.getClaimFromJwt(auth, "emailAddress");
 
-        BaseResponse consentRes = consentVerificationCoordinator.requireConsent(
+        /*BaseResponse consentRes = consentVerificationCoordinator.requireConsent(
                 http,
                 "POST",
                 rq.getQuoteId(),
                 userId,
                 rq,
                 acceptQuotePayloadHasher
+        );*/
+        BaseResponse consentRes = consentVerificationCoordinator.requireConsentUsingRawBody(
+                http,
+                "POST",
+                rq.getProcessId(),
+                userId,
+                defaultRawConsentPayloadHasher
         );
 
         if (consentRes.getStatusCode() != 200) {
@@ -125,14 +136,20 @@ public class QuoteController {
 
         String userId = uttilityMethods.getClaimFromJwt(auth, "emailAddress");
 
-        BaseResponse consentRes = consentVerificationCoordinator.requireConsent(
+        /* BaseResponse consentRes = consentVerificationCoordinator.requireConsent(
                 http,
                 "POST",
                 rq.getQuoteId(),
                 userId,
                 rq,
                 acceptQuotePayloadHasher
-        );
+        );*/
+        BaseResponse consentRes = consentVerificationCoordinator.requireConsentUsingRawBody(
+                http,
+                "POST",
+                rq.getProcessId(),
+                userId,
+                defaultRawConsentPayloadHasher);
 
         if (consentRes.getStatusCode() != 200) {
             return ResponseEntity.status(consentRes.getStatusCode()).body(consentRes);

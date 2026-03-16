@@ -16,5 +16,6 @@ public class CreateSubscriptionReq {
     private String productId;
     private String amount;
     private String currencyCode;
-    private String pin;
+    private String processId;
+    //private String pin;
 }

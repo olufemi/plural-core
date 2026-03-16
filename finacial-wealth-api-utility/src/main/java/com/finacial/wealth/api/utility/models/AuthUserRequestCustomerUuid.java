@@ -84,4 +84,5 @@ public class AuthUserRequestCustomerUuid {
 
     private String appType;
     private String appVersion; // ✅ add this
+    private String devicePublicSpkiB64;
 }

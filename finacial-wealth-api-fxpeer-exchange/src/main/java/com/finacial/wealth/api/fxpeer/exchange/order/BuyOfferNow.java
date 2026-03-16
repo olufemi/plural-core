@@ -16,5 +16,6 @@ public class BuyOfferNow {
     private String pin;;
     private String referralCode;
     private String offerCorrelationId;
+    private String processId;
    
 }

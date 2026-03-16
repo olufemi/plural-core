@@ -17,11 +17,22 @@ import org.springframework.stereotype.Component;
  * @author olufemioshin
  */
 @Component
-public class BreezePayInterbankPaymentPayloadHasher implements ConsentPayloadHasher<OtherBankTransferRequest> {
+public class BreezePayInterbankPaymentPayloadHasher
+        implements ConsentPayloadHasher<OtherBankTransferRequest> {
 
-    private static final Logger log = LoggerFactory.getLogger(BreezePayInterbankPaymentPayloadHasher.class);
+    private static final Logger log
+            = LoggerFactory.getLogger(BreezePayInterbankPaymentPayloadHasher.class);
 
+    /**
+     * IMPORTANT: This JSON must match exactly the payload order used by the
+     * mobile app when signing.
+     *
+     * Expected order: receiverBankAccount receiverAccountName sender amount
+     * processId transactionType fees bankCode bankName
+     */
+    @Override
     public String appJsonPayloadString(OtherBankTransferRequest r) {
+
         String json = "{"
                 + "\"receiverBankAccount\":\"" + ConsentStringUtil.esc(ConsentStringUtil.nz(r.getReceiverBankAccount())) + "\","
                 + "\"receiverAccountName\":\"" + ConsentStringUtil.esc(ConsentStringUtil.nz(r.getReceiverAccountName())) + "\","
@@ -35,10 +46,16 @@ public class BreezePayInterbankPaymentPayloadHasher implements ConsentPayloadHas
                 + "}";
 
         log.info("[CONSENT] interbank appJsonPayloadString={}", json);
+
         return json;
     }
 
+    /**
+     * Diagnostic canonical string. Used only for backend debugging.
+     */
+    @Override
     public String diagnosticCanonicalPayload(OtherBankTransferRequest r) {
+
         return "v1|INTERBANK"
                 + "|processId=" + ConsentStringUtil.nz(r.getProcessId())
                 + "|transactionType=" + ConsentStringUtil.nz(r.getTransactionType())
@@ -51,7 +68,18 @@ public class BreezePayInterbankPaymentPayloadHasher implements ConsentPayloadHas
                 + "|bankName=" + ConsentStringUtil.nz(r.getBankName());
     }
 
+    /**
+     * Payload hash used for verification.
+     */
+    @Override
     public String payloadHashB64(OtherBankTransferRequest r) {
-        return ConsentHashUtil.sha256Base64(appJsonPayloadString(r));
+
+        String json = appJsonPayloadString(r);
+
+        String hash = ConsentHashUtil.sha256Base64(json);
+
+        log.info("[CONSENT] interbank payloadHashB64={}", hash);
+
+        return hash;
     }
 }

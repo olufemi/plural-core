@@ -546,7 +546,7 @@ public class WalletServices {
             getdevKe.setDeviceId(rq.getDeviceId());
             getdevKe.setEmailAddress(getInitAcPin.get(0).getEmailAddress());
 
-            DeviceBindingResponse getDevBind = fxPeerClient.bindConfirmOtp(getdevKe);
+            /*DeviceBindingResponse getDevBind = fxPeerClient.bindConfirmOtp(getdevKe);
 
             Map mp = new HashMap();
             mp.put("deviceId", getDevBind.getDeviceId());
@@ -555,7 +555,7 @@ public class WalletServices {
             mp.put("publicKeySpki", getDevBind.getDevicePublicSpkiB64());
             mp.put("keyType", "DEVICE_SIGNING");
 
-            responseModel.addData("deviceBinding", mp);
+            responseModel.addData("deviceBinding", mp);*/
 
             responseModel.setDescription("Wallet PIN reset was successful, Thank you.");
             responseModel.setStatusCode(200);
@@ -1974,14 +1974,33 @@ public class WalletServices {
                 List<DeviceChangeLimitConfig> getDevList = deviceChangeLimitConfigRepo
                         .findByWalletNumberList(rq.getPhoneNumber());
 
+                DeviceConfirmOtp getdevKe = new DeviceConfirmOtp();
+
+                getdevKe.setDeviceId(rq.getUuid());
+                getdevKe.setEmailAddress(updateWallet.getEmail());
+
+                System.out.println("getdevKe req:::::::::: ::::: %S " + new Gson().toJson(getdevKe));
+
+                DeviceBindingResponse getDevBind = fxPeerClient.bindConfirmOtp(getdevKe);
+                Map mp = new HashMap();
+
                 if (getDevList.size() > 0) {
 
                     DeviceChangeLimitConfig getDevDetails = deviceChangeLimitConfigRepo
                             .findByWalletNumber(updateWallet.getPhoneNumber());
                     getDevDetails.setLastModifiedDate(new Date());
                     deviceChangeLimitConfigRepo.save(getDevDetails);
+
+                    mp.put("deviceId", getDevBind.getDeviceId());
+                    mp.put("activeKid", getDevBind.getActiveKid());
+                    mp.put("status", getDevBind.getStatus());
+                    mp.put("publicKeySpki", getDevBind.getDevicePublicSpkiB64());
+                    mp.put("keyType", "DEVICE_SIGNING");
+                    responseModel.addData("deviceBinding", mp);
                     responseModel.setDescription("Device change was sucessful!");
                     responseModel.setStatusCode(200);
+                    System.out.println("device change responseModel :::::::::: ::::: %S " + new Gson().toJson(responseModel));
+
                     return responseModel;
 
                 } else {
@@ -1996,8 +2015,11 @@ public class WalletServices {
                     deviceChangeLimitConfigRepo.save(getDevDetails);
                 }
 
+                responseModel.addData("deviceBinding", mp);
+
                 responseModel.setDescription("Device change was sucessful!");
                 responseModel.setStatusCode(200);
+                System.out.println("device change responseModel :::::::::: ::::: %S " + new Gson().toJson(responseModel));
                 return responseModel;
 
             }
@@ -2820,7 +2842,7 @@ public class WalletServices {
                 return responseModel;
             }
 
-            String encyrptedPin = utilMeth.encyrpt(String.valueOf(rq.getPin()), encryptionKey);
+            /*String encyrptedPin = utilMeth.encyrpt(String.valueOf(rq.getPin()), encryptionKey);
             String pin = wallDe.get(0).getPersonId();
             if (!encyrptedPin.equals(pin)) {
 
@@ -2835,7 +2857,7 @@ public class WalletServices {
 
                 return responseModel;
 
-            }
+            }*/
 
             String encyrptedPwd = utilMeth.encyrpt(String.valueOf(rq.getOldPassword()), encryptionKey);
             String pwd = wallDe.get(0).getPassword();
@@ -2999,7 +3021,7 @@ public class WalletServices {
                 resultWallet.setPersonId(newPin);
                 regWalletInfoRepo.save(resultWallet);
 
-                DeviceConfirmOtp getdevKe = new DeviceConfirmOtp();
+                /*DeviceConfirmOtp getdevKe = new DeviceConfirmOtp();
 
                 getdevKe.setDeviceId(rq.getDeviceId());
                 getdevKe.setEmailAddress(getDecoded.emailAddress);
@@ -3013,7 +3035,7 @@ public class WalletServices {
                 mp.put("publicKeySpki", getDevBind.getDevicePublicSpkiB64());
                 mp.put("keyType", "DEVICE_SIGNING");
 
-                responseModel.addData("deviceBinding", mp);
+                responseModel.addData("deviceBinding", mp);*/
 
                 responseModel.setDescription("Pin changed successfully.");
                 responseModel.setStatusCode(200);

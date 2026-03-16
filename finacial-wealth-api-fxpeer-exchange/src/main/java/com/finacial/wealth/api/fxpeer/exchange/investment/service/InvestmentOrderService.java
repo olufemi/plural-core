@@ -432,15 +432,15 @@ public class InvestmentOrderService {
             var product = productRepo.findByIdAndActiveTrue(Long.valueOf(rq.getProductId()))
                     .orElseThrow(() -> new NotFoundException("Investment product not found"));
 
-            Optional<RegWalletInfo> getRec = regWalletInfoRepository.findByPhoneNumber(phoneNumber);
+            /*  Optional<RegWalletInfo> getRec = regWalletInfoRepository.findByPhoneNumber(phoneNumber);
 
             if (rq.getPin() == null || rq.getPin().isBlank()) {
                 resp.setStatusCode(400);
                 resp.setDescription("Pin is required");
                 return resp;
-            }
+            }*/
 
-            /*BaseResponse bResPin = new BaseResponse();
+ /*BaseResponse bResPin = new BaseResponse();
             WalletNo wSend = new WalletNo();
             wSend.setPin(rq.getPin());
 
@@ -451,7 +451,6 @@ public class InvestmentOrderService {
                 resp.setDescription(bResPin.getDescription());
                 return resp;
             }*/
-
             if (rq == null || rq.getCurrencyCode() == null || rq.getCurrencyCode().trim().isEmpty()) {
                 resp.setStatusCode(400);
                 resp.setDescription("CurrencyCode is required");
@@ -631,8 +630,6 @@ public class InvestmentOrderService {
             orderRepo.save(order);
             throw new BusinessException("Service is currently unavailable. Please try again shortly.");
         }
-
-        orderRepo.save(order);
 
         // ---------- Call partner ----------
         /* try {
@@ -903,7 +900,6 @@ public class InvestmentOrderService {
                 res.setData(Collections.emptyMap());
                 return res;
             }*/
-
             // Find subscription order (must be ACTIVE)
             Optional<InvestmentOrder> optSubOrder
                     = orderRepo.findByOrderRefAndEmailAddress(rq.orderId().trim(), emailAddress.trim());
@@ -1313,13 +1309,13 @@ public class InvestmentOrderService {
 
             Optional<RegWalletInfo> getRec = regWalletInfoRepository.findByPhoneNumber(phoneNumber);
 
-            if (rq.getPin() == null || rq.getPin().isBlank()) {
+            /* if (rq.getPin() == null || rq.getPin().isBlank()) {
                 resp.setStatusCode(400);
                 resp.setDescription("Pin is required");
                 return resp;
-            }
+            }*/
 
-            /*BaseResponse bResPin = new BaseResponse();
+ /*BaseResponse bResPin = new BaseResponse();
             WalletNo wSend = new WalletNo();
             wSend.setPin(rq.getPin());
 
@@ -1330,7 +1326,6 @@ public class InvestmentOrderService {
                 resp.setDescription(bResPin.getDescription());
                 return resp;
             }*/
-
             if (rq == null || rq.getCurrencyCode() == null || rq.getCurrencyCode().trim().isEmpty()) {
                 resp.setStatusCode(400);
                 resp.setDescription("CurrencyCode is required");

@@ -24,6 +24,7 @@ import com.finacial.wealth.api.fxpeer.exchange.security.consent.ConsentVerificat
 import com.finacial.wealth.api.fxpeer.exchange.security.consent.harsher.CreateSubscriptionPayloadHasher;
 import com.finacial.wealth.api.fxpeer.exchange.security.consent.harsher.InvestmentTopupPayloadHasher;
 import com.finacial.wealth.api.fxpeer.exchange.security.consent.harsher.LiquidateInvestmentPayloadHasher;
+import com.finacial.wealth.api.fxpeer.exchange.security.consent.hasher.raw.DefaultRawConsentPayloadHasher;
 import com.finacial.wealth.api.fxpeer.exchange.util.UttilityMethods;
 import jakarta.servlet.http.HttpServletRequest;
 
@@ -31,6 +32,7 @@ import jakarta.validation.Valid;
 import java.io.IOException;
 import java.time.LocalDate;
 import java.util.Map;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 
 import org.springframework.http.MediaType;
@@ -54,6 +56,9 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/investments")
 public class InvestmentServicesController {
 
+    @Value("${allow.crypto.graphy.for.pin}")
+    private String allowCryptoGraphyForPin;
+
     private final InvestmentOrderService investmentOrderService;
     private final InvestmentValuationScheduler investmentValuationScheduler;
     private final LiquidationActionService liquidationActionService;
@@ -65,6 +70,7 @@ public class InvestmentServicesController {
     private final InvestmentTopupPayloadHasher investmentTopupPayloadHasher;
 
     private final InvestmentOrderQueryService queryService;
+    private final DefaultRawConsentPayloadHasher defaultRawConsentPayloadHasher;
 
     public InvestmentServicesController(InvestmentOrderService investmentOrderService,
             InvestmentValuationScheduler investmentValuationScheduler,
@@ -75,7 +81,8 @@ public class InvestmentServicesController {
             ConsentVerificationCoordinator consentVerificationCoordinator,
             CreateSubscriptionPayloadHasher createSubscriptionPayloadHasher,
             LiquidateInvestmentPayloadHasher liquidateInvestmentPayloadHasher,
-            InvestmentTopupPayloadHasher investmentTopupPayloadHasher) {
+            InvestmentTopupPayloadHasher investmentTopupPayloadHasher,
+            DefaultRawConsentPayloadHasher defaultRawConsentPayloadHasher) {
         this.investmentOrderService = investmentOrderService;
         this.investmentValuationScheduler = investmentValuationScheduler;
         this.queryService = queryService;
@@ -86,6 +93,7 @@ public class InvestmentServicesController {
         this.createSubscriptionPayloadHasher = createSubscriptionPayloadHasher;
         this.liquidateInvestmentPayloadHasher = liquidateInvestmentPayloadHasher;
         this.investmentTopupPayloadHasher = investmentTopupPayloadHasher;
+        this.defaultRawConsentPayloadHasher = defaultRawConsentPayloadHasher;
 
     }
 
@@ -172,20 +180,22 @@ public class InvestmentServicesController {
             @RequestBody @Valid CreateSubscriptionReq rq,
             HttpServletRequest http
     ) throws IOException {
+        if (allowCryptoGraphyForPin.equals("1")) {
+            String userId = uttilityMethods.getClaimFromJwt(auth, "emailAddress");
 
-        String userId = uttilityMethods.getClaimFromJwt(auth, "emailAddress");
+            BaseResponse consentRes = consentVerificationCoordinator.requireConsentUsingRawBody(
+                    http,
+                    "POST",
+                    rq.getProcessId(),
+                    userId,
+                    //rq,
+                    //createSubscriptionPayloadHasher
+                    defaultRawConsentPayloadHasher
+            );
 
-        BaseResponse consentRes = consentVerificationCoordinator.requireConsent(
-                http,
-                "POST",
-                rq.getProductId(),
-                userId,
-                rq,
-                createSubscriptionPayloadHasher
-        );
-
-        if (consentRes.getStatusCode() != 200) {
-            return consentRes;
+            if (consentRes.getStatusCode() != 200) {
+                return consentRes;
+            }
         }
 
         return investmentOrderService.createSubscriptionCaller(rq, auth);
@@ -200,20 +210,22 @@ public class InvestmentServicesController {
             @RequestBody @Valid LiquidateInvestmentRequest rq,
             HttpServletRequest http
     ) throws IOException {
+        if (allowCryptoGraphyForPin.equals("1")) {
+            String userId = uttilityMethods.getClaimFromJwt(auth, "emailAddress");
 
-        String userId = uttilityMethods.getClaimFromJwt(auth, "emailAddress");
+            BaseResponse consentRes = consentVerificationCoordinator.requireConsentUsingRawBody(
+                    http,
+                    "POST",
+                    rq.processId(),
+                    userId,
+                    // rq,
+                    // liquidateInvestmentPayloadHasher
+                    defaultRawConsentPayloadHasher
+            );
 
-        BaseResponse consentRes = consentVerificationCoordinator.requireConsent(
-                http,
-                "POST",
-                rq.orderId(),
-                userId,
-                rq,
-                liquidateInvestmentPayloadHasher
-        );
-
-        if (consentRes.getStatusCode() != 200) {
-            return consentRes;
+            if (consentRes.getStatusCode() != 200) {
+                return consentRes;
+            }
         }
 
         return investmentOrderService.requestLiquidation(rq, auth);
@@ -248,20 +260,22 @@ public class InvestmentServicesController {
             @RequestBody @Valid InvestmentTopupRequestCaller rq,
             HttpServletRequest http
     ) throws IOException {
+        if (allowCryptoGraphyForPin.equals("1")) {
+            String userId = uttilityMethods.getClaimFromJwt(auth, "emailAddress");
 
-        String userId = uttilityMethods.getClaimFromJwt(auth, "emailAddress");
+            BaseResponse consentRes = consentVerificationCoordinator.requireConsentUsingRawBody(
+                    http,
+                    "POST",
+                    rq.getProcessId(),
+                    userId,
+                    //  rq,
+                    // investmentTopupPayloadHasher
+                    defaultRawConsentPayloadHasher
+            );
 
-        BaseResponse consentRes = consentVerificationCoordinator.requireConsent(
-                http,
-                "POST",
-                rq.getOrderRef(),
-                userId,
-                rq,
-                investmentTopupPayloadHasher
-        );
-
-        if (consentRes.getStatusCode() != 200) {
-            return consentRes;
+            if (consentRes.getStatusCode() != 200) {
+                return consentRes;
+            }
         }
 
         return investmentOrderService.createTopUpCaller(rq, auth);

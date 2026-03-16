@@ -17,6 +17,7 @@ import com.finacial.wealth.api.fxpeer.exchange.security.consent.ConsentVerificat
 import com.finacial.wealth.api.fxpeer.exchange.security.consent.harsher.CancelOfferPayloadHasher;
 import com.finacial.wealth.api.fxpeer.exchange.security.consent.harsher.CreateOfferPayloadHasher;
 import com.finacial.wealth.api.fxpeer.exchange.security.consent.harsher.UpdateOfferPayloadHasher;
+import com.finacial.wealth.api.fxpeer.exchange.security.consent.hasher.raw.DefaultRawConsentPayloadHasher;
 import com.finacial.wealth.api.fxpeer.exchange.util.UttilityMethods;
 import jakarta.servlet.http.HttpServletRequest;
 
@@ -27,6 +28,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -37,6 +40,9 @@ import org.springframework.http.HttpStatus;
 @RequestMapping("/offers")
 public class OfferController {
 
+    @Value("${allow.crypto.graphy.for.pin}")
+    private String allowCryptoGraphyForPin;
+
     private final OfferService service;
     private final CreateOfferPayloadHasher createOfferPayloadHasher;
     private final UttilityMethods uttilityMethods;
@@ -44,11 +50,14 @@ public class OfferController {
     private final UpdateOfferPayloadHasher updateOfferPayloadHasher;
     private final CancelOfferPayloadHasher cancelOfferPayloadHasher;
 
+    private final DefaultRawConsentPayloadHasher defaultRawConsentPayloadHasher;
+
     public OfferController(OfferService service, CreateOfferPayloadHasher createOfferPayloadHasher,
             UttilityMethods uttilityMethods,
             ConsentVerificationCoordinator consentVerificationCoordinator,
             UpdateOfferPayloadHasher updateOfferPayloadHasher,
-            CancelOfferPayloadHasher cancelOfferPayloadHasher
+            CancelOfferPayloadHasher cancelOfferPayloadHasher,
+            DefaultRawConsentPayloadHasher defaultRawConsentPayloadHasher
     // ProcSochitelServices procSochitelServices
     ) {
         this.service = service;
@@ -57,6 +66,7 @@ public class OfferController {
         this.consentVerificationCoordinator = consentVerificationCoordinator;
         this.updateOfferPayloadHasher = updateOfferPayloadHasher;
         this.cancelOfferPayloadHasher = cancelOfferPayloadHasher;
+        this.defaultRawConsentPayloadHasher = defaultRawConsentPayloadHasher;
         //  this.procSochitelServices = procSochitelServices;
     }
 
@@ -95,27 +105,29 @@ public class OfferController {
             @RequestHeader(value = "authorization", required = true) String auth,
             @RequestBody @Valid CreateOfferCaller rq,
             HttpServletRequest http) {
+        if (allowCryptoGraphyForPin.equals("1")) {
+            String userId = uttilityMethods.getClaimFromJwt(auth, "emailAddress");
 
-        String userId = uttilityMethods.getClaimFromJwt(auth, "emailAddress");
+            BaseResponse consentRes = consentVerificationCoordinator.requireConsentUsingRawBody(
+                    http,
+                    "POST",
+                    rq.getExpiredAt(), // or use a better reference if available
+                    userId,
+                    //rq,
+                    // createOfferPayloadHasher
+                    defaultRawConsentPayloadHasher
+            );
 
-        BaseResponse consentRes = consentVerificationCoordinator.requireConsent(
-                http,
-                "POST",
-                rq.getExpiredAt(), // or use a better reference if available
-                userId,
-                rq,
-                createOfferPayloadHasher
-        );
+            if (consentRes.getStatusCode() != 200) {
+                ApiResponseModel errorResponse = new ApiResponseModel();
+                errorResponse.setStatusCode(consentRes.getStatusCode());
+                errorResponse.setDescription(consentRes.getDescription());
+                errorResponse.setData(consentRes.getData());
 
-        if (consentRes.getStatusCode() != 200) {
-            ApiResponseModel errorResponse = new ApiResponseModel();
-            errorResponse.setStatusCode(consentRes.getStatusCode());
-            errorResponse.setDescription(consentRes.getDescription());
-            errorResponse.setData(consentRes.getData());
-
-            return ResponseEntity
-                    .status(consentRes.getStatusCode())
-                    .body(errorResponse);
+                return ResponseEntity
+                        .status(consentRes.getStatusCode())
+                        .body(errorResponse);
+            }
         }
 
         return service.createOfferCaller(rq, auth);
@@ -126,28 +138,30 @@ public class OfferController {
             @RequestHeader(value = "authorization", required = true) String auth,
             @RequestBody @Valid UpdateOfferCallerReq rq,
             HttpServletRequest http) {
+        if (allowCryptoGraphyForPin.equals("1")) {
+            String userId = uttilityMethods.getClaimFromJwt(auth, "emailAddress");
 
-        String userId = uttilityMethods.getClaimFromJwt(auth, "emailAddress");
+            BaseResponse consentRes = consentVerificationCoordinator.requireConsentUsingRawBody(
+                    http,
+                    "POST",
+                    rq.getCorrelationId(),
+                    userId,
+                    // rq,
+                    // updateOfferPayloadHasher
+                    defaultRawConsentPayloadHasher
+            );
 
-        BaseResponse consentRes = consentVerificationCoordinator.requireConsent(
-                http,
-                "POST",
-                rq.getCorrelationId(),
-                userId,
-                rq,
-                updateOfferPayloadHasher
-        );
+            if (consentRes.getStatusCode() != 200) {
 
-        if (consentRes.getStatusCode() != 200) {
+                ApiResponseModel errorResponse = new ApiResponseModel();
+                errorResponse.setStatusCode(consentRes.getStatusCode());
+                errorResponse.setDescription(consentRes.getDescription());
+                errorResponse.setData(consentRes.getData());
 
-            ApiResponseModel errorResponse = new ApiResponseModel();
-            errorResponse.setStatusCode(consentRes.getStatusCode());
-            errorResponse.setDescription(consentRes.getDescription());
-            errorResponse.setData(consentRes.getData());
-
-            return ResponseEntity
-                    .status(consentRes.getStatusCode())
-                    .body(errorResponse);
+                return ResponseEntity
+                        .status(consentRes.getStatusCode())
+                        .body(errorResponse);
+            }
         }
 
         return service.updateOfferCaller(rq, auth);
@@ -158,28 +172,30 @@ public class OfferController {
             @RequestHeader(value = "authorization", required = true) String auth,
             @RequestBody @Valid CancelOfferCallerReq rq,
             HttpServletRequest http) {
+        if (allowCryptoGraphyForPin.equals("1")) {
+            String userId = uttilityMethods.getClaimFromJwt(auth, "emailAddress");
 
-        String userId = uttilityMethods.getClaimFromJwt(auth, "emailAddress");
+            BaseResponse consentRes = consentVerificationCoordinator.requireConsentUsingRawBody(
+                    http,
+                    "POST",
+                    rq.getCorrelationId(),
+                    userId,
+                    // rq,
+                    // cancelOfferPayloadHasher
+                    defaultRawConsentPayloadHasher
+            );
 
-        BaseResponse consentRes = consentVerificationCoordinator.requireConsent(
-                http,
-                "POST",
-                rq.getCorrelationId(),
-                userId,
-                rq,
-                cancelOfferPayloadHasher
-        );
+            if (consentRes.getStatusCode() != 200) {
 
-        if (consentRes.getStatusCode() != 200) {
+                ApiResponseModel errorResponse = new ApiResponseModel();
+                errorResponse.setStatusCode(consentRes.getStatusCode());
+                errorResponse.setDescription(consentRes.getDescription());
+                errorResponse.setData(consentRes.getData());
 
-            ApiResponseModel errorResponse = new ApiResponseModel();
-            errorResponse.setStatusCode(consentRes.getStatusCode());
-            errorResponse.setDescription(consentRes.getDescription());
-            errorResponse.setData(consentRes.getData());
-
-            return ResponseEntity
-                    .status(consentRes.getStatusCode())
-                    .body(errorResponse);
+                return ResponseEntity
+                        .status(consentRes.getStatusCode())
+                        .body(errorResponse);
+            }
         }
 
         return service.cancelOfferCaller(rq, auth);

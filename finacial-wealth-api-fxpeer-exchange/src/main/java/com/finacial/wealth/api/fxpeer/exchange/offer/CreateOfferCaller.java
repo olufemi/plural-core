@@ -20,6 +20,8 @@ public class CreateOfferCaller {
     String rate;
     String qtyTotal;
     private String expiredAt;
+    private String pin;
+    private String processId;
 
     @NotNull(message = "min is required")
     private String minAmount;
@@ -27,6 +29,5 @@ public class CreateOfferCaller {
     /*@NotNull(message = "max is required")
     private String maxAmount;*/
     private boolean showInTopDeals;
-  
 
 }

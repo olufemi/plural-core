@@ -15,8 +15,9 @@ import lombok.Data;
 public class AcceptDeclineSwapSlotReq {
 
     private String memberId;
-    private String pin;
+    //private String pin;
     private String invitationCodeReqId;
     private String senderEmailAddress;
     private boolean acceptOrDecline;
+    private String processId;
 }

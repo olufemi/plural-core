@@ -3477,12 +3477,12 @@ public class GroupSavingsService {
                 return set(resp, statusCode, MSG_CUSTOMER_NO_PIN);
             }
 
-            final String encryptedPin = utilMeth.encyrpt(String.valueOf(rq.getPin()), encryptionKey);
+            /*final String encryptedPin = utilMeth.encyrpt(String.valueOf(rq.getPin()), encryptionKey);
             final String storedPin = wallets.get(0).getPersonId();
             if (!safeEquals(encryptedPin, storedPin)) {
                 logFailure(MSG_INVALID_PIN);
                 return set(resp, statusCode, MSG_INVALID_PIN);
-            }
+            }*/
 
             // --- Load group
             final List<GroupSavingsData> groups = groupSavingsDataRepo.findByInviteCode(rq.getInvitationCodeReqId());

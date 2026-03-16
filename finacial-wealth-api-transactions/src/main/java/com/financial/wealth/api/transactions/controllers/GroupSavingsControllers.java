@@ -26,6 +26,7 @@ import com.financial.wealth.api.transactions.security.consent.hasher.GroupSaving
 import com.financial.wealth.api.transactions.security.consent.hasher.GroupSavingsSwapSlotRequestHasher;
 import com.financial.wealth.api.transactions.security.consent.hasher.JoinGroupPayloadHasher;
 import com.financial.wealth.api.transactions.security.consent.hasher.LeaveGroupPayloadHasher;
+import com.financial.wealth.api.transactions.security.consent.hasher.raw.DefaultRawConsentPayloadHasher;
 import com.financial.wealth.api.transactions.services.GroupSavingsService;
 import com.financial.wealth.api.transactions.utils.UttilityMethods;
 import javax.servlet.http.HttpServletRequest;
@@ -62,19 +63,28 @@ public class GroupSavingsControllers {
     private final GroupSavingsSwapSlotRequestHasher groupSavingsSwapSlotRequestHasher;
     private final AcceptDeclineSwapSlotHasher acceptDeclineSwapSlotHasher;
 
+    private final DefaultRawConsentPayloadHasher defaultRawConsentPayloadHasher;
+
     @PostMapping("/leave-group")
     public ResponseEntity<BaseResponse> leaveGroup(@RequestHeader(value = "authorization", required = true) String auth,
             @RequestBody @Valid LeaveGroupRequest rq, HttpServletRequest http) {
 
         String userId = uttilityMethods.getClaimFromJwt(auth, "emailAddress");
 
-        BaseResponse consentRes = consentVerificationCoordinator.requireConsent(
+        /*BaseResponse consentRes = consentVerificationCoordinator.requireConsent(
                 http,
                 "POST",
                 rq.getInvitationCodeReqId(),
                 userId,
                 rq,
                 leaveGroupPayloadHasher
+        );*/
+        BaseResponse consentRes = consentVerificationCoordinator.requireConsentUsingRawBody(
+                http,
+                "POST",
+                rq.getProcessId(),
+                userId,
+                defaultRawConsentPayloadHasher
         );
 
         if (consentRes.getStatusCode() != 200) {
@@ -90,13 +100,14 @@ public class GroupSavingsControllers {
             @RequestBody @Valid GroupSavingConf rq, HttpServletRequest http) {
         String userId = uttilityMethods.getClaimFromJwt(auth, "emailAddress");
 
-        BaseResponse consentRes = consentVerificationCoordinator.requireConsent(
+        BaseResponse consentRes = consentVerificationCoordinator.requireConsentUsingRawBody(
                 http,
                 "POST",
-                rq.getInvitationCodeReqId(),
+                rq.getProcessId(),
                 userId,
-                rq,
-                groupSavingsConfirmCreateHasher
+                // rq,
+                //groupSavingsConfirmCreateHasher
+                defaultRawConsentPayloadHasher
         );
 
         if (consentRes.getStatusCode() != 200) {
@@ -127,13 +138,14 @@ public class GroupSavingsControllers {
             @RequestBody @Valid GroupSavingConf rq, HttpServletRequest http) {
         String userId = uttilityMethods.getClaimFromJwt(auth, "emailAddress");
 
-        BaseResponse consentRes = consentVerificationCoordinator.requireConsent(
+        BaseResponse consentRes = consentVerificationCoordinator.requireConsentUsingRawBody(
                 http,
                 "POST",
-                rq.getInvitationCodeReqId(),
+                rq.getProcessId(),
                 userId,
-                rq,
-                groupSavingsConfirmCreateHasher
+                //rq,
+                //groupSavingsConfirmCreateHasher
+                defaultRawConsentPayloadHasher
         );
 
         if (consentRes.getStatusCode() != 200) {
@@ -150,13 +162,14 @@ public class GroupSavingsControllers {
 
         String userId = uttilityMethods.getClaimFromJwt(auth, "emailAddress");
 
-        BaseResponse consentRes = consentVerificationCoordinator.requireConsent(
+        BaseResponse consentRes = consentVerificationCoordinator.requireConsentUsingRawBody(
                 http,
                 "POST",
-                rq.getInvitationCodeReqId(),
+                rq.getProcessId(),
                 userId,
-                rq,
-                groupSavingsActivationHasher
+                //rq,
+                //groupSavingsActivationHasher
+                defaultRawConsentPayloadHasher
         );
 
         if (consentRes.getStatusCode() != 200) {
@@ -227,13 +240,14 @@ public class GroupSavingsControllers {
 
         String userId = uttilityMethods.getClaimFromJwt(auth, "emailAddress");
 
-        BaseResponse consentRes = consentVerificationCoordinator.requireConsent(
+        BaseResponse consentRes = consentVerificationCoordinator.requireConsentUsingRawBody(
                 http,
                 "POST",
-                rq.getInvitationCodeReqId(),
+                rq.getProcessId(),
                 userId,
-                rq,
-                groupSavingsSwapSlotRequestHasher
+                // rq,
+                // groupSavingsSwapSlotRequestHasher
+                defaultRawConsentPayloadHasher
         );
 
         if (consentRes.getStatusCode() != 200) {
@@ -250,13 +264,14 @@ public class GroupSavingsControllers {
 
         String userId = uttilityMethods.getClaimFromJwt(auth, "emailAddress");
 
-        BaseResponse consentRes = consentVerificationCoordinator.requireConsent(
+        BaseResponse consentRes = consentVerificationCoordinator.requireConsentUsingRawBody(
                 http,
                 "POST",
-                rq.getInvitationCodeReqId(),
+                rq.getProcessId(),
                 userId,
-                rq,
-                acceptDeclineSwapSlotHasher
+                // rq,
+                //  acceptDeclineSwapSlotHasher
+                defaultRawConsentPayloadHasher
         );
 
         if (consentRes.getStatusCode() != 200) {
@@ -273,13 +288,14 @@ public class GroupSavingsControllers {
 
         String userId = uttilityMethods.getClaimFromJwt(auth, "emailAddress");
 
-        BaseResponse consentRes = consentVerificationCoordinator.requireConsent(
+        BaseResponse consentRes = consentVerificationCoordinator.requireConsentUsingRawBody(
                 http,
                 "POST",
-                rq.getInvitationCodeReqId(),
+                rq.getProcessId(),
                 userId,
-                rq,
-                joinGroupPayloadHasher
+                // rq,
+                // joinGroupPayloadHasher
+                defaultRawConsentPayloadHasher
         );
 
         if (consentRes.getStatusCode() != 200) {

@@ -11,6 +11,8 @@ package com.finacial.wealth.api.profiling.security.consent;
 import com.finacial.wealth.api.profiling.models.ConsentVerifyRequest;
 import com.finacial.wealth.api.profiling.proxies.FxPeerClient;
 import com.finacial.wealth.api.profiling.response.BaseResponse;
+import com.finacial.wealth.api.profiling.security.consent.hasher.raw.ConsentRawBodyUtil;
+import com.finacial.wealth.api.profiling.security.consent.hasher.raw.RawConsentPayloadHasher;
 
 import feign.FeignException;
 import org.slf4j.Logger;
@@ -28,17 +30,17 @@ public class ConsentVerificationCoordinator {
     private final ConsentHeaderExtractor consentHeaderExtractor;
 
     public ConsentVerificationCoordinator(FxPeerClient fxPeerClient,
-                                          ConsentHeaderExtractor consentHeaderExtractor) {
+            ConsentHeaderExtractor consentHeaderExtractor) {
         this.fxPeerClient = fxPeerClient;
         this.consentHeaderExtractor = consentHeaderExtractor;
     }
 
     public <T> BaseResponse requireConsent(HttpServletRequest http,
-                                           String method,
-                                           String refId,
-                                           String userId,
-                                           T request,
-                                           ConsentPayloadHasher<T> payloadHasher) {
+            String method,
+            String refId,
+            String userId,
+            T request,
+            ConsentPayloadHasher<T> payloadHasher) {
 
         BaseResponse res = new BaseResponse();
 
@@ -133,6 +135,101 @@ public class ConsentVerificationCoordinator {
         }
 
         return copyResponse(verifyRes);
+    }
+
+    public BaseResponse requireConsentUsingRawBody(HttpServletRequest http,
+            String method,
+            String refId,
+            String userId,
+            RawConsentPayloadHasher payloadHasher) {
+
+        BaseResponse res = new BaseResponse();
+
+        ConsentRequestMeta meta = new ConsentRequestMeta();
+
+        BaseResponse headerRes = consentHeaderExtractor.extract(http, meta);
+        if (headerRes.getStatusCode() != 200) {
+            return copyResponse(headerRes);
+        }
+
+        String rawBody;
+        try {
+            rawBody = ConsentRawBodyUtil.getRawRequestBody(http);
+        } catch (Exception e) {
+            res.setStatusCode(500);
+            res.setDescription("Unable to read raw request body");
+            return res;
+        }
+
+        log.info("[CONSENT] headers deviceId={} kid={} ts={} nonce={} sig.len={}",
+                meta.getDeviceId(),
+                meta.getKid(),
+                meta.getTs(),
+                meta.getNonce(),
+                meta.getSignatureB64() == null ? 0 : meta.getSignatureB64().length());
+
+        String payloadHashB64;
+
+        try {
+            payloadHashB64 = payloadHasher.payloadHashB64(rawBody);
+        } catch (Exception e) {
+            log.error("[CONSENT] payload hash generation failed", e);
+            res.setStatusCode(500);
+            res.setDescription("Unable to compute payload hash");
+            return res;
+        }
+
+        ConsentVerifyRequest body = new ConsentVerifyRequest(
+                method,
+                meta.getPath(),
+                refId,
+                payloadHashB64,
+                userId
+        );
+
+        log.info("[CONSENT] sending verify body={}", body);
+
+        try {
+
+            BaseResponse verifyRes = fxPeerClient.verify(
+                    meta.getAuthorization(),
+                    meta.getDeviceId(),
+                    meta.getKid(),
+                    meta.getTs(),
+                    meta.getNonce(),
+                    meta.getSignatureB64(),
+                    body
+            );
+
+            if (verifyRes == null) {
+                res.setStatusCode(502);
+                res.setDescription("Consent verification returned no response");
+                return res;
+            }
+
+            return copyResponse(verifyRes);
+
+        } catch (feign.FeignException e) {
+
+            String responseBody = e.contentUTF8();
+
+            log.error("[CONSENT] verify call failed status={} body={}",
+                    e.status(), responseBody, e);
+
+            res.setStatusCode(e.status());
+            res.setDescription(responseBody != null ? responseBody : "Consent verification failed");
+
+            return res;
+
+        } catch (Exception e) {
+
+            log.error("[CONSENT] verify call failed", e);
+
+            res.setStatusCode(502);
+            res.setDescription("Consent verification service unavailable");
+
+            return res;
+        }
     }
 
     private BaseResponse copyResponse(BaseResponse source) {

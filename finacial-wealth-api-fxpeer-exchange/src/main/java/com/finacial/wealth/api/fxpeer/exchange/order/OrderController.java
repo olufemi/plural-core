@@ -10,6 +10,7 @@ import com.finacial.wealth.api.fxpeer.exchange.model.ApiResponseModel;
 import com.finacial.wealth.api.fxpeer.exchange.model.BaseResponse;
 import com.finacial.wealth.api.fxpeer.exchange.security.consent.ConsentVerificationCoordinator;
 import com.finacial.wealth.api.fxpeer.exchange.security.consent.harsher.BuyOfferNowPayloadHasher;
+import com.finacial.wealth.api.fxpeer.exchange.security.consent.hasher.raw.DefaultRawConsentPayloadHasher;
 import com.finacial.wealth.api.fxpeer.exchange.util.UttilityMethods;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -26,9 +27,7 @@ import java.security.NoSuchAlgorithmException;
 import javax.crypto.BadPaddingException;
 import javax.crypto.IllegalBlockSizeException;
 import javax.crypto.NoSuchPaddingException;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
-import org.springframework.data.web.PageableDefault;
+import org.springframework.beans.factory.annotation.Value;
 
 /**
  *
@@ -38,21 +37,27 @@ import org.springframework.data.web.PageableDefault;
 @RequestMapping("/orders")
 public class OrderController {
 
+    @Value("${allow.crypto.graphy.for.pin}")
+    private String allowCryptoGraphyForPin;
+
     private final OrderService orderService;
     private final EscrowService escrowService;
     private final UttilityMethods uttilityMethods;
     private final ConsentVerificationCoordinator consentVerificationCoordinator;
     private final BuyOfferNowPayloadHasher buyOfferNowPayloadHasher;
+    private final DefaultRawConsentPayloadHasher defaultRawConsentPayloadHasher;
 
     public OrderController(OrderService orderService, EscrowService escrowService,
             UttilityMethods uttilityMethods,
             ConsentVerificationCoordinator consentVerificationCoordinator,
-            BuyOfferNowPayloadHasher buyOfferNowPayloadHasher) {
+            BuyOfferNowPayloadHasher buyOfferNowPayloadHasher,
+            DefaultRawConsentPayloadHasher defaultRawConsentPayloadHasher) {
         this.orderService = orderService;
         this.escrowService = escrowService;
         this.uttilityMethods = uttilityMethods;
         this.consentVerificationCoordinator = consentVerificationCoordinator;
         this.buyOfferNowPayloadHasher = buyOfferNowPayloadHasher;
+        this.defaultRawConsentPayloadHasher = defaultRawConsentPayloadHasher;
     }
 
     @GetMapping("/get-all-customer-transactions")
@@ -71,27 +76,29 @@ public class OrderController {
             @RequestHeader(value = "authorization", required = true) String auth,
             @RequestBody @Valid BuyOfferNow rq,
             HttpServletRequest http) {
+        if (allowCryptoGraphyForPin.equals("1")) {
+            String userId = uttilityMethods.getClaimFromJwt(auth, "emailAddress");
 
-        String userId = uttilityMethods.getClaimFromJwt(auth, "emailAddress");
+            BaseResponse consentRes = consentVerificationCoordinator.requireConsentUsingRawBody(
+                    http,
+                    "POST",
+                    rq.getProcessId(),
+                    userId,
+                    // rq,
+                    //  buyOfferNowPayloadHasher
+                    defaultRawConsentPayloadHasher
+            );
 
-        BaseResponse consentRes = consentVerificationCoordinator.requireConsent(
-                http,
-                "POST",
-                rq.getOfferCorrelationId(),
-                userId,
-                rq,
-                buyOfferNowPayloadHasher
-        );
+            if (consentRes.getStatusCode() != 200) {
+                ApiResponseModel errorResponse = new ApiResponseModel();
+                errorResponse.setStatusCode(consentRes.getStatusCode());
+                errorResponse.setDescription(consentRes.getDescription());
+                errorResponse.setData(consentRes.getData());
 
-        if (consentRes.getStatusCode() != 200) {
-            ApiResponseModel errorResponse = new ApiResponseModel();
-            errorResponse.setStatusCode(consentRes.getStatusCode());
-            errorResponse.setDescription(consentRes.getDescription());
-            errorResponse.setData(consentRes.getData());
-
-            return ResponseEntity
-                    .status(consentRes.getStatusCode())
-                    .body(errorResponse);
+                return ResponseEntity
+                        .status(consentRes.getStatusCode())
+                        .body(errorResponse);
+            }
         }
 
         return orderService.createOrderCaller(rq, auth);

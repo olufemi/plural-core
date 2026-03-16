@@ -22,6 +22,7 @@ public class GroupSavingConf {
     @ApiModelProperty(notes = "The Email Address")
     @NotNull(message = "the field \"emailAddress\" is not nillable")
     private String emailAddress;
+    private String processId;
     /*@ApiModelProperty(notes = "The pin")
     @NotNull(message = "the field \"pin\" is not nillable")
     private String pin;*/

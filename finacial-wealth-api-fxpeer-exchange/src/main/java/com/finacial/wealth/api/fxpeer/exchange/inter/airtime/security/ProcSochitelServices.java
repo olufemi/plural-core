@@ -524,6 +524,8 @@ public class ProcSochitelServices {
             resp.setStatusCode(200);
             resp.setDescription("Successful");
             resp.setData(filtered);
+            System.out.println(" getProdoctsByCategory ::::::::::::::::  %S  " + new Gson().toJson(resp));
+
             return ResponseEntity.ok(resp);
 
         } catch (Exception ex) {
@@ -656,6 +658,8 @@ public class ProcSochitelServices {
             resp.setStatusCode(200);
             resp.setDescription("Successful");
             resp.setData(filtered);
+            System.out.println(" getAllProdocts ::::::::::::::::  %S  " + new Gson().toJson(resp));
+
             return ResponseEntity.ok(resp);
 
         } catch (Exception ex) {
@@ -799,13 +803,13 @@ public class ProcSochitelServices {
         try {
             final String phoneNumber = utilService.getClaimFromJwt(auth, "phoneNumber");
             final String email = utilService.getClaimFromJwt(auth, "emailAddress");
-            Optional<RegWalletInfo> getRec = regWalletInfoRepository.findByPhoneNumber(phoneNumber);
+            /* Optional<RegWalletInfo> getRec = regWalletInfoRepository.findByPhoneNumber(phoneNumber);
 
             if (rq.getPin() == null || rq.getPin().isBlank()) {
                 resp.setStatusCode(400);
                 resp.setDescription("Pin is required");
                 return resp;
-            }
+            }*/
 
             if (rq.getAmount() == null || rq.getAmount().isBlank()) {
                 resp.setStatusCode(400);
@@ -1230,7 +1234,7 @@ public class ProcSochitelServices {
             debitBuyer.setNarration(rq.getCurrencyCode() + "_Withdrawal");
             debitBuyer.setPhoneNumber(accountNumber);
             debitBuyer.setTransAmount(finCharges.toString());
-            debitBuyer.setTransactionId(processId+"-"+rq.getCurrencyCode());
+            debitBuyer.setTransactionId(processId + "-" + rq.getCurrencyCode());
 
             BaseResponse debitBuyerRes = transactionServiceProxies.debitCustomerWithType(debitBuyer, "CUSTOMER", auth);
             System.out.println(" preDebitAndSettleAirtime debitBuyerRes ::::::::::::::::  %S  " + new Gson().toJson(debitBuyerRes));
@@ -1285,7 +1289,7 @@ public class ProcSochitelServices {
             creditSeller.setNarration(rq.getCurrencyCode() + "_Deposit");
             creditSeller.setPhoneNumber(sellerAcctNumber);
             creditSeller.setTransAmount(receiveAmount.toString());
-            creditSeller.setTransactionId(processId+"-"+rq.getCurrencyCode());
+            creditSeller.setTransactionId(processId + "-" + rq.getCurrencyCode());
 
             BaseResponse creditBillsAccount = transactionServiceProxies.creditCustomerWithType(creditSeller, "CUSTOMER", auth);
             System.out.println(" preDebitAndSettleAirtime creditBillsAccount ::::::::::::::::  %S  " + new Gson().toJson(creditBillsAccount));
@@ -1304,7 +1308,7 @@ public class ProcSochitelServices {
             glCredit.setNarration(rq.getCurrencyCode() + "_Deposit");
             glCredit.setPhoneNumber(decryptedGL);
             glCredit.setTransAmount(receiveAmount.toString());
-            glCredit.setTransactionId(creditSeller.getTransactionId()+"-"+"DEPOSIT");
+            glCredit.setTransactionId(creditSeller.getTransactionId() + "-" + "DEPOSIT");
 
             BaseResponse creditGLRes = transactionServiceProxies.creditCustomerWithType(glCredit, GGL_CODE + "_GL", auth);
             System.out.println(" preDebitAndSettleAirtime creditGLRes ::::::::::::::::  %S  " + new Gson().toJson(creditGLRes));

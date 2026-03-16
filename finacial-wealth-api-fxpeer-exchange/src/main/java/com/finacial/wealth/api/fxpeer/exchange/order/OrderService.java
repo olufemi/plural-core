@@ -644,7 +644,7 @@ public class OrderService {
                 kTrans2b.setSenderName(getRec.get().getFullName());
                 kTrans2b.setSentAmount(rqC.getFinalCHarges());
                 kTrans2b.setTheNarration("Fx Peer-Peer Transfer");
-                kTrans2b.setCurrencyCode(off.get(0).getCurrencySell().toString());
+                kTrans2b.setCurrencyCode(off.get(0).getCurrencyReceive().toString());
 
                 finWealthPaymentTransactionRepo.save(kTrans2b);
 
@@ -951,7 +951,7 @@ public class OrderService {
         kTrans2b.setSenderName(senderName);
         kTrans2b.setSentAmount(rqC.getFinalCHarges());
         kTrans2b.setTheNarration("Fx Peer-Peer Transfer");
-        kTrans2b.setCurrencyCode(off.get(0).getCurrencyReceive().toString());
+        kTrans2b.setCurrencyCode(off.get(0).getCurrencySell().toString());
         finWealthPaymentTransactionRepo.save(kTrans2b);
 
         //  transactionHistoryClientLocalT.publishFromTxn(kTrans2b);

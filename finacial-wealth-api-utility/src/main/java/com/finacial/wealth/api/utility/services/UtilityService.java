@@ -13,6 +13,9 @@ import com.finacial.wealth.api.utility.domains.SessionServiceLogUtil;
 import com.finacial.wealth.api.utility.domains.UserDetails;
 import com.finacial.wealth.api.utility.domains.WalletTierVerifyBizness;
 import com.finacial.wealth.api.utility.models.AuthUserRequestCustomerUuid;
+import com.finacial.wealth.api.utility.models.DeviceBindingResponse;
+import com.finacial.wealth.api.utility.models.DeviceLoginKeyRequest;
+import com.finacial.wealth.api.utility.proxy.FxPeerClient;
 import com.finacial.wealth.api.utility.repository.CreateProvidusVirtAccountRepo;
 import com.finacial.wealth.api.utility.repository.ProcessorUserFailedTransInfoRepo;
 import com.finacial.wealth.api.utility.repository.RegWalletInfoRepository;
@@ -24,7 +27,9 @@ import com.finacial.wealth.api.utility.utils.GlobalMethods;
 import com.finacial.wealth.api.utility.utils.UttilityMethods;
 import com.google.gson.Gson;
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import javax.servlet.http.HttpServletResponse;
 import javax.transaction.Transactional;
@@ -42,7 +47,7 @@ import org.springframework.stereotype.Service;
 @Transactional
 @RequiredArgsConstructor
 public class UtilityService {
-    
+
     private final Logger logger = LoggerFactory.getLogger(UtilityService.class);
     private final UserDetailsRepository userDeRepo;
     UserDetails userDetailsResult = new UserDetails();
@@ -57,37 +62,38 @@ public class UtilityService {
     private final WalletTierVerifyBiznessRepo walletTierVerifyBiznessRepo;
     private final CreateProvidusVirtAccountRepo createProvidusVirtAccountRepo;
     private static final String LOGIN_SUCCESSFUL = "Login Successful";
-    
+    private final FxPeerClient fxFeignKeysClient;
+
     public BaseResponse authenticateUserCustomerUuid(AuthUserRequestCustomerUuid rq, String channel) {
-        
+
         BaseResponse responseModel = new BaseResponse();
         int statusCode = 500;
         String statusMessage = "An error occured,please try again";
         try {
-            
+
             System.out.println(" util authenticateUserCustomerUuid req ::::::::::::::::  %S  " + new Gson().toJson(rq));
-            
+
             logger.info(String.format("rq.getPushNotificationToken()>>>>>> +++++++++++++ =>%s", rq.getPushNotificationToken()));
-            
+
             if (rq.getPushNotificationToken() == null) {
                 rq.setPushNotificationToken("");
             }
-            
+
             rq.setUserDeviceId(rq.getUuid());
-            
+
             statusCode = 400;
             if (!channel.equals("Mobile")) {
                 ProcessorUserFailedTransInfo procFailedTrans = new ProcessorUserFailedTransInfo(
                         "authenticate-user", "Authenticate User failed, channel type does not exist!",
                         String.valueOf(GlobalMethods.generateTransactionId()), "", channel, "Utilities-Service"
                 );
-                
+
                 responseModel.setDescription("Authenticate User failed, channel type does not exist!");
                 responseModel.setStatusCode(statusCode);
-                
+
                 procFailedRepo.save(procFailedTrans);
                 return responseModel;
-                
+
             }
 
             //  logger.info(String.format("Device authenticationRequest  rq.getUserDeviceId() >>>>>> +++++++++++++ =>%s", rq.getUserDeviceId()));
@@ -95,12 +101,12 @@ public class UtilityService {
             if (userDeRepo.existsByEmailAddress(rq.getEmailAddress())) {
                 Optional<UserDetails> getUserDetailsResult = userDeRepo.findByEmailAddress(rq.getEmailAddress());
                 userDetailsResult = getUserDetailsResult.get();
-                
+
                 if (!userDetailsResult.getUserGroup().equals(utilMeth.returnWalletUserGroupId())) {
                     SessionServiceLogUtil log = new SessionServiceLogUtil();
-                    
+
                     log.setUserId(rq.getEmailAddress().toLowerCase().trim());
-                    
+
                     log.setPhoneNumber("");
                     log.setEmailAddress(rq.getEmailAddress());
                     log.setCreatedDate(Instant.now());
@@ -108,24 +114,24 @@ public class UtilityService {
                     log.setCustomerType("Wallet");
                     log.setChannel(channel);
                     String uuid = rq.getUserDeviceId();
-                    
+
                     log.setUuId(uuid);
                     log.setApiResponse("Authenticate User failed, User is not a wallet owner!s");
-                    
+
                     sessionServiceLogUtilRepo.save(log);
-                    
+
                     ProcessorUserFailedTransInfo procFailedTrans = new ProcessorUserFailedTransInfo(
                             "authenticate-user", "Authenticate User failed, User is not a wallet owner!",
                             String.valueOf(GlobalMethods.generateTransactionId()), "", channel, "Utilities-Service"
                     );
-                    
+
                     responseModel.setDescription("Authenticate User failed, User is not a wallet owner!");
                     responseModel.setStatusCode(statusCode);
-                    
+
                     procFailedRepo.save(procFailedTrans);
                     return responseModel;
                 }
-                
+
                 String encodePwd = utilMeth.encyrpt(rq.getPassword(), encryptionKey);
                 // String decrptSavedPassword = utilMeth.decrypt(userDetailsResult.getPassword(), encryptionKey);
                 //logger.info(String.format("decrptSavedPassword >>>>>> +++++++++++++ =>%s", decrptSavedPassword));
@@ -134,39 +140,39 @@ public class UtilityService {
 
                 if (!encodePwd.equals(userDetailsResult.getPassword())) {
                     SessionServiceLogUtil log = new SessionServiceLogUtil();
-                    
+
                     log.setUserId(rq.getEmailAddress().toLowerCase().trim());
                     log.setEmailAddress(rq.getEmailAddress());
-                    
+
                     log.setPhoneNumber("");
                     log.setCreatedDate(Instant.now());
                     log.setMethod("Authentication-Wallet-User");
                     log.setCustomerType("Wallet");
                     log.setChannel(channel);
                     String uuid = rq.getUserDeviceId();
-                    
+
                     log.setUuId(uuid);
                     log.setApiResponse("Authenticate User failed, Password is invalid!");
-                    
+
                     sessionServiceLogUtilRepo.save(log);
-                    
+
                     ProcessorUserFailedTransInfo procFailedTrans = new ProcessorUserFailedTransInfo(
                             "authenticate-user", "Authenticate User failed, Password is invalid!",
                             String.valueOf(GlobalMethods.generateTransactionId()), "", channel, "Utilities-Service"
                     );
-                    
+
                     responseModel.setDescription("Authenticate User failed, Password is invalid!");
                     responseModel.setStatusCode(statusCode);
-                    
+
                     procFailedRepo.save(procFailedTrans);
                     return responseModel;
-                    
+
                 }
 
                 //check if user has token and still active
                 if (userDetailsResult.isEnabled() == false) {
                     SessionServiceLogUtil log = new SessionServiceLogUtil();
-                    
+
                     log.setUserId(rq.getEmailAddress().toLowerCase().trim());
                     log.setEmailAddress(rq.getEmailAddress());
                     log.setCreatedDate(Instant.now());
@@ -174,26 +180,26 @@ public class UtilityService {
                     log.setCustomerType("Wallet");
                     log.setChannel(channel);
                     String uuid = rq.getUserDeviceId();
-                    
+
                     log.setUuId(uuid);
                     log.setApiResponse("Authenticate User failed, User disabled, please contact The Administrator!");
                     logger.info(String.format("authenticationLogRepository.save(log)   ", rq.getEmailAddress()));
-                    
+
                     sessionServiceLogUtilRepo.save(log);
-                    
+
                     ProcessorUserFailedTransInfo procFailedTrans = new ProcessorUserFailedTransInfo(
                             "authenticate-user", "Authenticate User failed, User disabled, please contact The Administrator!",
                             String.valueOf(GlobalMethods.generateTransactionId()), "", channel, "Utilities-Service"
                     );
-                    
+
                     responseModel.setDescription("Authenticate User failed, User disabled, please contact The Administrator!");
                     responseModel.setStatusCode(statusCode);
-                    
+
                     procFailedRepo.save(procFailedTrans);
                     return responseModel;
-                    
+
                 }
-                
+
                 Optional<RegWalletInfo> getRecord = regWalletInfoRepo.findByPhoneNumber(userDetailsResult.getUniqueIdentification());
                 resultWallet = getRecord.get();
                 String getUUIDAllowedUser = resultWallet.getUuidAllowUser() == null ? "0" : resultWallet.getUuidAllowUser();
@@ -203,7 +209,7 @@ public class UtilityService {
                     if (!getUUIDAllowedUser.equals("1")) {
                         if (!resultWallet.getUuid().equals(rq.getUserDeviceId().trim())) {
                             SessionServiceLogUtil log = new SessionServiceLogUtil();
-                            
+
                             log.setUserId(rq.getEmailAddress().toLowerCase().trim());
                             log.setEmailAddress(rq.getEmailAddress());
                             log.setCreatedDate(Instant.now());
@@ -211,35 +217,55 @@ public class UtilityService {
                             log.setCustomerType("Wallet");
                             log.setChannel(channel);
                             String uuid = rq.getUserDeviceId();
-                            
+
                             log.setUuId(uuid);
                             log.setApiResponse("This action will change your existing Device. Do you want to continue?!");
                             logger.info(String.format("Saving to log on request for Device Change >>>>>> +++++++++++++ =>%s", rq.getEmailAddress()));
-                            
+
                             sessionServiceLogUtilRepo.save(log);
-                            
+
                             ProcessorUserFailedTransInfo procFailedTrans = new ProcessorUserFailedTransInfo(
                                     "authenticate-user", "This action will change your existing Device. Do you want to continue?",
                                     String.valueOf(GlobalMethods.generateTransactionId()), "", channel, "Utilities-Service"
                             );
-                            
+
                             responseModel.setDescription("This action will change your existing Device. Do you want to continue?");
                             responseModel.setStatusCode(406);
-                            
+
+                            DeviceLoginKeyRequest getdevKe = new DeviceLoginKeyRequest();
+                            getdevKe.setEmailAddress(rq.getEmailAddress());
+                            getdevKe.setDeviceId(uuid);
+                            getdevKe.setDevicePublicSpkiB64(rq.getDevicePublicSpkiB64());
+
+                            System.out.println("DeviceBindingResponse getDevBind req  " + getdevKe);
+
+                            DeviceBindingResponse getDevBind = fxFeignKeysClient.loginKey(getdevKe);
+
+                            System.out.println("DeviceBindingResponse getDevBind response  " + getDevBind);
+
+                            Map mp = new HashMap();
+                            mp.put("deviceId", getDevBind.getDeviceId());
+                            mp.put("activeKid", getDevBind.getActiveKid());
+                            mp.put("status", getDevBind.getStatus());
+                            mp.put("publicKeySpki", getDevBind.getDevicePublicSpkiB64());
+                            mp.put("keyType", "DEVICE_SIGNING");
+
+                            responseModel.addData("deviceBinding", mp);
+
                             procFailedRepo.save(procFailedTrans);
                             return responseModel;
-                            
+
                         }
                     }
-                    
+
                 } else {
-                    
+
                     if (regWalletInfoRepo.existsByUuid(rq.getUserDeviceId().trim())) {
                         if (!getUUIDAllowedUser.equals("1")) {
-                            
+
                             if (!resultWallet.getUuid().equals(rq.getUserDeviceId().trim())) {
                                 SessionServiceLogUtil log = new SessionServiceLogUtil();
-                                
+
                                 log.setUserId(rq.getEmailAddress().toLowerCase().trim());
                                 log.setEmailAddress(rq.getEmailAddress());
                                 log.setCreatedDate(Instant.now());
@@ -247,24 +273,44 @@ public class UtilityService {
                                 log.setCustomerType("Wallet");
                                 log.setChannel(channel);
                                 String uuid = rq.getUserDeviceId();
-                                
+
                                 log.setUuId(uuid);
                                 log.setApiResponse("This action will change your existing Device. Do you want to continue?!");
-                                
+
                                 sessionServiceLogUtilRepo.save(log);
                                 logger.info(String.format("Saving to log on request for Device Change >>>>>> +++++++++++++ =>%s", regWalletInfoRepo.existsByUuid(rq.getUserDeviceId().trim())));
-                                
+
                                 ProcessorUserFailedTransInfo procFailedTrans = new ProcessorUserFailedTransInfo(
                                         "authenticate-user", "This action will change your existing Device. Do you want to continue?",
                                         String.valueOf(GlobalMethods.generateTransactionId()), "", channel, "Utilities-Service"
                                 );
-                                
+
                                 responseModel.setDescription("This action will change your existing Device. Do you want to continue?");
                                 responseModel.setStatusCode(406);
-                                
+
+                                DeviceLoginKeyRequest getdevKe = new DeviceLoginKeyRequest();
+                                getdevKe.setEmailAddress(rq.getEmailAddress());
+                                getdevKe.setDeviceId(uuid);
+                                getdevKe.setDevicePublicSpkiB64(rq.getDevicePublicSpkiB64());
+
+                                System.out.println("DeviceBindingResponse getDevBind req  " + getdevKe);
+
+                                DeviceBindingResponse getDevBind = fxFeignKeysClient.loginKey(getdevKe);
+
+                                System.out.println("DeviceBindingResponse getDevBind  response  " + getDevBind);
+
+                                Map mp = new HashMap();
+                                mp.put("deviceId", getDevBind.getDeviceId());
+                                mp.put("activeKid", getDevBind.getActiveKid());
+                                mp.put("status", getDevBind.getStatus());
+                                mp.put("publicKeySpki", getDevBind.getDevicePublicSpkiB64());
+                                mp.put("keyType", "DEVICE_SIGNING");
+
+                                responseModel.addData("deviceBinding", mp);
+
                                 procFailedRepo.save(procFailedTrans);
                                 return responseModel;
-                                
+
                             }
                         }
 
@@ -279,12 +325,12 @@ public class UtilityService {
                         procFailedRepo.save(procFailedTrans);
                         return responseModel;*/
                     }
-                    
+
                     RegWalletInfo updateWallet = regWalletInfoRepo.findByPhoneNumberId(resultWallet.getPhoneNumber());
                     updateWallet.setUerDeviceCustomer("1");
                     updateWallet.setUuid(rq.getUserDeviceId());
                     regWalletInfoRepo.save(updateWallet);
-                    
+
                 }
                 //}
                 //  logger.info(String.format("rq.getPushNotificationToken()>>>>>> +++++++++++++ =>%s", rq.getPushNotificationToken()));
@@ -292,16 +338,16 @@ public class UtilityService {
                 RegWalletInfo updateWallet2 = regWalletInfoRepo.findByPhoneNumberId(resultWallet.getPhoneNumber());
                 updateWallet2.setPushNotificationToken(rq.getPushNotificationToken());
                 regWalletInfoRepo.save(updateWallet2);
-                
+
                 List<WalletTierVerifyBizness> getBiz = walletTierVerifyBiznessRepo.findByWalletNo(resultWallet.getPhoneNumber());
                 String merchantId = null;
                 String merchantLink = null;
-                
+
                 if (getBiz.size() > 0) {
                     merchantId = getBiz.get(0).getMerchantId();
                     merchantLink = getBiz.get(0).getMerchantLink();
                 }
-                
+
                 boolean emailAct = resultWallet.isEmailVerification();
                 boolean phoneVerify = resultWallet.isCompleted();
                 boolean pinCreated = resultWallet.isActivation();
@@ -332,26 +378,26 @@ public class UtilityService {
                 if (getvir.size() > 0) {
                     virtualWalletNo = getvir.get(0).getAccountNumber();
                 }
-                
+
                 responseModel.addData("virtualWalletNo", virtualWalletNo);
-                
+
                 responseModel.setStatusCode(HttpServletResponse.SC_OK);
                 responseModel.setDescription(LOGIN_SUCCESSFUL);
             } else {
-                
+
                 responseModel.setStatusCode(statusCode);
                 responseModel.setDescription("Customer does not exist!");
             }
-            
+
         } catch (Exception ex) {
             responseModel.setDescription(statusMessage);
             responseModel.setStatusCode(statusCode);
-            
+
             ex.printStackTrace();
         }
-        
+
         return responseModel;
-        
+
     }
-    
+
 }

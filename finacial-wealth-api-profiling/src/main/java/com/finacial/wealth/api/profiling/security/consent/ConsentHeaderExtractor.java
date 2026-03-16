@@ -74,7 +74,7 @@ public class ConsentHeaderExtractor {
         String path = ConsentStringUtil.firstNonBlank(
                 http.getHeader("X-Original-Uri"),
                 http.getHeader("X-Forwarded-Uri"),
-                "/api/transactions" + http.getRequestURI()
+                "/api/profiling" + http.getRequestURI()
         );
 
         out.setAuthorization(auth);

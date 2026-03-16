@@ -20,4 +20,5 @@ public class SwapSlotReq {
     private String pin;
     private String invitationCodeReqId;
     private String senderEmailAddress;
+    private String processId;
 }

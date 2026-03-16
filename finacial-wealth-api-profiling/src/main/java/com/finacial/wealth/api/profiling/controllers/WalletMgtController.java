@@ -22,6 +22,7 @@ import com.finacial.wealth.api.profiling.models.WalletNo;
 import com.finacial.wealth.api.profiling.models.accounts.AddAccountObj;
 import com.finacial.wealth.api.profiling.response.BaseResponse;
 import com.finacial.wealth.api.profiling.security.consent.ConsentVerificationCoordinator;
+import com.finacial.wealth.api.profiling.security.consent.hasher.raw.DefaultRawConsentPayloadHasher;
 import com.finacial.wealth.api.profiling.security.hasher.ChangePasswordPayloadHasher;
 import com.finacial.wealth.api.profiling.services.AddAccountService;
 import com.finacial.wealth.api.profiling.services.CountryService;
@@ -64,6 +65,7 @@ public class WalletMgtController {
     private final ConsentVerificationCoordinator consentVerificationCoordinator;
     private final UttilityMethods uttilityMethods;
     private final ChangePasswordPayloadHasher changePasswordPayloadHasher;
+    private final DefaultRawConsentPayloadHasher defaultRawConsentPayloadHasher;
 
     /*@PostMapping("/create-user-old")
     public ResponseEntity<BaseResponse> onboardUser(
@@ -235,13 +237,14 @@ public class WalletMgtController {
 
         String userId = uttilityMethods.getClaimFromJwt(auth, "emailAddress");
 
-        BaseResponse consentRes = consentVerificationCoordinator.requireConsent(
+        BaseResponse consentRes = consentVerificationCoordinator.requireConsentUsingRawBody(
                 http,
                 "POST",
-                rq.getEmailAddress(),
+                rq.getProcessId(),
                 userId,
-                rq,
-                changePasswordPayloadHasher
+                // rq,
+                //  changePasswordPayloadHasher
+                defaultRawConsentPayloadHasher
         );
 
         if (consentRes.getStatusCode() != 200) {

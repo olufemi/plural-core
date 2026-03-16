@@ -27,5 +27,6 @@ public class LeaveGroupRequest {
     private String pin;
 
     private String memberId;
+    private String processId;
 
 }

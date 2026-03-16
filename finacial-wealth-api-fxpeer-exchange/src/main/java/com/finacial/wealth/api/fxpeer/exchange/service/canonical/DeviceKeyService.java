@@ -52,6 +52,7 @@ public class DeviceKeyService {
             log.info("[DEVICE-KEY] existing active device found for same deviceId={}", deviceId);
 
             DeviceKeyEntity e = existingActiveForDevice.get();
+            e.setPublicSpkiB64(cleanedSpki);
             e.setLastSeenAt(Instant.now());
             repo.save(e);
             return DeviceBindingResult.active(deviceId, e.getKid(), e.getPublicSpkiB64());

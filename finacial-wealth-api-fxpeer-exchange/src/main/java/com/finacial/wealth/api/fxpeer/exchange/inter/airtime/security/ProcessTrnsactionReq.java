@@ -18,6 +18,7 @@ public class ProcessTrnsactionReq {
     private String recipient;
     private String amount;
     private String currencyCode;
-    private String pin;
+    private String processId;
+    //private String pin;
 
 }

@@ -19,6 +19,7 @@ public class JoinGroupRequest {
     private String invitationCodeReqId;
     private String memberEmailAddress;
     private int selectedSlot;
-    private String pin;
+    //private String pin;
+    private String processId;
 
 }

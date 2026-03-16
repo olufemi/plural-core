@@ -21,6 +21,7 @@ import com.financial.wealth.api.transactions.security.consent.ConsentVerificatio
 import com.financial.wealth.api.transactions.security.consent.hasher.AcceptQuotePayloadHasher;
 import com.financial.wealth.api.transactions.security.consent.hasher.BreezePayInterbankPaymentPayloadHasher;
 import com.financial.wealth.api.transactions.security.consent.hasher.LocalTransferPayloadHasher;
+import com.financial.wealth.api.transactions.security.consent.hasher.raw.DefaultRawConsentPayloadHasher;
 import com.financial.wealth.api.transactions.services.HashDebugUtil;
 import com.financial.wealth.api.transactions.services.LocalTransferCanon;
 import com.financial.wealth.api.transactions.services.LocalTransferService;
@@ -59,6 +60,7 @@ public class TransferServicesControllers {
     private final LocalTransferPayloadHasher localTransferPayloadHasher;
     private final BreezePayInterbankPaymentPayloadHasher interbankPaymentPayloadHasher;
     private final AcceptQuotePayloadHasher acceptQuotePayloadHasher;
+    private final DefaultRawConsentPayloadHasher defaultRawConsentPayloadHasher;
 
     @GetMapping("/interbank/get-banks")
     public ApiResponseModel getAllBanks(@RequestHeader(value = "authorization", required = true) String auth) throws ApiClientException {
@@ -86,14 +88,22 @@ public class TransferServicesControllers {
             @RequestBody @Valid OtherBankTransferRequest rq, HttpServletRequest http) {
         String userId = uttilityMethods.getClaimFromJwt(auth, "emailAddress");
 
-        BaseResponse consentRes = consentVerificationCoordinator.requireConsent(
+        /*BaseResponse consentRes1 = consentVerificationCoordinator.requireConsent(
                 http,
                 "POST",
                 rq.getProcessId(),
                 userId,
                 rq,
                 interbankPaymentPayloadHasher
-        );
+        );*/
+        BaseResponse consentRes
+                = consentVerificationCoordinator.requireConsentUsingRawBody(
+                        http,
+                        "POST",
+                        rq.getProcessId(),
+                        userId,
+                        defaultRawConsentPayloadHasher
+                );
 
         if (consentRes.getStatusCode() != 200) {
             return ResponseEntity.status(consentRes.getStatusCode()).body(consentRes);

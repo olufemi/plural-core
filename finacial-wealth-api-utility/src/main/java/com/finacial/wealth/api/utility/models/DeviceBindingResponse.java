@@ -2,7 +2,7 @@
  * Click nbfs://nbhost/SystemFileSystem/Templates/Licenses/license-default.txt to change this license
  * Click nbfs://nbhost/SystemFileSystem/Templates/Classes/Class.java to edit this template
  */
-package com.financial.wealth.api.transactions.models;
+package com.finacial.wealth.api.utility.models;
 
 import lombok.Data;
 
@@ -11,10 +11,10 @@ import lombok.Data;
  * @author olufemioshin
  */
 @Data
-public class AcceptQuoteFE {
+public class DeviceBindingResponse {
 
-    boolean accepted;
-    private String quoteId;
-    private String processId;
-    // private String pin;
+    private String deviceId;
+    private String status;    // NONE|PENDING|ACTIVE
+    private String activeKid;
+    private String devicePublicSpkiB64;
 }

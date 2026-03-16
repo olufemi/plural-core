@@ -17,5 +17,6 @@ public class ChangePasswordInApp {
     private String oldPassword;
     private String newPassword;
     private String uuid;
-    private int pin;
+    private String processId;
+  //  private int pin;
 }

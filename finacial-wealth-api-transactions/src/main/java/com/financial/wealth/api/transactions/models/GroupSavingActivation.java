@@ -18,4 +18,5 @@ public class GroupSavingActivation {
     private String emailAddress;
     private String pin;
     private String activationDate;
+    private String processId;
 }

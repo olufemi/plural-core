@@ -4,29 +4,17 @@
  */
 package com.finacial.wealth.api.fxpeer.exchange.offer;
 
+import lombok.Data;
+
 /**
  *
  * @author olufemioshin
  */
+@Data
 public class CancelOfferCallerReq {
 
-    private String pin;
+    // private String pin;
     private String correlationId;
-
-    public String getPin() {
-        return pin;
-    }
-
-    public void setPin(String pin) {
-        this.pin = pin;
-    }
-
-    public String getCorrelationId() {
-        return correlationId;
-    }
-
-    public void setCorrelationId(String correlationId) {
-        this.correlationId = correlationId;
-    }
+    private String processId;
 
 }

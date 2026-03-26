@@ -15,10 +15,11 @@ import lombok.Data;
 public class UpdateOfferCallerReq {
 
     private String newRate;
-    private String pin;
+   // private String pin;
     private String correlationId;
 
     private String minAmount;
 
     private String maxAmount;
+    private String processId;
 }

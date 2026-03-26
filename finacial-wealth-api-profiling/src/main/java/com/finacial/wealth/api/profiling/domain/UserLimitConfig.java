@@ -39,8 +39,9 @@ public class UserLimitConfig implements Serializable {
     @JsonIgnore
     @Column(name = "WALLET_NUMBER", unique = true)
     private String walletNumber;
-    
-     @JsonIgnore
+    private String phoneNumber;
+
+    @JsonIgnore
     @Column(name = "CATEGORY")
     private String tierCategory;
 
@@ -52,6 +53,14 @@ public class UserLimitConfig implements Serializable {
     @Column(name = "LAST_MODIFIED_DATE", insertable = false, columnDefinition = "TIMESTAMP")
     @JsonIgnore
     private Instant lastModifiedDate;
+
+    public String getPhoneNumber() {
+        return phoneNumber;
+    }
+
+    public void setPhoneNumber(String phoneNumber) {
+        this.phoneNumber = phoneNumber;
+    }
 
     public Long getId() {
         return id;
@@ -92,7 +101,5 @@ public class UserLimitConfig implements Serializable {
     public void setLastModifiedDate(Instant lastModifiedDate) {
         this.lastModifiedDate = lastModifiedDate;
     }
-    
-    
 
 }

@@ -100,6 +100,7 @@ import org.springframework.stereotype.Service;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Optional;
 import java.util.function.Consumer;
@@ -769,8 +770,114 @@ public class InvestmentOrderService {
         }
     }
 
-    @Transactional()
+    @Transactional
     public BaseResponse getInvestmentRedemption(RedemptionInvestmentRequest rq, String auth) {
+
+        BaseResponse res = new BaseResponse();
+
+        try {
+            String email = utilService.getClaimFromJwt(auth, "emailAddress");
+            if (email == null || email.isBlank()) {
+                res.setStatusCode(401);
+                res.setDescription("Invalid token");
+                res.setData(Collections.emptyMap());
+                return res;
+            }
+
+            int page = rq.page() != null ? rq.page() : 0;
+            int size = rq.size() != null ? rq.size() : 20;
+
+            List<InvestmentOrderStatus> statuses = Arrays.asList(
+                    InvestmentOrderStatus.LIQUIDATION_PENDING_APPROVAL,
+                    InvestmentOrderStatus.LIQUIDATION_PROCESSING,
+                    InvestmentOrderStatus.LIQUIDATION_FAILED,
+                    InvestmentOrderStatus.SETTLED
+            );
+
+            if (rq.parentOrderId() != null) {
+                boolean exists = orderRepo.existsByEmailAddressAndParentOrderRefAndTypeAndStatusIn(
+                        email,
+                        rq.parentOrderId(),
+                        InvestmentOrderType.LIQUIDATION,
+                        statuses
+                );
+
+                if (!exists) {
+                    res.setStatusCode(400);
+                    res.setDescription("Invalid parentOrderRef");
+                    res.setData(Collections.emptyMap());
+                    return res;
+                }
+            }
+
+            Page<InvestmentOrder> orders = orderRepo.findLiquidationsByEmail(
+                    email,
+                    statuses,
+                    InvestmentOrderType.LIQUIDATION,
+                    rq.parentOrderId(),
+                    PageRequest.of(page, size)
+            );
+
+            var content = orders.getContent().stream().map(o -> {
+                Map<String, Object> item = new HashMap<>();
+                item.put("orderRef", o.getOrderRef());
+                item.put("orderParentRef", o.getParentOrderRef());
+                item.put("amount", o.getAmount());
+                item.put("currency", o.getProduct() != null ? o.getProduct().getCurrency() : null);
+                item.put("requestedAt", o.getCreatedAt());
+                item.put("settledAt", o.getUpdatedAt());
+                item.put("status", mapLiquidationStatus(o.getStatus()));
+                item.put("productName", o.getProduct() != null ? o.getProduct().getName() : null);
+                item.put("positionId", o.getPosition() != null ? o.getPosition().getId() : null);
+                return item;
+            }).toList();
+
+            Map<String, Object> data = new HashMap<>();
+            data.put("content", content);
+            data.put("page", orders.getNumber());
+            data.put("size", orders.getSize());
+            data.put("totalElements", orders.getTotalElements());
+            data.put("totalPages", orders.getTotalPages());
+
+            res.setStatusCode(200);
+            res.setDescription("Redemptions fetched successfully");
+            res.setData(data);
+            return res;
+
+        } catch (Exception ex) {
+            ex.printStackTrace();
+            res.setStatusCode(500);
+            res.setDescription("Something went wrong");
+            res.setData(Collections.emptyMap());
+            return res;
+        }
+    }
+
+    private String mapLiquidationStatus(InvestmentOrderStatus status) {
+        if (status == null) {
+            return null;
+        }
+
+        switch (status) {
+            case LIQUIDATION_PENDING_APPROVAL:
+                return "PENDING";
+
+            case LIQUIDATION_PROCESSING:
+                return "PENDING"; // still in progress
+
+            case LIQUIDATION_FAILED:
+                return "FAILED";
+
+            case SETTLED:
+                return "SUCCESS";
+
+            default:
+                return status.name(); // fallback (safe)
+        }
+    }
+
+    @Transactional()
+    public BaseResponse getInvestmentRedemptionOld(RedemptionInvestmentRequest rq, String auth) {
 
         BaseResponse res = new BaseResponse();
 

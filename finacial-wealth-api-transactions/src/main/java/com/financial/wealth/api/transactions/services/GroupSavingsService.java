@@ -215,7 +215,6 @@ public class GroupSavingsService {
                 return responseModel;
 
             }*/
-
             List<GroupSavingsData> chkPendId = groupSavingsDataRepo.findByInviteCode(rq.getInvitationCodeReqId());
             boolean itsId = false;
             boolean itsIdLink = false;
@@ -1178,7 +1177,6 @@ public class GroupSavingsService {
                 return responseModel;
 
             }*/
-
             List<GroupSavingsData> chkPendId = groupSavingsDataRepo.findByInviteCodeAndEmailAddress(rq.getInvitationCodeReqId(), rq.getEmailAddress());
             boolean itsId = false;
             boolean itsIdLink = false;
@@ -1414,7 +1412,6 @@ public class GroupSavingsService {
                 return responseModel;
 
             }*/
-
             boolean valFormatD1 = utilMeth.isValidFormat(utilMeth.getSETTING_DATE_FORMATT(), rq.getActivationDate(), Locale.ENGLISH);
 
             if (valFormatD1 == false) {
@@ -2807,7 +2804,6 @@ public class GroupSavingsService {
                 return responseModel;
 
             }*/
-
             SwapSlotDetails sw = new SwapSlotDetails();
             ValidateReqReq rqq = new ValidateReqReq();
             rqq.setAdminEmailAddress("");
@@ -2996,7 +2992,6 @@ public class GroupSavingsService {
                 return responseModel;
 
             }*/
-
             rr.setEmailAddress(rq.getMemberEmailAddress());
 
             rr.setInvitationCodeReqId(rq.getInvitationCodeReqId());
@@ -3163,7 +3158,6 @@ public class GroupSavingsService {
                 return responseModel;
 
             }*/
-
             GroupSavingsData group = groupSavingsDataRepo.findByInviteCodeDe(rq.getInvitationCodeReqId());
             if (group == null || "1".equals(group.getIsTrnsactionDeleted())) {
                 responseModel.setDescription("Invalid or deleted group.");
@@ -3483,7 +3477,6 @@ public class GroupSavingsService {
                 logFailure(MSG_INVALID_PIN);
                 return set(resp, statusCode, MSG_INVALID_PIN);
             }*/
-
             // --- Load group
             final List<GroupSavingsData> groups = groupSavingsDataRepo.findByInviteCode(rq.getInvitationCodeReqId());
             if (groups.isEmpty()) {
@@ -3628,7 +3621,6 @@ public class GroupSavingsService {
                     return responseModel;
 
                 }*/
-
             } else {
                 isAccepted = false;
 
@@ -4175,7 +4167,7 @@ public class GroupSavingsService {
 
                         } else {
 
-                            System.out.println("getAlG.getAddedMembersModels() ::::::::::::::::  %S  " + new Gson().toJson(getAlG.getAddedMembersModels()));
+                            //   System.out.println("getAlG.getAddedMembersModels() ::::::::::::::::  %S  " + new Gson().toJson(getAlG.getAddedMembersModels()));
                             String jsonInput = getAlG.getAddedMembersModels() == null ? "" : getAlG.getAddedMembersModels();
                             if (!jsonInput.equals("")) {
 

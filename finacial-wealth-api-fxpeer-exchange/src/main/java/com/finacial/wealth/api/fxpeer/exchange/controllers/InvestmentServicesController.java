@@ -242,6 +242,17 @@ public class InvestmentServicesController {
         return investmentValuationScheduler.getHistory(auth);
     }
 
+    @GetMapping(
+            path = "/get-customer-investment-position",
+            //     consumes = MediaType.APPLICATION_JSON_VALUE,
+            produces = MediaType.APPLICATION_JSON_VALUE
+    )
+    public ResponseEntity<ApiResponseModel> getInvestmentPositions(
+            @RequestHeader(name = "authorization", required = true) String auth
+    ) throws IOException {
+        return investmentValuationScheduler.getInvestmentPositions(auth);
+    }
+
     /**
      * Simple probe to confirm you’re hitting THIS build & service. curl -s
      * http://127.0.0.1:7007/fxothers/__ping

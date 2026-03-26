@@ -148,11 +148,35 @@ public interface InvestmentOrderRepository extends JpaRepository<InvestmentOrder
             @Param("parentOrderRef") String parentOrderRef,
             Pageable pageable
     );
-    
+
     boolean existsByEmailAddressAndParentOrderRefAndTypeAndStatus(
-        String emailAddress,
-        String parentOrderRef,
-        InvestmentOrderType type,
-        InvestmentOrderStatus status
-);
+            String emailAddress,
+            String parentOrderRef,
+            InvestmentOrderType type,
+            InvestmentOrderStatus status
+    );
+
+    boolean existsByEmailAddressAndParentOrderRefAndTypeAndStatusIn(
+            String emailAddress,
+            String parentOrderRef,
+            InvestmentOrderType type,
+            List<InvestmentOrderStatus> statuses
+    );
+
+    @Query("""
+       SELECT o
+       FROM InvestmentOrder o
+       WHERE o.emailAddress = :email
+         AND o.status IN :statuses
+         AND o.type = :type
+         AND (:parentOrderRef IS NULL OR o.parentOrderRef = :parentOrderRef)
+       ORDER BY o.updatedAt DESC
+       """)
+    Page<InvestmentOrder> findLiquidationsByEmail(
+            @Param("email") String email,
+            @Param("statuses") List<InvestmentOrderStatus> statuses,
+            @Param("type") InvestmentOrderType type,
+            @Param("parentOrderRef") String parentOrderRef,
+            Pageable pageable
+    );
 }

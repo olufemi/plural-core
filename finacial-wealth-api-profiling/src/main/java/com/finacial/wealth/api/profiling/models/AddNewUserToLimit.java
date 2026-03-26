@@ -16,5 +16,6 @@ public class AddNewUserToLimit {
     
     private String walletNumber;
     private String category;
+    private String phoneNumber;
     
 }

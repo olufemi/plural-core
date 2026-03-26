@@ -14,8 +14,10 @@ import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.format.DateTimeFormatter;
+import java.util.Arrays;
 import java.util.Base64;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 public final class HmacSigner {
@@ -25,15 +27,51 @@ public final class HmacSigner {
     private HmacSigner() {
     }
 
-    public static Map<String, String> makeSignature(String secretKey, String bodyOrNull) {
-        String timestamp = DateTimeFormatter.ISO_INSTANT.format(Instant.now());
+    public static void testSignatureVariants(String secretKey, String apiKey, String body, String timestamp, String expected) throws Exception {
+        List<String> variants = Arrays.asList(
+                body + "|" + timestamp,
+                timestamp + "|" + body,
+                body + timestamp,
+                timestamp + body,
+                apiKey + "|" + body + "|" + timestamp,
+                body + "|" + timestamp + "|" + apiKey,
+                apiKey + body + timestamp,
+                timestamp + "|" + apiKey + "|" + body
+        );
+
+        System.out.println("BEGINS ::::: ::::: ::::: ");
+
+        for (String dataToSign : variants) {
+            Mac mac = Mac.getInstance("HmacSHA256");
+            mac.init(new SecretKeySpec(secretKey.getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
+            byte[] hmac = mac.doFinal(dataToSign.getBytes(StandardCharsets.UTF_8));
+
+            StringBuilder sb = new StringBuilder();
+            for (byte b : hmac) {
+                sb.append(String.format("%02x", b));
+            }
+
+            String sig = sb.toString();
+
+            System.out.println("DATA_TO_SIGN ::: " + dataToSign);
+            System.out.println("SIG          ::: " + sig);
+            System.out.println("MATCH        ::: " + expected.equals(sig));
+            System.out.println("-------------------------------------------");
+        }
+
+        System.out.println("ENDS ::::: ::::: ::::: ");
+    }
+
+    public static Map<String, String> makeSignature(String secretKey, String bodyOrNull, String timestamp) {
         String body = (bodyOrNull == null) ? "" : bodyOrNull;
         String dataToSign = body + "|" + timestamp;
+        System.out.println("DATA_TO_SIGN ::::: " + dataToSign);
 
         try {
             Mac mac = Mac.getInstance(HMAC_ALG);
             mac.init(new SecretKeySpec(secretKey.getBytes(StandardCharsets.UTF_8), HMAC_ALG));
             byte[] hmac = mac.doFinal(dataToSign.getBytes(StandardCharsets.UTF_8));
+
             String signatureHex = toHex(hmac);
 
             Map<String, String> out = new HashMap<>();
@@ -43,6 +81,28 @@ public final class HmacSigner {
         } catch (Exception e) {
             throw new RuntimeException("Failed to compute HMAC signature", e);
         }
+    }
+
+    public static String makeSignatureOnly(String secretKey, String body, String timestamp) {
+        try {
+            String dataToSign = body + "|" + timestamp; // try current assumption first
+            Mac mac = Mac.getInstance("HmacSHA256");
+            mac.init(new SecretKeySpec(secretKey.getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
+            byte[] hmac = mac.doFinal(dataToSign.getBytes(StandardCharsets.UTF_8));
+
+            StringBuilder sb = new StringBuilder();
+            for (byte b : hmac) {
+                sb.append(String.format("%02x", b));
+            }
+            return sb.toString();
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    public static Map<String, String> makeSignature(String secretKey, String bodyOrNull) {
+        String timestamp = DateTimeFormatter.ISO_INSTANT.format(Instant.now());
+        return makeSignature(secretKey, bodyOrNull, timestamp);
     }
 
     public static String computeSignature(String secret, String timestamp, String rawBody) {

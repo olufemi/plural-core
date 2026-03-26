@@ -55,13 +55,14 @@ public interface InvestmentPositionRepository extends JpaRepository<InvestmentPo
     List<InvestmentPosition> findAllActivePositions();
 
     Optional<InvestmentPosition> findByOrderRef(String orderRef);
-    
+
     @Query("SELECT u FROM InvestmentPosition u where u.orderRef = :orderRef")
     InvestmentPosition findByOrderRefUpdate(@Param("orderRef") String orderRef);
-    
-    
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select p from InvestmentPosition p where p.id = :id")
     Optional<InvestmentPosition> lockById(@Param("id") Long id);
 
+    @Query("select ip from InvestmentPosition ip left join fetch ip.product where ip.emailAddress = :email order by ip.createdAt desc")
+    List<InvestmentPosition> findPositionsByEmailAddress(@Param("email") String email);
 }

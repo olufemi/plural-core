@@ -556,7 +556,6 @@ public class WalletServices {
             mp.put("keyType", "DEVICE_SIGNING");
 
             responseModel.addData("deviceBinding", mp);*/
-
             responseModel.setDescription("Wallet PIN reset was successful, Thank you.");
             responseModel.setStatusCode(200);
             responseModel.addData("processId", processId);
@@ -1282,7 +1281,275 @@ public class WalletServices {
 
     }
 
+    @Transactional
     public BaseResponse onboardUserForSDK(InitiateUserOnboarding rq) {
+        String processId = String.valueOf(GlobalMethods.generateTransactionId());
+        String phone = rq != null ? safeTrim(rq.getPhoneNumber()) : "";
+
+        try {
+            BaseResponse validation = validateOnboardingRequest(rq, processId);
+            if (!isSuccess(validation)) {
+                return validation;
+            }
+
+            String uuid = safeTrim(rq.getUuid());
+            phone = safeTrim(rq.getPhoneNumber());
+
+            BaseResponse duplicateCheck = validateDuplicates(uuid, phone, processId);
+            if (!isSuccess(duplicateCheck)) {
+                return duplicateCheck;
+            }
+
+            BaseResponse referralCheck = validateReferral(rq, processId);
+            if (!isSuccess(referralCheck)) {
+                return referralCheck;
+            }
+
+            RegWalletInfo walletInfo = buildRegWalletInfo(rq);
+
+            // Existing user details
+            if (userDeRepo.existsByUniqueIdentification(phone)) {
+
+                Optional<RegWalletInfo> existingWalletInfo = regWalletInfoRepo.findByPhoneNumber(phone);
+
+                BaseResponse limitResponse = assignTier(walletInfo.getWalletId(), phone, processId);
+                if (!isSuccess(limitResponse)) {
+                    return limitResponse;
+                }
+
+                if (!existingWalletInfo.isPresent()) {
+                    regWalletInfoRepo.save(walletInfo);
+                } else {
+                    // optionally update missing fields if needed
+                    // e.g existingWalletInfo.setUuid(walletInfo.getUuid());
+                    // regWalletInfoRepo.save(existingWalletInfo);
+                }
+
+                return successResponse("Customer onboarded successfully, kindly login to create PIN. Thank you.");
+            }
+
+            WalletSystemResponse addUserResponse = addUserToWalletSystem(phone);
+            if (addUserResponse == null || addUserResponse.getStatusCode() != 200) {
+                String message = addUserResponse != null
+                        ? addUserResponse.getDescription()
+                        : "Unable to create user in wallet system";
+                return failAndLog("create-wallet", message, processId, phone, 400);
+            }
+
+            BaseResponse limitResponse = assignTier(walletInfo.getWalletId(), phone, processId);
+            if (!isSuccess(limitResponse)) {
+                return limitResponse;
+            }
+
+            UserDetailsRequest userDetailsRequest = buildUserDetailsRequest(walletInfo);
+
+            BaseResponse walletUserResponse = createNewWalletUser(userDetailsRequest, "");
+            if (!isSuccess(walletUserResponse)) {
+                pinActFailedRepo.save(new PinActFailedTransLog(
+                        "activate-wallet",
+                        walletUserResponse.getDescription(),
+                        "",
+                        "",
+                        rq.getEmailAddress()
+                ));
+                return buildResponse(walletUserResponse.getStatusCode(), walletUserResponse.getDescription());
+            }
+
+            regWalletInfoRepo.save(walletInfo);
+
+            return successResponse("Customer onboarded successfully, kindly login to create PIN. Thank you.");
+
+        } catch (Exception ex) {
+            ex.printStackTrace();
+            return failAndLog("create-wallet", "An error occured,please try again", processId, phone, 500);
+        }
+    }
+
+    private BaseResponse validateOnboardingRequest(InitiateUserOnboarding rq, String processId) {
+        if (rq == null) {
+            return failAndLog("create-wallet", "Request cannot be null", processId, "", 400);
+        }
+
+        if (isBlank(rq.getUuid())) {
+            return failAndLog("create-wallet", "User Device-id cannot be null!", processId, rq.getPhoneNumber(), 400);
+        }
+
+        if (isBlank(rq.getPhoneNumber())) {
+            return failAndLog("create-wallet", "Phone number cannot be null!", processId, "", 400);
+        }
+
+        if (isBlank(rq.getPassword())) {
+            return failAndLog("create-wallet", "Password cannot be null!", processId, rq.getPhoneNumber(), 400);
+        }
+
+        return successResponse("VALID");
+    }
+
+    private BaseResponse validateDuplicates(String uuid, String phone, String processId) {
+        if (regWalletInfoRepo.existsByUuid(uuid)) {
+            return failAndLog("create-wallet", "The Customer's Device already exist!", processId, phone, 400);
+        }
+
+        if (regWalletInfoRepo.existsByPhoneNumber(phone)) {
+            return failAndLog("create-wallet", "The Customer's Phonenumber already exist!", processId, phone, 400);
+        }
+
+        return successResponse("VALID");
+    }
+
+    private BaseResponse validateReferral(InitiateUserOnboarding rq, String processId) {
+        if (isBlank(rq.getReferralCode())) {
+            return successResponse("VALID");
+        }
+
+        List<RegWalletInfo> referredUsers = regWalletInfoRepo.findByReferralCode(rq.getReferralCode());
+        if (referredUsers == null || referredUsers.isEmpty()) {
+            return failAndLog("create-wallet", "Referral Code is invalid, please check!", processId, rq.getPhoneNumber(), 400);
+        }
+
+        RegWalletInfo refOwner = referredUsers.get(0);
+        if (!"1".equals(refOwner.getEmailCreation())) {
+            return failAndLog("create-wallet", "Referral Code Owner has not completed onboarding process!", processId, rq.getPhoneNumber(), 400);
+        }
+
+        ReferralsLog refLog = new ReferralsLog();
+        refLog.setCreatedDate(Instant.now());
+        refLog.setReceiverNumber(rq.getPhoneNumber());
+        refLog.setReferralCode(rq.getReferralCode());
+        refLog.setReferralCodeLink(refOwner.getReferralCodeLink());
+        refLog.setSenderName(refOwner.getFirstName() + " " + refOwner.getLastName());
+        refLog.setSenderNumber(refOwner.getPhoneNumber());
+        referralsLogRepo.save(refLog);
+
+        return successResponse("VALID");
+    }
+
+    private RegWalletInfo buildRegWalletInfo(InitiateUserOnboarding rq) throws NoSuchAlgorithmException, NoSuchPaddingException, InvalidKeyException, IllegalBlockSizeException, BadPaddingException {
+        RegWalletInfo walletInfo = new RegWalletInfo();
+
+        String fullName = buildFullName(rq.getFirstName(), rq.getMiddleName(), rq.getLastName());
+        String referralCode = utilMeth.generateReferralCode("Customer-Onboarding");
+        String encryptedPassword = utilMeth.encyrpt(String.valueOf(rq.getPassword()), encryptionKey);
+        String walletId = GlobalMethods.generateNUBAN();
+
+        walletInfo.setCompleted(true);
+        walletInfo.setActivation(false);
+        walletInfo.setAccountName(fullName);
+        walletInfo.setFirstName(rq.getFirstName());
+        walletInfo.setLastName(rq.getLastName());
+        walletInfo.setMiddleName(rq.getMiddleName());
+        walletInfo.setFullName(fullName);
+        walletInfo.setEmail(rq.getEmailAddress());
+        walletInfo.setPhoneNumber(rq.getPhoneNumber());
+        walletInfo.setSecurityAnswer("");
+        walletInfo.setSecurityQue("");
+        walletInfo.setReferralCode(referralCode);
+        walletInfo.setReferralCodeLink(utilMeth.getSETTING_REF_LINK() + referralCode);
+        walletInfo.setAccountBankCode("");
+        walletInfo.setBvnNumber("");
+        walletInfo.setDateOfBirth(rq.getDateOfBirth());
+        walletInfo.setCustomerId("");
+        walletInfo.setUuid(safeTrim(rq.getUuid()));
+        walletInfo.setUserName(fullName);
+        walletInfo.setPersonId("");
+        walletInfo.setPassword(encryptedPassword);
+        walletInfo.setPhoneVerification("1");
+        walletInfo.setEmailCreation("1");
+        walletInfo.setLivePhotoUpload("0");
+        walletInfo.setUerDeviceCustomer("1");
+        walletInfo.setEmailVerification(true);
+        walletInfo.setWalletTier("Tier 2");
+        walletInfo.setIsOnboarded("0".equals(footPrintMockedData) ? "0" : "1");
+        walletInfo.setWalletId(walletId);
+        walletInfo.setCreatedBy("System");
+        walletInfo.setCreatedDate(Instant.now());
+
+        return walletInfo;
+    }
+
+    private UserDetailsRequest buildUserDetailsRequest(RegWalletInfo walletInfo) {
+        UserDetailsRequest request = new UserDetailsRequest();
+        request.setConfPassword(walletInfo.getPassword());
+        request.setEmailAddress(walletInfo.getEmail());
+        request.setFirstName(walletInfo.getFirstName());
+        request.setLastName(walletInfo.getLastName());
+        request.setPassword(walletInfo.getPassword());
+        request.setPhoneNumber(walletInfo.getPhoneNumber());
+        request.setUserGroup(utilMeth.returnWalletUserGroupId());
+        request.setUserName(walletInfo.getFirstName());
+        return request;
+    }
+
+    private BaseResponse assignTier(String walletId, String phone, String processId) {
+        AddNewUserToLimit addLimit = new AddNewUserToLimit();
+        addLimit.setCategory(utilMeth.getTier2());
+        addLimit.setWalletNumber(walletId);
+        addLimit.setPhoneNumber(phone);
+
+        BaseResponse response = addTierToWallet(addLimit);
+        if (response == null || response.getStatusCode() != 200) {
+            String message = response != null ? response.getDescription() : "Unable to assign wallet tier";
+            pinActFailedRepo.save(new PinActFailedTransLog("activate-wallet", message, "", "", phone));
+            return buildResponse(400, message);
+        }
+
+        return response;
+    }
+
+    private BaseResponse failAndLog(String action, String message, String processId, String phone, int statusCode) {
+        ReceiverFailedTransInfo recFailTrans = new ReceiverFailedTransInfo(
+                action, message, processId, "", "", phone
+        );
+        wallFailTransRepo.save(recFailTrans);
+        return buildResponse(statusCode, message);
+    }
+
+    private BaseResponse successResponse(String message) {
+        return buildResponse(200, message);
+    }
+
+    private BaseResponse buildResponse(int statusCode, String message) {
+        BaseResponse response = new BaseResponse();
+        response.setStatusCode(statusCode);
+        response.setDescription(message);
+        return response;
+    }
+
+    private boolean isSuccess(BaseResponse response) {
+        return response != null && response.getStatusCode() == 200;
+    }
+
+    private boolean isBlank(String value) {
+        return value == null || value.trim().isEmpty();
+    }
+
+    private String safeTrim(String value) {
+        return value == null ? null : value.trim();
+    }
+
+    private String buildFullName(String firstName, String middleName, String lastName) {
+        StringBuilder sb = new StringBuilder();
+
+        if (!isBlank(firstName)) {
+            sb.append(firstName.trim());
+        }
+        if (!isBlank(middleName)) {
+            if (sb.length() > 0) {
+                sb.append(" ");
+            }
+            sb.append(middleName.trim());
+        }
+        if (!isBlank(lastName)) {
+            if (sb.length() > 0) {
+                sb.append(" ");
+            }
+            sb.append(lastName.trim());
+        }
+
+        return sb.toString();
+    }
+
+    public BaseResponse onboardUserForSDKOld(InitiateUserOnboarding rq) {
 
         BaseResponse responseModel = new BaseResponse();
         int statusCode = 500;
@@ -1353,30 +1620,6 @@ public class WalletServices {
 
             }
 
-            if (regWalletInfoRepo.existsByPhoneNumber(rq.getPhoneNumber()
-                    .trim())) {
-
-                ReceiverFailedTransInfo recFailTrans = new ReceiverFailedTransInfo("create-wallet",
-                        "The Customer's Phonenumber already exist!", "", "", phone, rq
-                                .getPhoneNumber());
-                wallFailTransRepo.save(recFailTrans);
-                responseModel.setDescription("The Customer's Phonenumber already exist!");
-                responseModel.setStatusCode(statusCode);
-                return responseModel;
-
-            }
-
-            if (userDeRepo.existsByUniqueIdentification(rq.getPhoneNumber())) {
-
-                ReceiverFailedTransInfo recFailTrans = new ReceiverFailedTransInfo("create-wallet",
-                        "The Phonenumber already exist!", "", "", phone, rq
-                                .getPhoneNumber());
-                wallFailTransRepo.save(recFailTrans);
-                responseModel.setDescription("The Phonenumber already exist!");
-                responseModel.setStatusCode(statusCode);
-                return responseModel;
-
-            }
             RegWalletInfo resultOnboard = new RegWalletInfo();
             String encyrptedPassword = utilMeth.encyrpt(String.valueOf(rq.getPassword()), encryptionKey);
             resultOnboard.setCompleted(true);
@@ -1399,6 +1642,78 @@ public class WalletServices {
             resultOnboard.setSecurityQue("");
             String getRefreCode = utilMeth.generateReferralCode("Customer-Onboarding");
             String refLink = utilMeth.getSETTING_REF_LINK() + getRefreCode;
+            resultOnboard.setReferralCode(getRefreCode);
+            resultOnboard.setReferralCodeLink(refLink);
+            resultOnboard.setAccountBankCode("");
+            resultOnboard.setBvnNumber("");
+            resultOnboard.setDateOfBirth(rq.getDateOfBirth());
+            // result.setNationality("");
+            resultOnboard.setCustomerId("");
+            resultOnboard.setUuid(getUUID);
+            resultOnboard.setUserName(genUsername);
+            resultOnboard.setPersonId("");
+            resultOnboard.setPassword(encyrptedPassword);
+            resultOnboard.setPhoneVerification("1");
+            resultOnboard.setEmailCreation("1");
+            resultOnboard.setLivePhotoUpload("0");
+            resultOnboard.setUerDeviceCustomer("1");
+            resultOnboard.setEmailVerification(true);
+            resultOnboard.setWalletTier("Tier 2");
+            if (footPrintMockedData.equals("0")) {
+                resultOnboard.setIsOnboarded("0");
+            } else {
+                resultOnboard.setIsOnboarded("1");
+            }
+            String walletId = GlobalMethods.generateNUBAN();
+            resultOnboard.setWalletId(walletId);
+
+            resultOnboard.setCreatedBy("System");
+            resultOnboard.setCreatedDate(Instant.now());
+
+            if (regWalletInfoRepo.existsByPhoneNumber(rq.getPhoneNumber()
+                    .trim())) {
+
+                ReceiverFailedTransInfo recFailTrans = new ReceiverFailedTransInfo("create-wallet",
+                        "The Customer's Phonenumber already exist!", "", "", phone, rq
+                                .getPhoneNumber());
+                wallFailTransRepo.save(recFailTrans);
+                responseModel.setDescription("The Customer's Phonenumber already exist!");
+                responseModel.setStatusCode(statusCode);
+                return responseModel;
+
+            }
+
+            if (userDeRepo.existsByUniqueIdentification(rq.getPhoneNumber())) {
+
+                AddNewUserToLimit addLimit = new AddNewUserToLimit();
+                addLimit.setCategory(utilMeth.getTier2());
+                addLimit.setWalletNumber(walletId);
+                BaseResponse bAddLimitRes = this.addTierToWallet(addLimit);
+
+                System.out.println("Validate emailAdd :::::::: add tier successfully"
+                        + "  :::::::::::::::::::::  " + bAddLimitRes);
+
+                regWalletInfoRepo.save(resultOnboard);
+
+                responseModel.setDescription(
+                        "Customer onboarded successfully, kindly login to create PIN. Thank you.");
+                responseModel.setStatusCode(200);
+
+                Map<String, Object> data = new HashMap<>();
+                data.put("email", rq.getEmailAddress());
+                data.put("firstName", resultOnboard.getFirstName());
+
+
+                /*ReceiverFailedTransInfo recFailTrans = new ReceiverFailedTransInfo("create-wallet",
+                        "The Phonenumber already exist!", "", "", phone, rq
+                                .getPhoneNumber());
+                wallFailTransRepo.save(recFailTrans);
+                responseModel.setDescription("The Phonenumber already exist!");*/
+                responseModel.setStatusCode(200);
+                return responseModel;
+
+            }
+
             if (rq.getReferralCode() != null) {
 
                 // validate referralCode
@@ -1442,33 +1757,6 @@ public class WalletServices {
                 referralsLogRepo.save(refLog);
 
             }
-            resultOnboard.setReferralCode(getRefreCode);
-            resultOnboard.setReferralCodeLink(refLink);
-            resultOnboard.setAccountBankCode("");
-            resultOnboard.setBvnNumber("");
-            resultOnboard.setDateOfBirth(rq.getDateOfBirth());
-            // result.setNationality("");
-            resultOnboard.setCustomerId("");
-            resultOnboard.setUuid(getUUID);
-            resultOnboard.setUserName(genUsername);
-            resultOnboard.setPersonId("");
-            resultOnboard.setPassword(encyrptedPassword);
-            resultOnboard.setPhoneVerification("1");
-            resultOnboard.setEmailCreation("1");
-            resultOnboard.setLivePhotoUpload("0");
-            resultOnboard.setUerDeviceCustomer("1");
-            resultOnboard.setEmailVerification(true);
-            resultOnboard.setWalletTier("Tier 2");
-            if (footPrintMockedData.equals("0")) {
-                resultOnboard.setIsOnboarded("0");
-            } else {
-                resultOnboard.setIsOnboarded("1");
-            }
-            String walletId = GlobalMethods.generateNUBAN();
-            resultOnboard.setWalletId(walletId);
-
-            resultOnboard.setCreatedBy("System");
-            resultOnboard.setCreatedDate(Instant.now());
 
             UserDetailsRequest cUser = new UserDetailsRequest();
             cUser.setConfPassword(resultOnboard.getPassword());
@@ -1494,20 +1782,6 @@ public class WalletServices {
                 return responseModel;
             }
 
-            BaseResponse getRes = this
-                    .createNewWalletUser(cUser, "");
-
-            if (getRes.getStatusCode() != 200) {
-
-                PinActFailedTransLog pinActTransFailed = new PinActFailedTransLog("activate-wallet",
-                        getRes
-                                .getDescription(), "", "", rq.getEmailAddress());
-                pinActFailedRepo.save(pinActTransFailed);
-                responseModel.setDescription(getRes.getDescription());
-                responseModel.setStatusCode(getRes.getStatusCode());
-                return responseModel;
-            }
-
             AddNewUserToLimit addLimit = new AddNewUserToLimit();
             addLimit.setCategory(utilMeth.getTier2());
             addLimit.setWalletNumber(walletId);
@@ -1524,6 +1798,21 @@ public class WalletServices {
                 responseModel.setStatusCode(bAddLimitRes.getStatusCode());
                 return responseModel;
             }
+
+            BaseResponse getRes = this
+                    .createNewWalletUser(cUser, "");
+
+            if (getRes.getStatusCode() != 200) {
+
+                PinActFailedTransLog pinActTransFailed = new PinActFailedTransLog("activate-wallet",
+                        getRes
+                                .getDescription(), "", "", rq.getEmailAddress());
+                pinActFailedRepo.save(pinActTransFailed);
+                responseModel.setDescription(getRes.getDescription());
+                responseModel.setStatusCode(getRes.getStatusCode());
+                return responseModel;
+            }
+
             System.out.println("Validate emailAdd :::::::: add tier successfully"
                     + "  :::::::::::::::::::::  " + bAddLimitRes);
 
@@ -1716,6 +2005,7 @@ public class WalletServices {
             userLimit.setLastModifiedDate(Instant.now());
             userLimit.setCreatedDate(Instant.now());
             userLimit.setWalletNumber(rq.getWalletNumber());
+            userLimit.setPhoneNumber(rq.getPhoneNumber());
 
             userLimitConfigRepo.save(userLimit);
 
@@ -2858,7 +3148,6 @@ public class WalletServices {
                 return responseModel;
 
             }*/
-
             String encyrptedPwd = utilMeth.encyrpt(String.valueOf(rq.getOldPassword()), encryptionKey);
             String pwd = wallDe.get(0).getPassword();
             if (!encyrptedPwd.equals(pwd)) {
@@ -3036,7 +3325,6 @@ public class WalletServices {
                 mp.put("keyType", "DEVICE_SIGNING");
 
                 responseModel.addData("deviceBinding", mp);*/
-
                 responseModel.setDescription("Pin changed successfully.");
                 responseModel.setStatusCode(200);
             } else {

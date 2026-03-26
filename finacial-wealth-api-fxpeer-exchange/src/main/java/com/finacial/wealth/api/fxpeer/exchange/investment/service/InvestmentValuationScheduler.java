@@ -14,6 +14,7 @@ import com.finacial.wealth.api.fxpeer.exchange.investment.ennum.InvestmentOrderT
 import com.finacial.wealth.api.fxpeer.exchange.investment.ennum.InvestmentPositionStatus;
 import com.finacial.wealth.api.fxpeer.exchange.investment.record.CustomerInvestmentsPojo;
 import com.finacial.wealth.api.fxpeer.exchange.investment.record.InvestmentPositionHistoryPojo;
+import com.finacial.wealth.api.fxpeer.exchange.investment.record.InvestmentPositionPojo;
 import com.finacial.wealth.api.fxpeer.exchange.investment.repo.InvestmentOrderRepository;
 import com.finacial.wealth.api.fxpeer.exchange.investment.repo.InvestmentPositionHistoryRepository;
 import com.finacial.wealth.api.fxpeer.exchange.investment.repo.InvestmentPositionRepository;
@@ -34,6 +35,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
@@ -160,6 +162,100 @@ public class InvestmentValuationScheduler {
 
             historyRepo.save(hist);
         }
+    }
+
+    @Transactional(readOnly = true)
+    public ResponseEntity<ApiResponseModel> getInvestmentPositions(String auth) {
+        ApiResponseModel responseModel = new ApiResponseModel();
+        int statusCode = 500;
+        String statusMessage = "Something went wrong!";
+
+        try {
+            statusCode = 400;
+
+            if (auth == null || auth.trim().isEmpty()) {
+                responseModel.setStatusCode(statusCode);
+                responseModel.setDescription("Missing Authorization header");
+                responseModel.setData(Collections.emptyList());
+                return ResponseEntity.ok(responseModel);
+            }
+
+            final String email = utilService.getClaimFromJwt(auth, "emailAddress");
+            if (email == null || email.trim().isEmpty()) {
+                responseModel.setStatusCode(statusCode);
+                responseModel.setDescription("Invalid token: emailAddress claim missing");
+                responseModel.setData(Collections.emptyList());
+                return ResponseEntity.ok(responseModel);
+            }
+
+            List<InvestmentPosition> positions = positionRepo.findPositionsByEmailAddress(email);
+
+            List<InvestmentPositionPojo> items = positions.stream()
+                    .map(position -> {
+                        InvestmentPositionPojo pojo = toInvestmentPositionPojo(position, email);
+                        pojo.setId(position.getId()); // use DB id
+                        return pojo;
+                    })
+                    .collect(Collectors.toList());
+
+            responseModel.setData(items);
+            responseModel.setStatusCode(200);
+            responseModel.setDescription(
+                    items.isEmpty()
+                    ? "No investment positions found for this customer."
+                    : "Investment positions fetched successfully."
+            );
+
+        } catch (Exception ex) {
+            ex.printStackTrace();
+            responseModel.setStatusCode(statusCode);
+            responseModel.setDescription(statusMessage);
+            responseModel.setData(Collections.emptyList());
+        }
+
+        return ResponseEntity.ok(responseModel);
+    }
+
+    private InvestmentPositionPojo toInvestmentPositionPojo(InvestmentPosition position, String email) {
+        InvestmentPositionPojo pojo = new InvestmentPositionPojo();
+
+        pojo.setEmailAddress(email);
+        pojo.setWalletId(position.getWalletId());
+        pojo.setInvestmentId(position.getOrderRef());
+        pojo.setProductName(position.getProductName());
+
+        if (position.getProduct() != null) {
+            pojo.setProductId(position.getProduct().getId());
+            if (pojo.getProductName() == null || pojo.getProductName().trim().isEmpty()) {
+                pojo.setProductName(position.getProduct().getName());
+            }
+        }
+
+        pojo.setUnits(position.getUnits());
+        pojo.setInvestedAmount(position.getInvestedAmount());
+        pojo.setMarketValue(position.getCurrentValue());
+        pojo.setAccruedInterest(position.getAccruedInterest());
+        pojo.setTotalAccruedInterest(position.getTotalAccruedInterest());
+        pojo.setReservedLiquidationAmount(position.getReservedLiquidationAmount());
+
+        pojo.setStatus(position.getStatus() != null ? position.getStatus().name() : null);
+
+        pojo.setCreatedAt(position.getCreatedAt());
+        pojo.setUpdatedAt(position.getUpdatedAt());
+        pojo.setSettlementAt(position.getSettlementAt());
+        pojo.setMaturityAt(position.getMaturityAt());
+
+        pojo.setInterestStartDate(position.getInterestStartDate());
+        pojo.setInterestCapitalization(
+                position.getInterestCapitalization() != null
+                ? position.getInterestCapitalization().name()
+                : null
+        );
+        pojo.setCurrency(position.getProduct().getCurrency());
+        pojo.setPrice(position.getProduct().getUnitPrice());
+        pojo.setMinimumAmount(position.getProduct().getMinimumInvestmentAmount());
+
+        return pojo;
     }
 
     private LocalDate getQuarterEnd(LocalDate date) {

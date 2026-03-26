@@ -446,7 +446,6 @@ public class CreateQuoteClient {
                 responseModel.setStatusCode(statusCode);
                 return responseModel;
             }*/
-
             CreateQuoteResLog logToUpdate
                     = createQuoteResLogRepo.findByQuoteIdUpdate(rq.getQuoteId());
 
@@ -798,21 +797,57 @@ public class CreateQuoteClient {
             cQuote.setOriginReference(String.valueOf(GlobalMethods.generateTransactionId()));
             cQuote.setOnBehalfOf(String.valueOf(GlobalMethods.generateTransactionId()));
 
-            String bodyJson = mapper.writeValueAsString(cQuote);
+            //String bodyJson = mapper.writeValueAsString(cQuote);
+            String fixedTimestamp = "2026-03-16T10:24:38.586Z";
+            String bodyJson = "{\"narration\":\"\",\"tz\":\"America/Toronto\",\"source_currency\":\"CAD\",\"target_currency\":\"CAD\",\"source_amount\":\"1000.00\",\"destination_amount\":\"1000.00\",\"fee_config_id\":\"1\",\"expected_source_interac_email\":\"oshin.olufemi@gmail.com\",\"quote_type\":\"DEPOSIT\",\"origin_reference\":\"177365563458151166\",\"on_behalf_of\":\"177365563458123674\"}";
+
             System.out.println("createQuote req ::::: " + bodyJson);
 
-            Map<String, String> sig = HmacSigner.makeSignature(hmacSecret, bodyJson);
-
+            //Map<String, String> sig = HmacSigner.makeSignature(hmacSecret, bodyJson);
             String endpoint = url + "/client/quotes";
             System.out.println("createQuote url ::::: " + endpoint);
 
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
             headers.setAccept(Collections.singletonList(MediaType.APPLICATION_JSON));
-            headers.add("X-API-Key", apiKey);
-            headers.add("timestamp", sig.get("timestamp"));
-            headers.add("signature", sig.get("signature"));
+            //headers.add("X-API-Key", apiKey);
+            // headers.add("timestamp", sig.get("timestamp"));
+            //headers.add("signature", sig.get("signature"));
 
+            /*headers.add("X-API-Key", apiKey); // likely your email
+            // headers.add("X-Timestamp", sig.get("timestamp"));
+            headers.add("X-Timestamp", fixedTimestamp);
+            headers.add("X-Signature", sig.get("signature"));*/
+            Map<String, String> sig = HmacSigner.makeSignature(hmacSecret, bodyJson, fixedTimestamp);
+
+            headers.add("X-API-Key", apiKey);
+            headers.add("X-Timestamp", sig.get("timestamp"));
+            headers.add("X-Signature", sig.get("signature"));
+
+            System.out.println("BODY ::::: " + bodyJson);
+            System.out.println("X-API-Key ::::: " + apiKey);
+            System.out.println("X-Timestamp ::::: " + sig.get("timestamp"));
+            System.out.println("X-Signature ::::: " + sig.get("signature"));
+
+            //String expectedPortalSig = "badf1ee77713dae89534ec6001161b583f20c597cd80537d905e5fc83bbf9869";
+            //System.out.println("MATCH ::: " + expectedPortalSig.equals(sig.get("signature")));
+
+            String actual = HmacSigner.makeSignatureOnly(hmacSecret, bodyJson, fixedTimestamp);
+
+            HmacSigner.testSignatureVariants(
+                    hmacSecret,
+                    apiKey,
+                    bodyJson,
+                    "2026-03-16T10:24:38.586Z",
+                    "badf1ee77713dae89534ec6001161b583f20c597cd80537d905e5fc83bbf9869"
+            );
+
+            System.out.println("BODY ::::: " + bodyJson);
+            System.out.println("X-API-Key ::::: " + apiKey);
+            System.out.println("X-Timestamp ::::: " + fixedTimestamp);
+            System.out.println("X-Signature ::::: " + actual);
+           // System.out.println("MATCH ::: " + expectedPortalSig.equals(actual));
+            System.out.println("ACTUAL ::: " + actual);
             // if not sending to third party, return mock/pending response (existing behavior)
             if (!"1".equals(sendToThirdParty)) {
 
@@ -1046,7 +1081,7 @@ public class CreateQuoteClient {
             }
 
             // validate pin
-           /* String encryptedPin
+            /* String encryptedPin
                     = uttilityMethods.encyrpt(String.valueOf(rq.getPin()), encryptionKey);
 
             String storedPin = senderWalletdetails.get(0).getPersonId();
@@ -1063,7 +1098,6 @@ public class CreateQuoteClient {
 
                 return responseModel;
             }*/
-
             // get updateable log
             CreateQuoteResLog getDeeUp
                     = createQuoteResLogRepo.findByQuoteIdUpdate(rq.getQuoteId());

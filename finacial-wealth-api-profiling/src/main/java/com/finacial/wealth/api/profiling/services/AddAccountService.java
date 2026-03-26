@@ -192,6 +192,8 @@ public class AddAccountService {
             statusCode = 400;
             DecodedJWTToken getDecoded = DecodedJWTToken.getDecoded(auth);
             String emailAddress = getDecoded.emailAddress;
+            rq.setCountryCode("NG");
+            rq.setCountry("Nigeria");
 
             BvnLookup getBvnDe = repo.findByBvn(rq.getBvn()).orElse(null);
 

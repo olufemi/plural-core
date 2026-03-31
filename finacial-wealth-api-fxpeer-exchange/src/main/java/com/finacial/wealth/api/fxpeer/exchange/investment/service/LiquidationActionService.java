@@ -13,7 +13,9 @@ import com.finacial.wealth.api.fxpeer.exchange.model.BaseResponse;
 import com.finacial.wealth.api.fxpeer.exchange.util.UttilityMethods;
 import jakarta.transaction.Transactional;
 import java.time.Instant;
+import java.util.Arrays;
 import java.util.Collections;
+import java.util.List;
 import org.springframework.stereotype.Service;
 
 /**
@@ -37,6 +39,62 @@ public class LiquidationActionService {
         this.utilService = utilService;
         this.activityService = activityService;
         this.investmentService = investmentService;
+    }
+    
+
+
+    @Transactional
+    public void processPendingLiquidationsBatch() {
+
+        List<InvestmentOrderStatus> statuses = Arrays.asList(
+                InvestmentOrderStatus.LIQUIDATION_PENDING_APPROVAL,
+                InvestmentOrderStatus.LIQUIDATION_PROCESSING
+        );
+
+        List<InvestmentOrder> orders = orderRepo.findByTypeAndStatusIn(
+                InvestmentOrderType.LIQUIDATION,
+                statuses
+        );
+
+        if (orders == null || orders.isEmpty()) {
+            return;
+        }
+
+        for (InvestmentOrder order : orders) {
+
+            try {
+                // Lock each order (important for concurrency)
+                InvestmentOrder lockedOrder = orderRepo.lockByOrderRef(order.getOrderRef()).orElse(null);
+                if (lockedOrder == null) {
+                    continue;
+                }
+
+                // Idempotency check
+                if (lockedOrder.getStatus() == InvestmentOrderStatus.SETTLED) {
+                    continue;
+                }
+
+                // Only process allowed states
+                if (lockedOrder.getStatus() != InvestmentOrderStatus.LIQUIDATION_PENDING_APPROVAL
+                        && lockedOrder.getStatus() != InvestmentOrderStatus.LIQUIDATION_PROCESSING) {
+                    continue;
+                }
+
+                // Move to PROCESSING (if coming from PENDING_APPROVAL)
+                lockedOrder.setStatus(InvestmentOrderStatus.LIQUIDATION_PROCESSING);
+                lockedOrder.setUpdatedAt(Instant.now());
+                orderRepo.save(lockedOrder);
+
+                // 🔥 Actual settlement
+                investmentService.onLiquidationSettledInternal(lockedOrder);
+
+            } catch (Exception ex) {
+                // DO NOT fail whole batch
+               // log.error("Failed processing liquidation orderRef={}", order.getOrderRef(), ex);
+
+                // leave in PROCESSING for retry
+            }
+        }
     }
 
     @Transactional

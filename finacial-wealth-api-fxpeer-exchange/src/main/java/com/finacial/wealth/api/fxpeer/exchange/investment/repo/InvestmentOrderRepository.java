@@ -179,4 +179,9 @@ public interface InvestmentOrderRepository extends JpaRepository<InvestmentOrder
             @Param("parentOrderRef") String parentOrderRef,
             Pageable pageable
     );
+
+    List<InvestmentOrder> findByTypeAndStatusIn(
+            InvestmentOrderType type,
+            List<InvestmentOrderStatus> statuses
+    );
 }

@@ -295,7 +295,7 @@ public class WebhookKeyService {
                // finWealthPaymentTransactionRepo.save(kTrans2b);
 
                 PushNotificationFireBase puFireSender = new PushNotificationFireBase();
-                puFireSender.setBody(pushNotifyDebitWalletForWalletTransfer(new BigDecimal(rqq.getAmount()),
+                puFireSender.setBody(pushNotifyDebitWalletForWalletTransferDollar(new BigDecimal(rqq.getAmount()),
                         "", "" + " " + ""
                 ));
                 List<DeviceDetails> getDepuFireSender = deviceDetailsRepo.findAllByWalletId(regWalletInfo.get(0).getWalletId());
@@ -539,7 +539,7 @@ public class WebhookKeyService {
                 transactionHistoryClientLocalT.publishFromTxn(kTrans2b);
 
                 PushNotificationFireBase puFireSender = new PushNotificationFireBase();
-                puFireSender.setBody(pushNotifyCreditWalletForWalletTransfer(new BigDecimal(amount),
+                puFireSender.setBody(pushNotifyCreditWalletForWalletTransferDollar(new BigDecimal(amount),
                         "", "" + " " + ""
                 ));
                 List<DeviceDetails> getDepuFireSender = deviceDetailsRepo.findAllByWalletId(regWalletInfo.get(0).getWalletId());
@@ -600,6 +600,20 @@ public class WebhookKeyService {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Invalid JSON");
         }
 
+    }
+    
+     public static String pushNotifyCreditWalletForWalletTransferDollar(BigDecimal amount, String recName, String senderName) {
+        String sMSMessage = "Dear " + "Customer" + ", "
+                + " your Wallet has been credited with " + "CAD" + amount + ", "
+                + " Thanks for using Plural.";
+        return sMSMessage;
+    }
+
+    public static String pushNotifyDebitWalletForWalletTransferDollar(BigDecimal amount, String recName, String senderName) {
+        String sMSMessage = "Dear " + "Customer" + ", "
+                + " your Wallet has been debited with " + "CAD" + amount + ", "
+                + " Thanks for using Plural.";
+        return sMSMessage;
     }
 
     public static String pushNotifyCreditWalletForWalletTransfer(BigDecimal amount, String recName, String senderName) {

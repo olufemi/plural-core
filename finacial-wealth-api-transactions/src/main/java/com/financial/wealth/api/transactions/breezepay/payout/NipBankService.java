@@ -1687,7 +1687,7 @@ public class NipBankService {
             List<RegWalletInfo> senderWalletdetails = regWalletInfoRepository.findByPhoneNumberData(getDecoded.phoneNumber);
             if (!senderWalletdetails.get(0).isActivation()) {
 
-                PaymentsFailedTransInfo procFailedTrans = new PaymentsFailedTransInfo(
+                /*PaymentsFailedTransInfo procFailedTrans = new PaymentsFailedTransInfo(
                         "Wallet-Bank-Transfer", "Wallet to Bank transfer, Customer has not created PIN!",
                         String.valueOf(GlobalMethods.generateTransactionId()), "", channel,
                         "Payment-Service"
@@ -1697,7 +1697,7 @@ public class NipBankService {
                 responseModel.setStatusCode(statusCode);
 
                 localTransFailedTransInfoRepo.save(procFailedTrans);
-                return responseModel;
+                return responseModel;*/
             }
             //validate pin (is pin valid?)
 

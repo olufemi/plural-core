@@ -189,7 +189,7 @@ public class GroupSavingsService {
                 return responseModel;
             }
 
-            List<RegWalletInfo> senderWalletdetails = regWalletInfoRepository.findByPhoneNumberData(getDecoded.phoneNumber);
+            /*List<RegWalletInfo> senderWalletdetails = regWalletInfoRepository.findByPhoneNumberData(getDecoded.phoneNumber);
             if (!senderWalletdetails.get(0).isActivation()) {
 
                 SettlementFailureLog conWall = new SettlementFailureLog("", "",
@@ -199,7 +199,7 @@ public class GroupSavingsService {
                 responseModel.setDescription("Customer has not created PIN!");
                 responseModel.setStatusCode(statusCode);
                 return responseModel;
-            }
+            }*/
 
             /*String encyrptedPin = utilMeth.encyrpt(String.valueOf(rq.getPin()), encryptionKey);
             String pin = senderWalletdetails.get(0).getPersonId();
@@ -406,7 +406,7 @@ public class GroupSavingsService {
             int number = rq.getSelectedSlot();
 
             List<RegWalletInfo> wallDe = regWalletInfoRepository.findByPhoneNumberData(getDecoded.phoneNumber);
-            if (!wallDe.get(0).isActivation()) {
+            /*if (!wallDe.get(0).isActivation()) {
 
                 SettlementFailureLog conWall = new SettlementFailureLog("", "",
                         "Customer has not created PIN!");
@@ -416,7 +416,7 @@ public class GroupSavingsService {
                 responseModel.setStatusCode(60);
 
                 return responseModel;
-            }
+            }*/
 
             String transactionId = "#" + String.valueOf(GlobalMethods.generateTransactionId());
 
@@ -742,7 +742,7 @@ public class GroupSavingsService {
             int number = rq.getSelectedSlot();
 
             List<RegWalletInfo> wallDe = regWalletInfoRepository.findByPhoneNumberData(getDecoded.phoneNumber);
-            if (!wallDe.get(0).isActivation()) {
+            /*if (!wallDe.get(0).isActivation()) {
 
                 SettlementFailureLog conWall = new SettlementFailureLog("", "",
                         "Customer has not created PIN!");
@@ -752,7 +752,7 @@ public class GroupSavingsService {
                 responseModel.setStatusCode(60);
 
                 return responseModel;
-            }
+            }*/
 
             String transactionId = "#" + String.valueOf(GlobalMethods.generateTransactionId());
 
@@ -1152,7 +1152,7 @@ public class GroupSavingsService {
             }
 
             List<RegWalletInfo> getWallDe = regWalletInfoRepository.findByPhoneNumberData(getDecoded.phoneNumber);
-            if (!getWallDe.get(0).isActivation()) {
+            /*if (!getWallDe.get(0).isActivation()) {
 
                 SettlementFailureLog conWall = new SettlementFailureLog("", "",
                         "Customer has not created PIN!");
@@ -1161,7 +1161,7 @@ public class GroupSavingsService {
                 responseModel.setDescription("Customer has not created PIN!");
                 responseModel.setStatusCode(statusCode);
                 return responseModel;
-            }
+            }*/
 
             /*String encyrptedPin = utilMeth.encyrpt(String.valueOf(rq.getPin()), encryptionKey);
             String pin = getWallDe.get(0).getPersonId();
@@ -1387,7 +1387,7 @@ public class GroupSavingsService {
             }
 
             List<RegWalletInfo> getWallDe = regWalletInfoRepository.findByPhoneNumberData(getDecoded.phoneNumber);
-            if (!getWallDe.get(0).isActivation()) {
+            /*if (!getWallDe.get(0).isActivation()) {
 
                 SettlementFailureLog conWall = new SettlementFailureLog("", "",
                         "Customer has not created PIN!");
@@ -1396,7 +1396,7 @@ public class GroupSavingsService {
                 responseModel.setDescription("Customer has not created PIN!");
                 responseModel.setStatusCode(statusCode);
                 return responseModel;
-            }
+            }*/
 
             /*String encyrptedPin = utilMeth.encyrpt(String.valueOf(rq.getPin()), encryptionKey);
             String pin = getWallDe.get(0).getPersonId();
@@ -2779,7 +2779,7 @@ public class GroupSavingsService {
             }
 
             List<RegWalletInfo> getWallDe = regWalletInfoRepository.findByPhoneNumberData(getDecoded.phoneNumber);
-            if (!getWallDe.get(0).isActivation()) {
+            /*if (!getWallDe.get(0).isActivation()) {
 
                 SettlementFailureLog conWall = new SettlementFailureLog("", "",
                         "Customer has not created PIN!");
@@ -2788,7 +2788,7 @@ public class GroupSavingsService {
                 responseModel.setDescription("Customer has not created PIN!");
                 responseModel.setStatusCode(statusCode);
                 return responseModel;
-            }
+            }*/
 
             /*String encyrptedPin = utilMeth.encyrpt(String.valueOf(rq.getPin()), encryptionKey);
             String pin = getWallDe.get(0).getPersonId();
@@ -2967,7 +2967,7 @@ public class GroupSavingsService {
             }
 
             List<RegWalletInfo> getWallDe = regWalletInfoRepository.findByPhoneNumberData(getDecoded.phoneNumber);
-            if (!getWallDe.get(0).isActivation()) {
+            /*if (!getWallDe.get(0).isActivation()) {
 
                 SettlementFailureLog conWall = new SettlementFailureLog("", "",
                         "Customer has not created PIN!");
@@ -2976,7 +2976,7 @@ public class GroupSavingsService {
                 responseModel.setDescription("Customer has not created PIN!");
                 responseModel.setStatusCode(statusCode);
                 return responseModel;
-            }
+            }*/
 
             /*String encyrptedPin = utilMeth.encyrpt(String.valueOf(rq.getPin()), encryptionKey);
             String pin = getWallDe.get(0).getPersonId();
@@ -3133,7 +3133,7 @@ public class GroupSavingsService {
             }
 
             List<RegWalletInfo> getWallDe = regWalletInfoRepository.findByPhoneNumberData(getDecoded.phoneNumber);
-            if (!getWallDe.get(0).isActivation()) {
+            /*if (!getWallDe.get(0).isActivation()) {
 
                 SettlementFailureLog conWall = new SettlementFailureLog("", "",
                         "Customer has not created PIN!");
@@ -3142,7 +3142,7 @@ public class GroupSavingsService {
                 responseModel.setDescription("Customer has not created PIN!");
                 responseModel.setStatusCode(statusCode);
                 return responseModel;
-            }
+            }*/
 
             /*String encyrptedPin = utilMeth.encyrpt(String.valueOf(rq.getPin()), encryptionKey);
             String pin = getWallDe.get(0).getPersonId();
@@ -3596,7 +3596,7 @@ public class GroupSavingsService {
 
             if (rq.isAcceptOrDecline() == true) {
                 List<RegWalletInfo> getWallDe = regWalletInfoRepository.findByPhoneNumberData(getDecoded.phoneNumber);
-                if (!getWallDe.get(0).isActivation()) {
+                /*if (!getWallDe.get(0).isActivation()) {
 
                     SettlementFailureLog conWall = new SettlementFailureLog("", "",
                             "Customer has not created PIN!");
@@ -3605,7 +3605,7 @@ public class GroupSavingsService {
                     responseModel.setDescription("Customer has not created PIN!");
                     responseModel.setStatusCode(statusCode);
                     return responseModel;
-                }
+                }*/
 
                 /*String encyrptedPin = utilMeth.encyrpt(String.valueOf(rq.getPin()), encryptionKey);
                 String pin = getWallDe.get(0).getPersonId();
@@ -4741,7 +4741,7 @@ public class GroupSavingsService {
             DecodedJWTToken getDecoded = DecodedJWTToken.getDecoded(auth);
 
             List<RegWalletInfo> senderWalletdetails = regWalletInfoRepository.findByPhoneNumberData(getDecoded.phoneNumber);
-            if (!senderWalletdetails.get(0).isActivation()) {
+            /*if (!senderWalletdetails.get(0).isActivation()) {
 
                 SettlementFailureLog conWall = new SettlementFailureLog("", "",
                         "Customer has not created PIN!");
@@ -4751,7 +4751,7 @@ public class GroupSavingsService {
                 responseModel.setStatusCode(60);
 
                 return responseModel;
-            }
+            }*/
 
             responseModel.setDescription("Customer has activated PIN.");
             responseModel.setStatusCode(200);

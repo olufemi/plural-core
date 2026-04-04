@@ -1025,7 +1025,7 @@ public class LocalTransferService {
             if (rq.getTransactionType().equals("debitwalletbillspayment")) {
                 rq.setTransactionType("localtransfer");
             }
-            if (!senderWalletdetails.get(0).isActivation()) {
+            /*if (!senderWalletdetails.get(0).isActivation()) {
                 
                 LocalTransFailedTransInfo procFailedTrans = new LocalTransFailedTransInfo(
                         "Wallet-Wallet-Transfer", "Wallet to Wallet transfer, Customer has not created PIN!",
@@ -1038,7 +1038,7 @@ public class LocalTransferService {
                 
                 localTransFailedTransInfoRepo.save(procFailedTrans);
                 return responseModel;
-            }
+            }*/
             //validate pin (is pin valid?)
 
             /*String encyrptedPin = utilMeth.encyrpt(String.valueOf(rq.getPin()), encryptionKey);

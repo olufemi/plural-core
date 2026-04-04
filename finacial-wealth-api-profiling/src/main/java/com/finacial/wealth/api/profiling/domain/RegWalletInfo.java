@@ -85,6 +85,7 @@ public class RegWalletInfo extends AbstractAuditingEntity implements Serializabl
     private String accountName;
     private String walletId;
     private String accountNumber;
+    private String isUserBlocked;
 
     @Column(insertable = true, updatable = false)
     private LocalDateTime created;

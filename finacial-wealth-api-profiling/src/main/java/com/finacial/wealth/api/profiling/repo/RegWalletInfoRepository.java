@@ -6,6 +6,8 @@
 package com.finacial.wealth.api.profiling.repo;
 
 import com.finacial.wealth.api.profiling.domain.RegWalletInfo;
+import com.google.api.gax.paging.Page;
+import java.awt.print.Pageable;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.Query;
@@ -57,5 +59,25 @@ public interface RegWalletInfoRepository extends
     RegWalletInfo findByPhoneNumberId(String phoneNumber);
 
     Optional<RegWalletInfo> findByPhoneNumber(String phoneNumber);
+
+    Optional<RegWalletInfo> findByCustomerId(String customerId);
+
+    Optional<RegWalletInfo> findByUuid(String uuid);
+
+    Optional<RegWalletInfo> findByAccountNumber(String accountNumber);
+
+    Page<RegWalletInfo> findByEmailContainingIgnoreCaseOrPhoneNumberContainingIgnoreCaseOrFirstNameContainingIgnoreCaseOrLastNameContainingIgnoreCaseOrCustomerIdContainingIgnoreCaseOrAccountNumberContainingIgnoreCase(
+            String email,
+            String phoneNumber,
+            String firstName,
+            String lastName,
+            String customerId,
+            String accountNumber,
+            Pageable pageable
+    );
+
+    Page<RegWalletInfo> findByIsUserBlocked(String isUserBlocked, Pageable pageable);
+    
+    
 
 }

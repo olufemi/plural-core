@@ -8,8 +8,8 @@ package com.finacial.wealth.backoffice.config;
  *
  * @author olufemioshin
  */
-import io.swagger.v3.oas.models.OpenAPI;
 import io.swagger.v3.oas.models.Components;
+import io.swagger.v3.oas.models.OpenAPI;
 import io.swagger.v3.oas.models.info.Info;
 import io.swagger.v3.oas.models.security.SecurityRequirement;
 import io.swagger.v3.oas.models.security.SecurityScheme;
@@ -28,7 +28,12 @@ public class OpenApiConfig {
         final String schemeName = "bearerAuth";
 
         return new OpenAPI()
-                .info(new Info().title("Backoffice API").version("v1"))
+                .info(new Info()
+                        .title("Backoffice API")
+                        .version("v1")
+                        .description("Operational APIs for investments, customer support, approvals, and role-based administration. "
+                                + "JWT bearer authentication is required, and many endpoints also require fine-grained permission codes such as "
+                                + "`approval.inbox.view` or `investment.liquidation.approve`."))
                 .addServersItem(new io.swagger.v3.oas.models.servers.Server()
                         .url(OPEN_API_FORCE_URL)
                         .description("Public HTTPS"))

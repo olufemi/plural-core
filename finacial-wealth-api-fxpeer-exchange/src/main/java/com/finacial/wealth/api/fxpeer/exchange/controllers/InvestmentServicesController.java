@@ -31,7 +31,6 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import java.io.IOException;
 import java.time.LocalDate;
-import java.util.Map;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 
@@ -114,12 +113,12 @@ public class InvestmentServicesController {
     }
 
     @PostMapping("/create-product")
-    public Map<String, Object> create(@RequestBody InvestmentProductUpsertRequest req) {
+    public ApiResponseModel create(@RequestBody InvestmentProductUpsertRequest req) {
         return productService.create(req);
     }
 
     @PutMapping("/update-product/{productCode}")
-    public Map<String, Object> update(
+    public ApiResponseModel update(
             @PathVariable String productCode,
             @RequestBody InvestmentProductUpsertRequest req
     ) {
@@ -137,6 +136,74 @@ public class InvestmentServicesController {
     public ResponseEntity<ApiResponseModel> getAllLiquidationProcessing( //  @RequestHeader("Authorization") String auth
             ) {
         return queryService.getOrdersByStatusForCustomer(InvestmentOrderStatus.LIQUIDATION_PROCESSING);
+    }
+
+    @GetMapping("/admin/liquidations")
+    public ResponseEntity<ApiResponseModel> getAdminLiquidations(
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String productCode,
+            @RequestParam(required = false) LocalDate fromDate,
+            @RequestParam(required = false) LocalDate toDate,
+            @RequestParam(defaultValue = "0") Integer page,
+            @RequestParam(defaultValue = "20") Integer size
+    ) {
+        return queryService.getAdminLiquidations(status, productCode, fromDate, toDate, page, size, false);
+    }
+
+    @GetMapping("/admin/liquidations/history")
+    public ResponseEntity<ApiResponseModel> getAdminLiquidationHistory(
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String productCode,
+            @RequestParam(required = false) LocalDate fromDate,
+            @RequestParam(required = false) LocalDate toDate,
+            @RequestParam(defaultValue = "0") Integer page,
+            @RequestParam(defaultValue = "20") Integer size
+    ) {
+        return queryService.getAdminLiquidations(status, productCode, fromDate, toDate, page, size, true);
+    }
+
+    @GetMapping("/admin/orders")
+    public ResponseEntity<ApiResponseModel> getAdminOrders(
+            @RequestParam(required = false) String type,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String productCode,
+            @RequestParam(required = false) String cutoffBucket,
+            @RequestParam(required = false) LocalDate fromDate,
+            @RequestParam(required = false) LocalDate toDate,
+            @RequestParam(defaultValue = "0") Integer page,
+            @RequestParam(defaultValue = "20") Integer size
+    ) {
+        return queryService.getAdminOrders(type, status, productCode, cutoffBucket, fromDate, toDate, page, size);
+    }
+
+    @GetMapping("/admin/customers/orders")
+    public ResponseEntity<ApiResponseModel> getAdminCustomerOrders(
+            @RequestParam String email,
+            @RequestParam(required = false) String type,
+            @RequestParam(required = false) String status,
+            @RequestParam(defaultValue = "0") Integer page,
+            @RequestParam(defaultValue = "20") Integer size
+    ) {
+        return queryService.getAdminCustomerOrders(email, type, status, page, size);
+    }
+
+    @GetMapping("/admin/customers/liquidations")
+    public ResponseEntity<ApiResponseModel> getAdminCustomerLiquidations(
+            @RequestParam String email,
+            @RequestParam(required = false) String status,
+            @RequestParam(defaultValue = "0") Integer page,
+            @RequestParam(defaultValue = "20") Integer size
+    ) {
+        return queryService.getAdminCustomerLiquidations(email, status, page, size);
+    }
+
+    @GetMapping("/admin/customers/positions")
+    public ResponseEntity<ApiResponseModel> getAdminCustomerPositions(
+            @RequestParam String email,
+            @RequestParam(defaultValue = "0") Integer page,
+            @RequestParam(defaultValue = "20") Integer size
+    ) {
+        return queryService.getAdminCustomerPositions(email, page, size);
     }
 
     @PostMapping("/orders/liquidation/approve")

@@ -8,6 +8,9 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
 import org.springframework.http.MediaType;
+import org.springframework.format.annotation.DateTimeFormat;
+
+import java.time.LocalDate;
 
 @FeignClient(name = "fxpeer-exchange-service", configuration = com.finacial.wealth.backoffice.config.FeignConfig.class)
 public interface FxPeerExchangeClient {
@@ -30,8 +33,64 @@ public interface FxPeerExchangeClient {
     @GetMapping("/investments/orders/all-liquidation-settled")
     Map<String, Object> allLiquidationSettled(@RequestBody Map<String, Object> request);
 
-    @GetMapping("/investments/orders/processing")
+    @GetMapping("/investments/orders/all-liquidation-processing")
     Map<String, Object> allLiquidationProcessing(@RequestBody Map<String, Object> request);
+
+    @GetMapping("/investments/admin/liquidations")
+    Map<String, Object> getAdminLiquidations(
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String productCode,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fromDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate toDate,
+            @RequestParam(defaultValue = "0") Integer page,
+            @RequestParam(defaultValue = "20") Integer size
+    );
+
+    @GetMapping("/investments/admin/liquidations/history")
+    Map<String, Object> getAdminLiquidationHistory(
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String productCode,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fromDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate toDate,
+            @RequestParam(defaultValue = "0") Integer page,
+            @RequestParam(defaultValue = "20") Integer size
+    );
+
+    @GetMapping("/investments/admin/orders")
+    Map<String, Object> getAdminOrders(
+            @RequestParam(required = false) String type,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String productCode,
+            @RequestParam(required = false) String cutoffBucket,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fromDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate toDate,
+            @RequestParam(defaultValue = "0") Integer page,
+            @RequestParam(defaultValue = "20") Integer size
+    );
+
+    @GetMapping("/investments/admin/customers/orders")
+    Map<String, Object> getCustomerOrders(
+            @RequestParam String email,
+            @RequestParam(required = false) String type,
+            @RequestParam(required = false) String status,
+            @RequestParam(defaultValue = "0") Integer page,
+            @RequestParam(defaultValue = "20") Integer size
+    );
+
+    @GetMapping("/investments/admin/customers/liquidations")
+    Map<String, Object> getCustomerLiquidations(
+            @RequestParam String email,
+            @RequestParam(required = false) String status,
+            @RequestParam(defaultValue = "0") Integer page,
+            @RequestParam(defaultValue = "20") Integer size
+    );
+
+    @GetMapping("/investments/admin/customers/positions")
+    Map<String, Object> getCustomerPositions(
+            @RequestParam String email,
+            @RequestParam(defaultValue = "0") Integer page,
+            @RequestParam(defaultValue = "20") Integer size
+    );
 
     @PostMapping(
             value = "/investments/orders/liquidation/approve",

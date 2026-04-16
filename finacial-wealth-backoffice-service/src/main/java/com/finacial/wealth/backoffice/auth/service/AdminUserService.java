@@ -41,12 +41,10 @@ public class AdminUserService {
     private final ObjectMapper objectMapper;
     private final BoAdminRoleRepository roleRepo;
     private final PasswordPolicy passwordPolicy;
+    private final AdminRolePermissionService adminRolePermissionService;
 
     public List<AdminRoleDto> listRoles() {
-        return roleRepo.findAllByOrderByNameAsc()
-                .stream()
-                .map(r -> new AdminRoleDto(r.getId(), r.getName()))
-                .toList();
+        return adminRolePermissionService.listRoles();
     }
 
     @Transactional

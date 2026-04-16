@@ -7,7 +7,10 @@ package com.finacial.wealth.api.fxpeer.exchange.investment.record;
 import com.finacial.wealth.api.fxpeer.exchange.investment.ennum.InterestAccrueType;
 import com.finacial.wealth.api.fxpeer.exchange.investment.ennum.InterestCapitalization;
 import com.finacial.wealth.api.fxpeer.exchange.investment.ennum.InvestmentType;
+import com.finacial.wealth.api.fxpeer.exchange.investment.ennum.LiquidationFeeAppliedTo;
+import com.finacial.wealth.api.fxpeer.exchange.investment.ennum.LiquidationFeeType;
 import com.finacial.wealth.api.fxpeer.exchange.investment.ennum.ScheduleMode;
+import com.finacial.wealth.api.fxpeer.exchange.investment.ennum.ValuationMethod;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import java.math.BigDecimal;
@@ -30,6 +33,11 @@ public class InvestmentProductUpsertRequest {
     private BigDecimal unitPrice;
     private BigDecimal yieldPa;
     private BigDecimal yieldYtd;
+    private ValuationMethod valuationMethod;
+    private LiquidationFeeAppliedTo liquidationFeeAppliedTo;
+    private LiquidationFeeType liquidationFeeType;
+    private BigDecimal liquidationFeeRate;
+    private BigDecimal minLiquidationFee;
     private Integer tenorDays;
     private Boolean active;
 
@@ -53,4 +61,3 @@ public class InvestmentProductUpsertRequest {
 
     @NotNull private LocalTime subscriptionCutOffTime;
 }
-

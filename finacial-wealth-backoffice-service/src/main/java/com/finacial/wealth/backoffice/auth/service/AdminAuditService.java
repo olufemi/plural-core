@@ -37,12 +37,22 @@ public class AdminAuditService {
             String ip,
             String ua,
             Map<String, Object> meta) {
+        audit(action, actorId, "BoAdminUser", targetId, ip, ua, meta);
+    }
 
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void audit(String action,
+            Long actorId,
+            String targetType,
+            Long targetId,
+            String ip,
+            String ua,
+            Map<String, Object> meta) {
         try {
             log(AdminAuditLog.builder()
                     .actorAdminId(actorId)
                     .action(action)
-                    .targetType("BoAdminUser")
+                    .targetType(targetType)
                     .targetId(targetId)
                     .ip(ip)
                     .userAgent(ua)

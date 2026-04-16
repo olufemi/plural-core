@@ -184,4 +184,70 @@ public interface InvestmentOrderRepository extends JpaRepository<InvestmentOrder
             InvestmentOrderType type,
             List<InvestmentOrderStatus> statuses
     );
+
+    @Query("""
+       SELECT o
+       FROM InvestmentOrder o
+       JOIN o.product p
+       WHERE o.type = com.finacial.wealth.api.fxpeer.exchange.investment.ennum.InvestmentOrderType.LIQUIDATION
+         AND o.status IN :statuses
+         AND (:productCode IS NULL OR p.productCode = :productCode)
+         AND (:fromDate IS NULL OR o.createdAt >= :fromDate)
+         AND (:toDate IS NULL OR o.createdAt < :toDate)
+       ORDER BY o.createdAt DESC
+       """)
+    List<InvestmentOrder> findAdminLiquidations(
+            @Param("statuses") List<InvestmentOrderStatus> statuses,
+            @Param("productCode") String productCode,
+            @Param("fromDate") Instant fromDate,
+            @Param("toDate") Instant toDate
+    );
+
+    @Query("""
+       SELECT o
+       FROM InvestmentOrder o
+       JOIN o.product p
+       WHERE o.type IN :types
+         AND o.status IN :statuses
+         AND (:productCode IS NULL OR p.productCode = :productCode)
+         AND (:fromDate IS NULL OR o.createdAt >= :fromDate)
+         AND (:toDate IS NULL OR o.createdAt < :toDate)
+       ORDER BY o.createdAt DESC
+       """)
+    List<InvestmentOrder> findAdminOrders(
+            @Param("types") List<InvestmentOrderType> types,
+            @Param("statuses") List<InvestmentOrderStatus> statuses,
+            @Param("productCode") String productCode,
+            @Param("fromDate") Instant fromDate,
+            @Param("toDate") Instant toDate
+    );
+
+    @Query("""
+       SELECT o
+       FROM InvestmentOrder o
+       JOIN o.product p
+       WHERE o.emailAddress = :email
+         AND o.type = com.finacial.wealth.api.fxpeer.exchange.investment.ennum.InvestmentOrderType.LIQUIDATION
+         AND o.status IN :statuses
+       ORDER BY o.createdAt DESC
+       """)
+    List<InvestmentOrder> findAdminCustomerLiquidations(
+            @Param("email") String email,
+            @Param("statuses") List<InvestmentOrderStatus> statuses
+    );
+
+    @Query("""
+       SELECT o
+       FROM InvestmentOrder o
+       JOIN o.product p
+       WHERE o.emailAddress = :email
+         AND o.type IN :types
+         AND o.status IN :statuses
+       ORDER BY o.createdAt DESC
+       """)
+    List<InvestmentOrder> findAdminCustomerOrders(
+            @Param("email") String email,
+            @Param("types") List<InvestmentOrderType> types,
+            @Param("statuses") List<InvestmentOrderStatus> statuses
+    );
 }

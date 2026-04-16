@@ -12,6 +12,7 @@ import com.finacial.wealth.api.fxpeer.exchange.inter.airtime.security.ProcessTrn
 import com.finacial.wealth.api.fxpeer.exchange.inter.airtime.security.ValidatePhoneNumber;
 import com.finacial.wealth.api.fxpeer.exchange.model.GetProducts;
 import com.finacial.wealth.api.fxpeer.exchange.model.GetProductsByCatId;
+import com.finacial.wealth.api.fxpeer.exchange.model.GetProductsByCountry;
 import com.finacial.wealth.api.fxpeer.exchange.model.ValidateAccount;
 import com.finacial.wealth.api.fxpeer.exchange.security.consent.ConsentVerificationCoordinator;
 import com.finacial.wealth.api.fxpeer.exchange.security.consent.harsher.IntUtilitiesFulfilmentPayloadHasher;
@@ -89,6 +90,18 @@ public class FxOtherServicesController {
         return procSochitelServices.getProdoctsByCategory(rq, auth);
     }
 
+    @PostMapping(
+            path = "/int-utilities-get-products-by-country",
+            consumes = MediaType.APPLICATION_JSON_VALUE,
+            produces = MediaType.APPLICATION_JSON_VALUE
+    )
+    public ResponseEntity<ApiResponseModel> getProductsByCountries(
+            @RequestHeader(name = "authorization", required = true) String auth,
+            @RequestBody @Valid GetProductsByCountry rq
+    ) {
+        return procSochitelServices.getProdoctsByCountry(rq, auth);
+    }
+
     /**
      * Simple probe to confirm you’re hitting THIS build & service. curl -s
      * http://127.0.0.1:7007/fxothers/__ping
@@ -134,29 +147,30 @@ public class FxOtherServicesController {
             HttpServletRequest http) throws IOException {
         if (allowCryptoGraphyForPin.equals("1")) {
 
-        String userId = uttilityMethods.getClaimFromJwt(auth, "emailAddress");
+            String userId = uttilityMethods.getClaimFromJwt(auth, "emailAddress");
 
-        BaseResponse consentRes = consentVerificationCoordinator.requireConsentUsingRawBody(
-                http,
-                "POST",
-                rq.getProcessId(), // reference for this transaction
-                userId,
-                // rq,
-                //intUtilitiesFulfilmentPayloadHasher
-                defaultRawConsentPayloadHasher
-        );
+            BaseResponse consentRes = consentVerificationCoordinator.requireConsentUsingRawBody(
+                    http,
+                    "POST",
+                    rq.getProcessId(), // reference for this transaction
+                    userId,
+                    // rq,
+                    //intUtilitiesFulfilmentPayloadHasher
+                    defaultRawConsentPayloadHasher
+            );
 
-        if (consentRes.getStatusCode() != 200) {
+            if (consentRes.getStatusCode() != 200) {
 
-            ApiResponseModel errorResponse = new ApiResponseModel();
-            errorResponse.setStatusCode(consentRes.getStatusCode());
-            errorResponse.setDescription(consentRes.getDescription());
-            errorResponse.setData(consentRes.getData());
+                ApiResponseModel errorResponse = new ApiResponseModel();
+                errorResponse.setStatusCode(consentRes.getStatusCode());
+                errorResponse.setDescription(consentRes.getDescription());
+                errorResponse.setData(consentRes.getData());
 
-            return ResponseEntity
-                    .status(consentRes.getStatusCode())
-                    .body(errorResponse);
-        }}
+                return ResponseEntity
+                        .status(consentRes.getStatusCode())
+                        .body(errorResponse);
+            }
+        }
 
         ApiResponseModel baseResponse = procSochitelServices.processTrnsaction(rq, auth);
 

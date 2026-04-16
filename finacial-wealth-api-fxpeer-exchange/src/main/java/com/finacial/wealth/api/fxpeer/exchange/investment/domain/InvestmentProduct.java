@@ -8,6 +8,7 @@ import com.finacial.wealth.api.fxpeer.exchange.investment.ennum.InterestAccrueTy
 import com.finacial.wealth.api.fxpeer.exchange.investment.ennum.InterestCapitalization;
 import com.finacial.wealth.api.fxpeer.exchange.investment.ennum.InvestmentType;
 import com.finacial.wealth.api.fxpeer.exchange.investment.ennum.ScheduleMode;
+import com.finacial.wealth.api.fxpeer.exchange.investment.ennum.ValuationMethod;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
@@ -59,6 +60,10 @@ public class InvestmentProduct {
 
     @Column(precision = 9, scale = 4)
     private BigDecimal yieldYtd;         // YTD yield
+
+    @Enumerated(EnumType.STRING)
+    @Column(length = 32)
+    private ValuationMethod valuationMethod;
 
     @Column
     private Integer tenorDays;           // optional
@@ -114,5 +119,7 @@ public class InvestmentProduct {
     @Column(name = "subscription_cutoff_time", nullable = false)
     private LocalTime subscriptionCutOffTime; // e.g. 16:30
 
-    // getters/setters/constructors
+    public ValuationMethod resolvedValuationMethod() {
+        return valuationMethod == null ? ValuationMethod.RATE : valuationMethod;
+    }
 }

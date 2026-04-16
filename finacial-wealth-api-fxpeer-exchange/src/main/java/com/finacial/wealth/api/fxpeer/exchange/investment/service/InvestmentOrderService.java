@@ -30,10 +30,12 @@ import static com.finacial.wealth.api.fxpeer.exchange.investment.ennum.InterestC
 import static com.finacial.wealth.api.fxpeer.exchange.investment.ennum.InterestCapitalization.MONTHLY;
 import static com.finacial.wealth.api.fxpeer.exchange.investment.ennum.InterestCapitalization.QUARTERLY;
 import static com.finacial.wealth.api.fxpeer.exchange.investment.ennum.InterestCapitalization.WEEKLY;
+import com.finacial.wealth.api.fxpeer.exchange.investment.ennum.LiquidationFeeAppliedTo;
 import com.finacial.wealth.api.fxpeer.exchange.investment.ennum.InvestmentOrderStatus;
 import com.finacial.wealth.api.fxpeer.exchange.investment.ennum.InvestmentOrderType;
 import com.finacial.wealth.api.fxpeer.exchange.investment.ennum.InvestmentPositionStatus;
 import com.finacial.wealth.api.fxpeer.exchange.investment.ennum.InvestmentType;
+import com.finacial.wealth.api.fxpeer.exchange.investment.ennum.ValuationMethod;
 import static com.finacial.wealth.api.fxpeer.exchange.investment.ennum.InvestmentType.BOND;
 import static com.finacial.wealth.api.fxpeer.exchange.investment.ennum.InvestmentType.MONEY_MARKET;
 import static com.finacial.wealth.api.fxpeer.exchange.investment.ennum.InvestmentType.MUTUAL_FUND;
@@ -225,6 +227,11 @@ public class InvestmentOrderService {
                     getK.setTenorDays(getKul.getTenorDays());
                     getK.setTenorMinutes(getKul.getTenorMinutes());
                     getK.setUnitPrice(getKul.getUnitPrice());
+                    getK.setValuationMethod(getKul.getValuationMethod() != null ? getKul.getValuationMethod().name() : null);
+                    getK.setLiquidationFeeAppliedTo(readLiquidationFeeAppliedTo(getKul).map(Enum::name).orElse(null));
+                    getK.setLiquidationFeeType(readLiquidationFeeType(getKul).map(Enum::name).orElse(null));
+                    getK.setLiquidationFeeRate(readLiquidationFeeRate(getKul));
+                    getK.setMinLiquidationFee(readMinLiquidationFeeNew(getKul));
                     getK.setYieldPa(getKul.getYieldPa());
                     getK.setYieldYtd(getKul.getYieldYtd());
                     mapAll.add(getK);
@@ -728,9 +735,15 @@ public class InvestmentOrderService {
                 // 5) Populate position
                 position.setUnits(order.getUnits());
                 position.setInvestedAmount(order.getAmount());
-                position.setCurrentValue(order.getAmount());
-                position.setAccruedInterest(BigDecimal.ZERO);
-                position.setTotalAccruedInterest(BigDecimal.ZERO);
+                if (resolveValuationMethod(product) == ValuationMethod.UNIT_PRICE) {
+                    position.setCurrentValue(computeUnitPriceValue(order.getUnits(), resolveUnitPrice(product)));
+                    position.setAccruedInterest(BigDecimal.ZERO);
+                    position.setTotalAccruedInterest(BigDecimal.ZERO);
+                } else {
+                    position.setCurrentValue(order.getAmount());
+                    position.setAccruedInterest(BigDecimal.ZERO);
+                    position.setTotalAccruedInterest(BigDecimal.ZERO);
+                }
                 position.setOrderRef(order.getOrderRef());
                 position.setProductName(product.getName());
                 position.setUpdatedAt(Instant.now());
@@ -1084,7 +1097,7 @@ public class InvestmentOrderService {
                 return res;
             }
 
-            BigDecimal fees = nvl(computeEntireMarketValuesLiquidationFee(position.getProduct(), liquidationBaseAmount));
+            BigDecimal fees = nvl(computeLiquidationFee(position, liquidationBaseAmount));
             BigDecimal tax = nvl(computeTax(subscriptionOrder.getProduct(), liquidationBaseAmount));
 
             BigDecimal netAmount = liquidationBaseAmount.subtract(fees).subtract(tax);
@@ -1192,6 +1205,9 @@ public class InvestmentOrderService {
         BigDecimal accruedInterest = nvl(position.getAccruedInterest());
         BigDecimal currentValue = nvl(position.getCurrentValue());
         BigDecimal reserved = nvl(position.getReservedLiquidationAmount());
+        InvestmentProduct product = position.getProduct();
+        ValuationMethod valuationMethod = resolveValuationMethod(product);
+        BigDecimal unitPrice = resolveUnitPrice(product);
 
         // 2) release reserved
         Instant cutoff = reserveFeatureCutoff();
@@ -1233,11 +1249,13 @@ public class InvestmentOrderService {
             position.setAccruedInterest(BigDecimal.ZERO);
             position.setCurrentValue(BigDecimal.ZERO);
             position.setUnits(BigDecimal.ZERO);
+            position.setTotalAccruedInterest(BigDecimal.ZERO);
             position.setStatus(InvestmentPositionStatus.FULLY_LIQUIDATED);
             orderIdm.setStatus(InvestmentOrderStatus.SETTLED);
             orderIdm.setUpdatedAt(Instant.now());
             orderIdm.setAmount(BigDecimal.ZERO);
             orderIdm.setAmountBalance(BigDecimal.ZERO);
+            orderIdm.setUnits(BigDecimal.ZERO);
             orderRepo.save(order);
 
         } else {
@@ -1250,7 +1268,21 @@ public class InvestmentOrderService {
 
             BigDecimal newInvested = investedAmount.subtract(liquidationAmount);
             position.setInvestedAmount(newInvested);
-            position.setCurrentValue(newInvested.add(accruedInterest));
+            if (valuationMethod == ValuationMethod.UNIT_PRICE) {
+                BigDecimal unitsToRedeem = liquidationAmount
+                        .divide(unitPrice, 8, RoundingMode.HALF_UP);
+                BigDecimal newUnits = nvl(position.getUnits()).subtract(unitsToRedeem);
+                if (newUnits.compareTo(BigDecimal.ZERO) < 0) {
+                    newUnits = BigDecimal.ZERO;
+                }
+                position.setUnits(newUnits);
+                position.setAccruedInterest(BigDecimal.ZERO);
+                position.setTotalAccruedInterest(BigDecimal.ZERO);
+                position.setCurrentValue(computeUnitPriceValue(newUnits, unitPrice));
+                orderIdm.setUnits(newUnits);
+            } else {
+                position.setCurrentValue(newInvested.add(accruedInterest));
+            }
             position.setStatus(newInvested.compareTo(BigDecimal.ZERO) == 0
                     ? InvestmentPositionStatus.FULLY_LIQUIDATED
                     : InvestmentPositionStatus.PARTIALLY_LIQUIDATED);
@@ -1685,9 +1717,20 @@ public class InvestmentOrderService {
             // 6) Update POSITION capital
             InvestmentPosition updatePos = positionRepo.findByOrderRefUpdate(rq.orderRef());
             BigDecimal newCapital = nz(updatePos.getInvestedAmount()).add(topupAmount);
+            InvestmentProduct positionProduct = updatePos.getProduct();
+            ValuationMethod valuationMethod = resolveValuationMethod(positionProduct);
 
             updatePos.setInvestedAmount(newCapital);
-            updatePos.setCurrentValue(newCapital.add(nz(updatePos.getTotalAccruedInterest())));
+            if (valuationMethod == ValuationMethod.UNIT_PRICE) {
+                BigDecimal topupUnits = computeUnits(positionProduct, topupAmount);
+                BigDecimal newUnits = nz(updatePos.getUnits()).add(topupUnits);
+                updatePos.setUnits(newUnits);
+                updatePos.setAccruedInterest(BigDecimal.ZERO);
+                updatePos.setTotalAccruedInterest(BigDecimal.ZERO);
+                updatePos.setCurrentValue(computeUnitPriceValue(newUnits, resolveUnitPrice(positionProduct)));
+            } else {
+                updatePos.setCurrentValue(newCapital.add(nz(updatePos.getTotalAccruedInterest())));
+            }
             updatePos.setUpdatedAt(Instant.now());
             System.out.println("updating postion ::::::::::::::: :::::::::::::::  " + updatePos);
 
@@ -1705,6 +1748,9 @@ public class InvestmentOrderService {
             // netAmount: if you use it as "total net debited so far", update it too.
             // If you use it as "net amount for THIS transaction", then DO NOT add.
             orderUpdate.setNetAmount(nz(orderUpdate.getNetAmount()).add(topupAmount));
+            if (valuationMethod == ValuationMethod.UNIT_PRICE) {
+                orderUpdate.setUnits(nz(updatePos.getUnits()));
+            }
 
             // Must be unique per request. Since we're reusing the same row,
             // this will overwrite the previous idempotency key (that's OK, but only last key is retained).
@@ -1836,11 +1882,32 @@ public class InvestmentOrderService {
     }
 
     private BigDecimal computeUnits(InvestmentProduct product, BigDecimal amount) {
-        if (product.getUnitPrice() == null || BigDecimal.ZERO.compareTo(product.getUnitPrice()) == 0) {
+        if (resolveValuationMethod(product) != ValuationMethod.UNIT_PRICE) {
             // Money market case – units = 1, amount drives value
             return BigDecimal.ONE;
         }
-        return amount.divide(product.getUnitPrice(), 8, RoundingMode.HALF_UP);
+        BigDecimal unitPrice = resolveUnitPrice(product);
+        return amount.divide(unitPrice, 8, RoundingMode.HALF_UP);
+    }
+
+    private ValuationMethod resolveValuationMethod(InvestmentProduct product) {
+        if (product == null) {
+            return ValuationMethod.RATE;
+        }
+        return product.resolvedValuationMethod();
+    }
+
+    private BigDecimal resolveUnitPrice(InvestmentProduct product) {
+        if (product == null || product.getUnitPrice() == null || product.getUnitPrice().compareTo(BigDecimal.ZERO) <= 0) {
+            return BigDecimal.ONE;
+        }
+        return product.getUnitPrice();
+    }
+
+    private BigDecimal computeUnitPriceValue(BigDecimal units, BigDecimal unitPrice) {
+        return nz(units)
+                .multiply(unitPrice)
+                .setScale(2, RoundingMode.HALF_UP);
     }
 
     private BigDecimal getFeePercentFromMeta(
@@ -1876,6 +1943,70 @@ public class InvestmentOrderService {
                     : BigDecimal.ZERO;
         } catch (Exception e) {
             return BigDecimal.ZERO;
+        }
+    }
+
+    private Optional<LiquidationFeeAppliedTo> readLiquidationFeeAppliedTo(InvestmentProduct product) {
+        try {
+            if (product == null || product.getMetaJson() == null || product.getMetaJson().isBlank()) {
+                return Optional.empty();
+            }
+            JsonNode root = new ObjectMapper().readTree(product.getMetaJson());
+            JsonNode value = root.path("liquidationFee").path("appliedTo");
+            if (value.isMissingNode() || value.asText().isBlank()) {
+                return Optional.empty();
+            }
+            return Optional.of(LiquidationFeeAppliedTo.valueOf(value.asText()));
+        } catch (Exception ex) {
+            return Optional.empty();
+        }
+    }
+
+    private Optional<com.finacial.wealth.api.fxpeer.exchange.investment.ennum.LiquidationFeeType> readLiquidationFeeType(InvestmentProduct product) {
+        try {
+            if (product == null || product.getMetaJson() == null || product.getMetaJson().isBlank()) {
+                return Optional.empty();
+            }
+            JsonNode root = new ObjectMapper().readTree(product.getMetaJson());
+            JsonNode value = root.path("liquidationFee").path("type");
+            if (value.isMissingNode() || value.asText().isBlank()) {
+                return Optional.empty();
+            }
+            return Optional.of(com.finacial.wealth.api.fxpeer.exchange.investment.ennum.LiquidationFeeType.valueOf(value.asText()));
+        } catch (Exception ex) {
+            return Optional.empty();
+        }
+    }
+
+    private BigDecimal readLiquidationFeeRate(InvestmentProduct product) {
+        try {
+            if (product == null || product.getMetaJson() == null || product.getMetaJson().isBlank()) {
+                return null;
+            }
+            JsonNode root = new ObjectMapper().readTree(product.getMetaJson());
+            JsonNode value = root.path("liquidationFee").path("rate");
+            if (value.isMissingNode() || value.asText().isBlank()) {
+                return null;
+            }
+            return new BigDecimal(value.asText());
+        } catch (Exception ex) {
+            return null;
+        }
+    }
+
+    private BigDecimal readMinLiquidationFeeNew(InvestmentProduct product) {
+        try {
+            if (product == null || product.getMetaJson() == null || product.getMetaJson().isBlank()) {
+                return null;
+            }
+            JsonNode root = new ObjectMapper().readTree(product.getMetaJson());
+            JsonNode value = root.path("liquidationFee").path("minFee");
+            if (value.isMissingNode() || value.asText().isBlank()) {
+                return null;
+            }
+            return new BigDecimal(value.asText());
+        } catch (Exception ex) {
+            return null;
         }
     }
 
@@ -1964,6 +2095,56 @@ public class InvestmentOrderService {
                 .setScale(2, RoundingMode.HALF_UP);
 
         return fee.max(minFee);
+    }
+
+    private BigDecimal computeLiquidationFee(InvestmentPosition position, BigDecimal liquidationAmount) {
+        InvestmentProduct product = position.getProduct();
+        Optional<LiquidationFeeAppliedTo> appliedToOpt = readLiquidationFeeAppliedTo(product);
+        BigDecimal configuredRate = readLiquidationFeeRate(product);
+
+        if (appliedToOpt.isEmpty() || configuredRate == null) {
+            return computeEntireMarketValuesLiquidationFee(product, liquidationAmount);
+        }
+
+        BigDecimal feeBase = switch (appliedToOpt.get()) {
+            case TOTAL_VALUE -> liquidationAmount;
+            case CAPITAL -> deriveCapitalPortion(position, liquidationAmount);
+            case INTEREST -> deriveInterestPortion(position, liquidationAmount);
+        };
+
+        BigDecimal fee = feeBase
+                .multiply(configuredRate)
+                .divide(BigDecimal.valueOf(100), 8, RoundingMode.HALF_UP)
+                .setScale(2, RoundingMode.HALF_UP);
+
+        BigDecimal minFee = readMinLiquidationFeeNew(product);
+        if (minFee == null) {
+            minFee = BigDecimal.ZERO;
+        }
+
+        return fee.max(minFee);
+    }
+
+    private BigDecimal deriveCapitalPortion(InvestmentPosition position, BigDecimal liquidationAmount) {
+        if (resolveValuationMethod(position.getProduct()) == ValuationMethod.UNIT_PRICE) {
+            BigDecimal currentValue = nvl(position.getCurrentValue());
+            if (currentValue.compareTo(BigDecimal.ZERO) <= 0) {
+                return BigDecimal.ZERO;
+            }
+            BigDecimal capitalRatio = nvl(position.getInvestedAmount())
+                    .divide(currentValue, 8, RoundingMode.HALF_UP);
+            return liquidationAmount.multiply(capitalRatio).setScale(2, RoundingMode.HALF_UP);
+        }
+        return liquidationAmount.min(nvl(position.getInvestedAmount())).setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal deriveInterestPortion(InvestmentPosition position, BigDecimal liquidationAmount) {
+        BigDecimal capitalPortion = deriveCapitalPortion(position, liquidationAmount);
+        BigDecimal interestPortion = liquidationAmount.subtract(capitalPortion);
+        if (interestPortion.compareTo(BigDecimal.ZERO) < 0) {
+            return BigDecimal.ZERO;
+        }
+        return interestPortion.setScale(2, RoundingMode.HALF_UP);
     }
 
 }

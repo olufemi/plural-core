@@ -32,6 +32,12 @@ public class InvestmentProductRecord {
 
     private BigDecimal yieldYtd;         // Year-To-Date Yield
 
+    private String valuationMethod;
+    private String liquidationFeeAppliedTo;
+    private String liquidationFeeType;
+    private BigDecimal liquidationFeeRate;
+    private BigDecimal minLiquidationFee;
+
     private Integer tenorDays;           // optional
 
     private boolean active = true;

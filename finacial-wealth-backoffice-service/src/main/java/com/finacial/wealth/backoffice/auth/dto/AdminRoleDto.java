@@ -4,9 +4,10 @@
  */
 package com.finacial.wealth.backoffice.auth.dto;
 
+import java.util.Set;
+
 /**
  *
  * @author olufemioshin
  */
-public record AdminRoleDto(Long id, String name) {}
-
+public record AdminRoleDto(Long id, String name, Set<String> permissionCodes) {}

@@ -105,6 +105,8 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
             @SuppressWarnings("unchecked")
             List<String> roles = (List<String>) claims.get("roles", List.class);
+            @SuppressWarnings("unchecked")
+            List<String> permissions = (List<String>) claims.get("permissions", List.class);
 
             List<GrantedAuthority> authorities = (roles == null)
                     ? Collections.<GrantedAuthority>emptyList()
@@ -115,6 +117,19 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                             .map(r -> r.startsWith("ROLE_") ? r : "ROLE_" + r)
                             .map(SimpleGrantedAuthority::new)
                             .collect(Collectors.toList());
+
+            if (permissions != null) {
+                authorities = java.util.stream.Stream.concat(
+                                authorities.stream(),
+                                permissions.stream()
+                                        .filter(Objects::nonNull)
+                                        .map(String::trim)
+                                        .filter(s -> !s.isEmpty())
+                                        .map(SimpleGrantedAuthority::new)
+                        )
+                        .distinct()
+                        .collect(Collectors.toList());
+            }
 
             Authentication authentication
                     = new UsernamePasswordAuthenticationToken(email, null, authorities);

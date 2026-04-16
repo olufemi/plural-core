@@ -4,8 +4,10 @@ import jakarta.transaction.Transactional;
 
 import com.finacial.wealth.backoffice.auth.entity.BoAdminRole;
 import com.finacial.wealth.backoffice.auth.entity.BoAdminUser;
+import com.finacial.wealth.backoffice.auth.entity.BoPermission;
 import com.finacial.wealth.backoffice.auth.repo.BoAdminRoleRepository;
 import com.finacial.wealth.backoffice.auth.repo.BoAdminUserRepository;
+import com.finacial.wealth.backoffice.auth.repo.BoPermissionRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
@@ -13,6 +15,8 @@ import org.springframework.stereotype.Component;
 
 import org.springframework.security.crypto.password.PasswordEncoder;
 
+import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 /*@Component
@@ -47,17 +51,26 @@ public class AdminSeedRunner implements ApplicationRunner {
     private final BoAdminRoleRepository roleRepo;
     private final BoAdminUserRepository userRepo;
     private final PasswordEncoder passwordEncoder;
+    private final BoPermissionRepository permissionRepository;
 
     @Override
     @Transactional
     public void run(ApplicationArguments args) {
+        List<BoPermission> permissions = ensurePermissions();
 
         // 1. Ensure roles exist FIRST
         BoAdminRole superAdminRole = roleRepo
                 .findByName("SUPER_ADMIN")
                 .orElseGet(() -> roleRepo.saveAndFlush(
-                        new BoAdminRole(null, "SUPER_ADMIN")
+                        BoAdminRole.builder().name("SUPER_ADMIN").build()
                 ));
+        if (superAdminRole.getPermissions() == null) {
+            superAdminRole.setPermissions(new HashSet<>());
+        }
+        if (superAdminRole.getPermissions().size() != permissions.size()) {
+            superAdminRole.setPermissions(new HashSet<>(permissions));
+            roleRepo.saveAndFlush(superAdminRole);
+        }
 
         // 2. Ensure admin user exists
         BoAdminUser admin = userRepo
@@ -78,5 +91,19 @@ public class AdminSeedRunner implements ApplicationRunner {
             userRepo.saveAndFlush(admin);
         }
     }
-}
 
+    private List<BoPermission> ensurePermissions() {
+        return DefaultPermissionCatalog.all().stream()
+                .map(spec -> permissionRepository.findByCode(spec.code())
+                        .orElseGet(() -> permissionRepository.saveAndFlush(
+                                BoPermission.builder()
+                                        .module(spec.module())
+                                        .subModule(spec.subModule())
+                                        .action(spec.action())
+                                        .code(spec.code())
+                                        .description(spec.description())
+                                        .build()
+                        )))
+                .toList();
+    }
+}

@@ -12,6 +12,7 @@ import com.finacial.wealth.api.fxpeer.exchange.investment.ennum.InterestCapitali
 import com.finacial.wealth.api.fxpeer.exchange.investment.ennum.InvestmentOrderStatus;
 import com.finacial.wealth.api.fxpeer.exchange.investment.ennum.InvestmentOrderType;
 import com.finacial.wealth.api.fxpeer.exchange.investment.ennum.InvestmentPositionStatus;
+import com.finacial.wealth.api.fxpeer.exchange.investment.ennum.ValuationMethod;
 import com.finacial.wealth.api.fxpeer.exchange.investment.record.CustomerInvestmentsPojo;
 import com.finacial.wealth.api.fxpeer.exchange.investment.record.InvestmentPositionHistoryPojo;
 import com.finacial.wealth.api.fxpeer.exchange.investment.record.InvestmentPositionPojo;
@@ -103,6 +104,8 @@ public class InvestmentValuationScheduler {
             // Defensive null-safety
             BigDecimal invested = nz(pos.getInvestedAmount());
             BigDecimal totalAccrued = nz(pos.getTotalAccruedInterest());
+            BigDecimal currentUnitPrice = resolveUnitPrice(pos.getProduct());
+            ValuationMethod valuationMethod = resolveValuationMethod(pos.getProduct());
 
             // 2) Enforce "no interest until next day"
             LocalDate interestStart = pos.getInterestStartDate();
@@ -117,19 +120,27 @@ public class InvestmentValuationScheduler {
             }
 
             BigDecimal todaysAccruedInterest = BigDecimal.ZERO;
+            BigDecimal currentValue;
 
-            if (!today.isBefore(interestStart)) {
+            if (valuationMethod == ValuationMethod.UNIT_PRICE) {
+                totalAccrued = BigDecimal.ZERO;
+                todaysAccruedInterest = BigDecimal.ZERO;
+                currentValue = computeUnitPriceValue(pos.getUnits(), currentUnitPrice);
+            } else if (!today.isBefore(interestStart)) {
                 // 3) Accrue today's interest (your % daily logic)
                 //BigDecimal pct = nz(pos.getProduct().getPercentageCurrValue()); // e.g 0.001 for 0.1%
                 todaysAccruedInterest = computeAccruedInterestForToday(pos, today);
 
                 totalAccrued = totalAccrued.add(todaysAccruedInterest);
+                currentValue = invested.add(totalAccrued);
+            } else {
+                currentValue = invested.add(totalAccrued);
             }
 
             // 4) Update position values
             pos.setAccruedInterest(todaysAccruedInterest);     // today's interest only
             pos.setTotalAccruedInterest(totalAccrued);         // cumulative interest
-            pos.setCurrentValue(invested.add(totalAccrued));   // capital + cumulative interest
+            pos.setCurrentValue(currentValue);
             pos.setUpdatedAt(Instant.now());
             positionRepo.save(pos);
 //So your Gain/Lost = Your Current Value - Invested amount amount -> which technically equal to your Total Interest for today.
@@ -137,7 +148,7 @@ public class InvestmentValuationScheduler {
             InvestmentPositionHistory hist = new InvestmentPositionHistory();
             hist.setPosition(pos);
             hist.setValuationDate(today);
-            hist.setPrice(pos.getProduct().getUnitPrice());
+            hist.setPrice(currentUnitPrice);
 
             hist.setUnits(nz(pos.getUnits()));
             hist.setSubscriptionAmount(invested);
@@ -252,7 +263,7 @@ public class InvestmentValuationScheduler {
                 : null
         );
         pojo.setCurrency(position.getProduct().getCurrency());
-        pojo.setPrice(position.getProduct().getUnitPrice());
+        pojo.setPrice(resolveUnitPrice(position.getProduct()));
         pojo.setMinimumAmount(position.getProduct().getMinimumInvestmentAmount());
 
         return pojo;
@@ -444,6 +455,26 @@ public class InvestmentValuationScheduler {
 
     private BigDecimal nz(BigDecimal v) {
         return v == null ? BigDecimal.ZERO : v;
+    }
+
+    private ValuationMethod resolveValuationMethod(InvestmentProduct product) {
+        if (product == null) {
+            return ValuationMethod.RATE;
+        }
+        return product.resolvedValuationMethod();
+    }
+
+    private BigDecimal resolveUnitPrice(InvestmentProduct product) {
+        if (product == null || product.getUnitPrice() == null || product.getUnitPrice().compareTo(BigDecimal.ZERO) <= 0) {
+            return BigDecimal.ONE;
+        }
+        return product.getUnitPrice();
+    }
+
+    private BigDecimal computeUnitPriceValue(BigDecimal units, BigDecimal unitPrice) {
+        return nz(units)
+                .multiply(unitPrice)
+                .setScale(2, RoundingMode.HALF_UP);
     }
 
     private LocalDate retDate(Instant exp) {

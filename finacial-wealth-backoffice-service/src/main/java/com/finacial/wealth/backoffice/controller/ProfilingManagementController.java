@@ -8,8 +8,13 @@ import com.finacial.wealth.backoffice.integrations.profiling.BackofficeCustomerS
 import com.finacial.wealth.backoffice.model.ApiResponse;
 import com.finacial.wealth.backoffice.model.BlockUserRequest;
 import com.finacial.wealth.backoffice.model.RegWalletInfoBackofficeResponse;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -18,6 +23,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.Map;
+
 /**
  *
  * @author olufemioshin
@@ -25,27 +32,119 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/backoffice/profiling")
 @RequiredArgsConstructor
+@Tag(name = "Customers", description = "Customer support and customer 360 backoffice endpoints.")
 public class ProfilingManagementController {
 
     private final BackofficeCustomerService backofficeCustomerService;
 
     @GetMapping
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','ADMIN','OPERATIONS','FINANCE')")
+    @Operation(
+            summary = "List customers",
+            description = "Returns paginated customer records from profiling for backoffice support and operations teams.",
+            security = @SecurityRequirement(name = "bearerAuth")
+    )
     public ApiResponse<Page<RegWalletInfoBackofficeResponse>> getAllCustomers(
+            @Parameter(description = "Zero-based page number")
             @RequestParam(defaultValue = "0") int page,
+            @Parameter(description = "Page size")
             @RequestParam(defaultValue = "20") int size,
+            @Parameter(description = "Sort expression, for example id,desc")
             @RequestParam(defaultValue = "id,desc") String sort
     ) {
         return backofficeCustomerService.getAllCustomers(page, size, sort);
     }
 
     @GetMapping("/{customerId}")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','ADMIN','OPERATIONS','FINANCE')")
+    @Operation(
+            summary = "Get customer profile",
+            description = "Returns the customer profile used to anchor backoffice customer support screens.",
+            security = @SecurityRequirement(name = "bearerAuth")
+    )
     public ApiResponse<RegWalletInfoBackofficeResponse> getCustomerById(
             @PathVariable("customerId") String customerId
     ) {
         return backofficeCustomerService.getCustomerById(customerId);
     }
 
+    @GetMapping("/{customerId}/investment-summary")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','ADMIN','OPERATIONS','FINANCE')")
+    @Operation(
+            summary = "Get customer investment summary",
+            description = "Aggregates customer profile, orders, liquidations, and positions into a frontend-friendly summary response.",
+            security = @SecurityRequirement(name = "bearerAuth")
+    )
+    public Map<String, Object> getCustomerInvestmentSummary(
+            @PathVariable("customerId") String customerId
+    ) {
+        return backofficeCustomerService.getCustomerInvestmentSummary(customerId);
+    }
+
+    @GetMapping("/{customerId}/orders")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','ADMIN','OPERATIONS','FINANCE')")
+    @Operation(
+            summary = "List customer investment and topup requests",
+            description = "Returns customer-level order history with status and type filtering for customer detail screens.",
+            security = @SecurityRequirement(name = "bearerAuth")
+    )
+    public Map<String, Object> getCustomerInvestmentOrders(
+            @PathVariable("customerId") String customerId,
+            @Parameter(description = "Optional order type such as SUBSCRIPTION or TOPUP")
+            @RequestParam(required = false) String type,
+            @Parameter(description = "Optional comma-separated order status filter")
+            @RequestParam(required = false) String status,
+            @Parameter(description = "Zero-based page number")
+            @RequestParam(defaultValue = "0") Integer page,
+            @Parameter(description = "Page size")
+            @RequestParam(defaultValue = "20") Integer size
+    ) {
+        return backofficeCustomerService.getCustomerInvestmentOrders(customerId, type, status, page, size);
+    }
+
+    @GetMapping("/{customerId}/liquidations")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','ADMIN','OPERATIONS','FINANCE')")
+    @Operation(
+            summary = "List customer liquidation requests",
+            description = "Returns customer liquidation requests and their current statuses for the customer module.",
+            security = @SecurityRequirement(name = "bearerAuth")
+    )
+    public Map<String, Object> getCustomerLiquidations(
+            @PathVariable("customerId") String customerId,
+            @Parameter(description = "Optional comma-separated liquidation status filter")
+            @RequestParam(required = false) String status,
+            @Parameter(description = "Zero-based page number")
+            @RequestParam(defaultValue = "0") Integer page,
+            @Parameter(description = "Page size")
+            @RequestParam(defaultValue = "20") Integer size
+    ) {
+        return backofficeCustomerService.getCustomerLiquidations(customerId, status, page, size);
+    }
+
+    @GetMapping("/{customerId}/positions")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','ADMIN','OPERATIONS','FINANCE')")
+    @Operation(
+            summary = "List customer investment positions",
+            description = "Returns customer positions across investment products for customer detail and portfolio support screens.",
+            security = @SecurityRequirement(name = "bearerAuth")
+    )
+    public Map<String, Object> getCustomerInvestmentPositions(
+            @PathVariable("customerId") String customerId,
+            @Parameter(description = "Zero-based page number")
+            @RequestParam(defaultValue = "0") Integer page,
+            @Parameter(description = "Page size")
+            @RequestParam(defaultValue = "20") Integer size
+    ) {
+        return backofficeCustomerService.getCustomerInvestmentPositions(customerId, page, size);
+    }
+
     @PatchMapping("/{id}/block")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','ADMIN','OPERATIONS','FINANCE')")
+    @Operation(
+            summary = "Block a customer",
+            description = "Blocks a customer account in profiling. Intended for support and risk workflows.",
+            security = @SecurityRequirement(name = "bearerAuth")
+    )
     public ApiResponse<RegWalletInfoBackofficeResponse> blockCustomer(
             @PathVariable("id") Long id,
             @RequestBody BlockUserRequest request
@@ -54,6 +153,12 @@ public class ProfilingManagementController {
     }
 
     @PatchMapping("/{id}/unblock")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','ADMIN','OPERATIONS','FINANCE')")
+    @Operation(
+            summary = "Unblock a customer",
+            description = "Reverses a prior customer block in profiling.",
+            security = @SecurityRequirement(name = "bearerAuth")
+    )
     public ApiResponse<RegWalletInfoBackofficeResponse> unblockCustomer(
             @PathVariable("id") Long id,
             @RequestBody BlockUserRequest request

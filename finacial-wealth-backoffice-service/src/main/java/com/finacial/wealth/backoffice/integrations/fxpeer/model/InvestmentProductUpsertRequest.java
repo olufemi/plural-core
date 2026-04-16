@@ -22,12 +22,17 @@ public class InvestmentProductUpsertRequest {
     @NotNull private InvestmentType type;
     @NotBlank private String currency;
     @NotNull private BigDecimal minimumInvestmentAmount;
+    @NotNull private ValuationMethod valuationMethod;
 
     private BigDecimal unitPrice;
     private BigDecimal yieldPa;
     private BigDecimal yieldYtd;
     private Integer tenorDays;
     private Boolean active;
+    private LiquidationFeeAppliedTo liquidationFeeAppliedTo;
+    private LiquidationFeeType liquidationFeeType;
+    private BigDecimal liquidationFeeRate;
+    private BigDecimal minLiquidationFee;
 
     private String partnerProductCode;
     private String prospectusUrl;
@@ -49,4 +54,3 @@ public class InvestmentProductUpsertRequest {
 
     @NotNull private LocalTime subscriptionCutOffTime;
 }
-

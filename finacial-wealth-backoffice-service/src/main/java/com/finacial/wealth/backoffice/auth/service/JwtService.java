@@ -12,6 +12,8 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Date;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 public class JwtService {
@@ -37,6 +39,10 @@ public class JwtService {
         Instant now = Instant.now();
         Instant exp = now.plus(accessTtlMinutes, ChronoUnit.MINUTES);
         List<String> roles = user.getRoles().stream().map(r -> r.getName()).toList();
+        Set<String> permissions = user.getRoles().stream()
+                .flatMap(role -> role.getPermissions().stream())
+                .map(permission -> permission.getCode())
+                .collect(Collectors.toCollection(java.util.TreeSet::new));
 
         return Jwts.builder()
                 .issuer(issuer)
@@ -44,6 +50,7 @@ public class JwtService {
                 .claim("typ", "ACCESS")
                 .claim("email", user.getEmail())
                 .claim("roles", roles)
+                .claim("permissions", permissions)
                 .issuedAt(Date.from(now))
                 .expiration(Date.from(exp))
                 .signWith(key)

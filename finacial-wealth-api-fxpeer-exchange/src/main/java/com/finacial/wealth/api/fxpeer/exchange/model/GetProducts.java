@@ -12,6 +12,7 @@ import lombok.Data;
  */
 @Data
 public class GetProducts {
+
     private String currencyCode;
-  
+
 }

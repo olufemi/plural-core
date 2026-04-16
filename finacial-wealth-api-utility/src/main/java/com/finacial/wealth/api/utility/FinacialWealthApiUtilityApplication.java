@@ -33,8 +33,15 @@ public class FinacialWealthApiUtilityApplication {
 
         String encryptionKeyPilot = "ed36e39b7de30ad8db7137af61f898ec";
         // String aactTopDebit = decrypt("BZ9wNGTmmfNBt2Je+mZznHNDVGEHVlDVcQwgiy1hDIM=", encryptionKeyPilot);
-        String clear = encyrpt("410010005", encryptionKeyPilot);
-        System.out.println("clear  " + "  ::::::::::::::::::::: " + clear);
+        String encrypt = encyrpt("0823345692", encryptionKeyPilot);
+        System.out.println("encrypt  " + "  ::::::::::::::::::::: " + encrypt);
+        //System.out.println("password " + "  ::::::::::::::::::::: " + password);
+//05044400198 -
+        // String clientidDec = decrypt("sZSmsolo1Lg1sTSF1bFySA==", encryptionKeyPilot);
+        //System.out.println("clientidDec " + "  ::::::::::::::::::::: " + clientidDec);
+        String decrypt = decrypt("WsmqJHl8mnRynYeSjAl2Sg==", encryptionKeyPilot);
+        System.out.println("decrypt " + "  ::::::::::::::::::::: " + decrypt);
+        // String password = encyrpt("CliPwd$@2024connect", encryptionKeyPilot);
 
     }
 

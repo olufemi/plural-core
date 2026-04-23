@@ -5,6 +5,7 @@
 package com.finacial.wealth.api.fxpeer.exchange.feign;
 
 import com.finacial.wealth.api.fxpeer.exchange.model.BaseResponse;
+import com.finacial.wealth.api.fxpeer.exchange.model.BatchPostingRequest;
 import com.finacial.wealth.api.fxpeer.exchange.model.CreditWalletCaller;
 import com.finacial.wealth.api.fxpeer.exchange.model.DebitWalletCaller;
 import com.finacial.wealth.api.fxpeer.exchange.model.WalletNo;
@@ -37,6 +38,9 @@ public interface TransactionServiceProxies {
 
     @RequestMapping(value = "/peer-to-peer/credit-customer-with-type", consumes = "application/json", method = RequestMethod.POST)
     public BaseResponse creditCustomerWithType(@RequestBody CreditWalletCaller rq, @RequestHeader("user-type") String userType, @RequestHeader("Authorization") String authorization);
+
+    @RequestMapping(value = "/peer-to-peer/batch-post-with-type", consumes = "application/json", method = RequestMethod.POST)
+    public BaseResponse batchPostWithType(@RequestBody BatchPostingRequest rq, @RequestHeader("Authorization") String authorization);
 
     //, @RequestHeader("Authorization") String auth
 }

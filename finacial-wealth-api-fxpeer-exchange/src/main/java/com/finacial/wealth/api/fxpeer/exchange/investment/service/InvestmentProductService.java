@@ -207,32 +207,113 @@ public class InvestmentProductService {
                 = req.getLiquidationFeeAppliedTo() != null
                 || req.getLiquidationFeeType() != null
                 || req.getLiquidationFeeRate() != null
-                || req.getMinLiquidationFee() != null;
+                || req.getMinLiquidationFee() != null
+                || req.getLiquidationFeeCap() != null;
 
-        if (!anyLiquidationFeeField) {
+        String liquidationValidationError = validateFeeConfig(
+                "liquidation",
+                valuationMethod,
+                anyLiquidationFeeField,
+                req.getLiquidationFeeAppliedTo(),
+                req.getLiquidationFeeType(),
+                req.getLiquidationFeeRate(),
+                req.getMinLiquidationFee(),
+                req.getLiquidationFeeCap()
+        );
+        if (liquidationValidationError != null) {
+            return liquidationValidationError;
+        }
+
+        boolean anyEarlyLiquidationFeeField
+                = req.getEarlyLiquidationFeeAppliedTo() != null
+                || req.getEarlyLiquidationFeeType() != null
+                || req.getEarlyLiquidationFeeRate() != null
+                || req.getEarlyLiquidationFeeCap() != null;
+
+        String earlyLiquidationValidationError = validateFeeConfig(
+                "earlyLiquidation",
+                valuationMethod,
+                anyEarlyLiquidationFeeField,
+                req.getEarlyLiquidationFeeAppliedTo(),
+                req.getEarlyLiquidationFeeType(),
+                req.getEarlyLiquidationFeeRate(),
+                null,
+                req.getEarlyLiquidationFeeCap()
+        );
+        if (earlyLiquidationValidationError != null) {
+            return earlyLiquidationValidationError;
+        }
+
+        Boolean lockEnabled = req.getLockEnabled() != null
+                ? req.getLockEnabled()
+                : readBooleanFromMeta(existingProduct == null ? null : existingProduct.getMetaJson(), "lockConfig", "enabled");
+        Integer lockDays = req.getLockDays() != null
+                ? req.getLockDays()
+                : readIntegerFromMeta(existingProduct == null ? null : existingProduct.getMetaJson(), "lockConfig", "days");
+
+        boolean anyLockField
+                = req.getLockEnabled() != null
+                || req.getLockDays() != null
+                || anyEarlyLiquidationFeeField;
+
+        if (Boolean.TRUE.equals(lockEnabled)) {
+            if (lockDays == null || lockDays <= 0) {
+                return "lockDays must be provided and greater than 0 when lockEnabled is true";
+            }
+        } else if (lockDays != null && lockDays <= 0) {
+            return "lockDays must be greater than 0 when provided";
+        }
+
+        if (anyEarlyLiquidationFeeField && !Boolean.TRUE.equals(lockEnabled)) {
+            return "lockEnabled must be true when early liquidation fee is configured";
+        }
+
+        if (anyLockField && req.getLockEnabled() == null && req.getLockDays() == null && existingProduct == null) {
+            return "lockEnabled must be provided when lock configuration is supplied on product creation";
+        }
+
+        return null;
+    }
+
+    private String validateFeeConfig(
+            String label,
+            ValuationMethod valuationMethod,
+            boolean anyFeeField,
+            LiquidationFeeAppliedTo appliedTo,
+            LiquidationFeeType feeType,
+            BigDecimal feeRate,
+            BigDecimal minFee,
+            BigDecimal feeCap
+    ) {
+        if (!anyFeeField) {
             return null;
         }
 
-        if (req.getLiquidationFeeAppliedTo() == null
-                || req.getLiquidationFeeType() == null
-                || req.getLiquidationFeeRate() == null) {
-            return "liquidationFeeAppliedTo, liquidationFeeType and liquidationFeeRate must all be provided together";
+        if (appliedTo == null || feeType == null || feeRate == null) {
+            return label + " fee appliedTo, type and rate must all be provided together";
         }
 
-        if (req.getLiquidationFeeType() != LiquidationFeeType.RATE) {
+        if (feeType != LiquidationFeeType.RATE) {
             return "Only RATE liquidation fee type is supported for now";
         }
 
-        if (req.getLiquidationFeeRate().compareTo(BigDecimal.ZERO) < 0) {
-            return "liquidationFeeRate cannot be negative";
+        if (feeRate.compareTo(BigDecimal.ZERO) < 0) {
+            return label + " fee rate cannot be negative";
         }
 
-        if (req.getMinLiquidationFee() != null && req.getMinLiquidationFee().compareTo(BigDecimal.ZERO) < 0) {
-            return "minLiquidationFee cannot be negative";
+        if (minFee != null && minFee.compareTo(BigDecimal.ZERO) < 0) {
+            return label + " minimum fee cannot be negative";
         }
 
-        if (valuationMethod == ValuationMethod.UNIT_PRICE
-                && req.getLiquidationFeeAppliedTo() != LiquidationFeeAppliedTo.TOTAL_VALUE) {
+        if (feeCap != null && feeCap.compareTo(BigDecimal.ZERO) < 0) {
+            return label + " fee cap cannot be negative";
+        }
+
+        if (minFee != null && feeCap != null && feeCap.compareTo(minFee) < 0) {
+            return label + " fee cap cannot be less than the minimum fee";
+        }
+
+        if (valuationMethod == ValuationMethod.UNIT_PRICE && appliedTo != LiquidationFeeAppliedTo.TOTAL_VALUE) {
             return "UNIT_PRICE products currently support liquidation fees applied to TOTAL_VALUE only";
         }
 
@@ -256,20 +337,64 @@ public class InvestmentProductService {
                     = req.getLiquidationFeeAppliedTo() != null
                     || req.getLiquidationFeeType() != null
                     || req.getLiquidationFeeRate() != null
-                    || req.getMinLiquidationFee() != null;
+                    || req.getMinLiquidationFee() != null
+                    || req.getLiquidationFeeCap() != null;
+            boolean hasLockConfig
+                    = req.getLockEnabled() != null
+                    || req.getLockDays() != null;
+            boolean hasEarlyLiquidationFeeConfig
+                    = req.getEarlyLiquidationFeeAppliedTo() != null
+                    || req.getEarlyLiquidationFeeType() != null
+                    || req.getEarlyLiquidationFeeRate() != null
+                    || req.getEarlyLiquidationFeeCap() != null;
 
-            if (!hasLiquidationFeeConfig) {
+            if (!hasLiquidationFeeConfig && !hasLockConfig && !hasEarlyLiquidationFeeConfig) {
                 return root.isEmpty() ? null : objectMapper.writeValueAsString(root);
             }
 
-            ObjectNode liquidationFee = root.with("liquidationFee");
-            liquidationFee.put("appliedTo", req.getLiquidationFeeAppliedTo().name());
-            liquidationFee.put("type", req.getLiquidationFeeType().name());
-            liquidationFee.put("rate", req.getLiquidationFeeRate());
-            if (req.getMinLiquidationFee() != null) {
-                liquidationFee.put("minFee", req.getMinLiquidationFee());
-            } else {
-                liquidationFee.remove("minFee");
+            if (hasLiquidationFeeConfig) {
+                ObjectNode liquidationFee = root.with("liquidationFee");
+                liquidationFee.put("appliedTo", req.getLiquidationFeeAppliedTo().name());
+                liquidationFee.put("type", req.getLiquidationFeeType().name());
+                liquidationFee.put("rate", req.getLiquidationFeeRate());
+                if (req.getMinLiquidationFee() != null) {
+                    liquidationFee.put("minFee", req.getMinLiquidationFee());
+                } else {
+                    liquidationFee.remove("minFee");
+                }
+                if (req.getLiquidationFeeCap() != null) {
+                    liquidationFee.put("cap", req.getLiquidationFeeCap());
+                } else {
+                    liquidationFee.remove("cap");
+                }
+            }
+
+            if (hasLockConfig) {
+                ObjectNode lockConfig = root.with("lockConfig");
+                if (req.getLockEnabled() != null) {
+                    lockConfig.put("enabled", req.getLockEnabled());
+                }
+                if (req.getLockDays() != null) {
+                    lockConfig.put("days", req.getLockDays());
+                } else if (Boolean.FALSE.equals(req.getLockEnabled())) {
+                    lockConfig.remove("days");
+                } else {
+                    // preserve existing lock days on unrelated updates
+                }
+            }
+
+            if (hasEarlyLiquidationFeeConfig) {
+                ObjectNode earlyLiquidationFee = root.with("earlyLiquidationFee");
+                earlyLiquidationFee.put("appliedTo", req.getEarlyLiquidationFeeAppliedTo().name());
+                earlyLiquidationFee.put("type", req.getEarlyLiquidationFeeType().name());
+                earlyLiquidationFee.put("rate", req.getEarlyLiquidationFeeRate());
+                if (req.getEarlyLiquidationFeeCap() != null) {
+                    earlyLiquidationFee.put("cap", req.getEarlyLiquidationFeeCap());
+                } else {
+                    earlyLiquidationFee.remove("cap");
+                }
+            } else if (Boolean.FALSE.equals(req.getLockEnabled())) {
+                root.remove("earlyLiquidationFee");
             }
 
             return objectMapper.writeValueAsString(root);
@@ -291,6 +416,22 @@ public class InvestmentProductService {
         } catch (Exception ex) {
             return objectMapper.createObjectNode();
         }
+    }
+
+    private Boolean readBooleanFromMeta(String metaJson, String nodeName, String fieldName) {
+        JsonNode value = readMetaJson(metaJson).path(nodeName).path(fieldName);
+        if (value.isMissingNode() || value.isNull()) {
+            return null;
+        }
+        return value.asBoolean();
+    }
+
+    private Integer readIntegerFromMeta(String metaJson, String nodeName, String fieldName) {
+        JsonNode value = readMetaJson(metaJson).path(nodeName).path(fieldName);
+        if (value.isMissingNode() || value.isNull() || value.asText().isBlank()) {
+            return null;
+        }
+        return value.asInt();
     }
 
     private void markRollbackOnly() {

@@ -15,7 +15,6 @@ import com.financial.wealth.api.transactions.domain.FinWealthPaymentTransaction;
 import com.financial.wealth.api.transactions.domain.GlobalLimitConfig;
 import com.financial.wealth.api.transactions.domain.LocalBeneficiaries;
 import com.financial.wealth.api.transactions.domain.LocalBeneficiariesIndividual;
-import com.financial.wealth.api.transactions.domain.LocalTLogRetrialDebit;
 import com.financial.wealth.api.transactions.domain.LocalTransFailedTransInfo;
 import com.financial.wealth.api.transactions.domain.LocalTransferRequestLog;
 import com.financial.wealth.api.transactions.domain.RegWalletCheckLog;
@@ -25,6 +24,8 @@ import com.financial.wealth.api.transactions.domain.UserLimitConfig;
 import com.financial.wealth.api.transactions.domain.WToWaletTransfer;
 import com.financial.wealth.api.transactions.models.ApiResponseModel;
 import com.financial.wealth.api.transactions.models.BaseResponse;
+import com.financial.wealth.api.transactions.models.BatchPostingLegRequest;
+import com.financial.wealth.api.transactions.models.BatchPostingRequest;
 import com.financial.wealth.api.transactions.models.CreditWalletCaller;
 import com.financial.wealth.api.transactions.models.DebitWalletCaller;
 import com.financial.wealth.api.transactions.models.FinWalletPaymentTransModel;
@@ -1846,334 +1847,226 @@ public class LocalTransferService {
             reqq.setNarration(narration);
             reqq.setTransactionId(rq.getProcessId());
             //System.out.println("debitAcct :::::::: reqq" + "    ::::::::::::::::::::: " + new Gson().toJson(reqq));
-            DebitWalletCaller rqD = new DebitWalletCaller();
-            rqD.setAuth(auth);
-            rqD.setFees(reqq.getKuleanFess());
-            rqD.setFinalCHarges(reqq.getFinalCharges());
-            rqD.setNarration(reqq.getNarration());
-            rqD.setPhoneNumber(reqq.getPhonenumber());
-            rqD.setTransAmount(rq.getAmount());
-            rqD.setTransactionId(rq.getProcessId());
-            BaseResponse debitAcct = utilMeth.debitCustomerWithType(rqD, "CUSTOMER", CCY);
+            ProcLedgerRequestCreditOneTime rqq = new ProcLedgerRequestCreditOneTime();
+            rqq.setFundingType(getKul.get().getServiceType());
+            rqq.setKulFees(kulFees);
+            rqq.setKulTransactionId(rq.getProcessId());
+            rqq.setNarration(narration);
+            rqq.setPhoneNumber(rq.getReceiver());
+            rqq.setSwFees(BigDecimal.ZERO);
+            rqq.setSwRefrenceNumber("");
+            rqq.setTransAmount(amountToCredit);
 
-            //   System.out.println("Debit Response from core ::::::::::::::::  %S  " + new Gson().toJson(debitAcct));
-            // BaseResponse debitAcct = genLedgerProxy.debitOneTime(reqq);
-            //    System.out.println("verify local transfer in long expiry" + "   ::::::::::::::::::::: " + utilMeth.ltExistingRunningWindow());
             LocalDateTime expireMinutes = LocalDateTime.now().plusMinutes(Long.valueOf(utilMeth.ltExistingRunningWindow()));
             long expiry = Timestamp.valueOf(expireMinutes).getTime();
 
-            //   System.out.println("verify locat transfer in long expiry" + "   ::::::::::::::::::::: " + expiry);
-            if (debitAcct.getStatusCode() == 200) {
-                DebitWalletCaller debGLCredit = new DebitWalletCaller();
-                debGLCredit.setAuth("Sender");
-                debGLCredit.setFees("0.00");
-                debGLCredit.setFinalCHarges(amount);
-                debGLCredit.setNarration("CAD_Withdrawal");
-                debGLCredit.setPhoneNumber(decryptData(utilMeth.getSETTING_KEY_WALLET_SYSTEM_SYSTEM_GG_CAD()));
-                debGLCredit.setTransAmount(amount);
-                debGLCredit.setTransactionId(rq.getProcessId() + "-CAD_GL");
-                
-                utilMeth.debitCustomerWithType(debGLCredit, "CAD_GL", CCY);
-                /* KuleanPaymentTransaction kTrans = new KuleanPaymentTransaction();
-                kTrans.setAmmount(amountToDebit);
-                kTrans.setCreatedDate(Instant.now());
-                kTrans.setFees(new BigDecimal(getKul.get().getFees()));
-                kTrans.setPaymentType("Wallet to Wallet Transfer");
-                kTrans.setReceiver(rq.getReceiver());
-                kTrans.setSender(getDecoded.phoneNumber);
-                kTrans.setTransactionId(rq.getProcessId());
-                kTrans.setTransactionType("Withdrawal");
-                kTrans.setWalletNo(getDecoded.phoneNumber);
-                kTrans.setReceiverName(rq.getReceiverName());
-                kTrans.setSenderName(senderName);
-                kTrans.setSentAmount(amountToCredit.toString());
-                processKuleanPaymentTransactionLedger(kTrans);
+            BatchPostingLegRequest senderDebitLeg = new BatchPostingLegRequest();
+            senderDebitLeg.setDirection("DEBIT");
+            senderDebitLeg.setRequestRef(rq.getProcessId() + "-CUSTOMER_DR");
+            senderDebitLeg.setUserType("CUSTOMER");
+            senderDebitLeg.setFees(reqq.getKuleanFess());
+            senderDebitLeg.setFinalCHarges(reqq.getFinalCharges());
+            senderDebitLeg.setNarration(reqq.getNarration());
+            senderDebitLeg.setPhoneNumber(reqq.getPhonenumber());
+            senderDebitLeg.setTransAmount(rq.getAmount());
+            senderDebitLeg.setTransactionId(rq.getProcessId() + "-CUSTOMER_DR");
+            senderDebitLeg.setAuth(auth);
 
-                KuleanPaymentTransaction kTrans1a = new KuleanPaymentTransaction();
-                kTrans1a.setAmmount(amountToDebit);
-                kTrans1a.setCreatedDate(Instant.now());
-                kTrans1a.setFees(new BigDecimal(getKul.get().getFees()));
-                kTrans1a.setPaymentType("Wallet to Wallet Transfer");
-                kTrans1a.setReceiver(rq.getReceiver());
-                kTrans1a.setSender(getDecoded.phoneNumber);
-                kTrans1a.setTransactionId(rq.getProcessId());
-                kTrans1a.setTransactionType("Withdrawal");
-                kTrans1a.setWalletNo(getDecoded.phoneNumber);
-                kTrans1a.setReceiverName(rq.getReceiverName());
-                kTrans1a.setSenderName(senderName);
-                kTrans1a.setSentAmount(amountToCredit.toString());
+            BatchPostingLegRequest cadGlDebitLeg = new BatchPostingLegRequest();
+            cadGlDebitLeg.setDirection("DEBIT");
+            cadGlDebitLeg.setRequestRef(rq.getProcessId() + "-CAD_GL_DR");
+            cadGlDebitLeg.setUserType("CAD_GL");
+            cadGlDebitLeg.setFees("0.00");
+            cadGlDebitLeg.setFinalCHarges(amount);
+            cadGlDebitLeg.setNarration("CAD_Withdrawal");
+            cadGlDebitLeg.setPhoneNumber(decryptData(utilMeth.getSETTING_KEY_WALLET_SYSTEM_SYSTEM_GG_CAD()));
+            cadGlDebitLeg.setTransAmount(amount);
+            cadGlDebitLeg.setTransactionId(rq.getProcessId() + "-CAD_GL_DR");
+            cadGlDebitLeg.setAuth("Sender");
 
-                kuleanPaymentTransactionRepo.save(kTrans1a);*/
-                ProcLedgerRequestCreditOneTime rqq = new ProcLedgerRequestCreditOneTime();
-                rqq.setFundingType(getKul.get().getServiceType());
-                rqq.setKulFees(kulFees);
-                rqq.setKulTransactionId(rq.getProcessId());
-                
-                rqq.setNarration(narration);
-                rqq.setPhoneNumber(rq.getReceiver());
-                rqq.setSwFees(BigDecimal.ZERO);
-                rqq.setSwRefrenceNumber("");
-                rqq.setTransAmount(amountToCredit);
-                CreditWalletCaller rqC = new CreditWalletCaller();
-                rqC.setAuth("Receiver");
-                rqC.setFees(rqq.getSwFees().toString());
-                rqC.setFinalCHarges(rqq.getTransAmount().toString());
-                rqC.setNarration(narration);
-                rqC.setPhoneNumber(rq.getReceiver());
-                rqC.setTransAmount(rqq.getTransAmount().toString());
-                rqC.setTransactionId(rq.getProcessId() + "-CAD_RECV");
-                BaseResponse creditAcct = utilMeth.creditCustomer(rqC);
+            BatchPostingLegRequest receiverCreditLeg = new BatchPostingLegRequest();
+            receiverCreditLeg.setDirection("CREDIT");
+            receiverCreditLeg.setRequestRef(rq.getProcessId() + "-RECEIVER_CR");
+            receiverCreditLeg.setUserType("CUSTOMER");
+            receiverCreditLeg.setFees(rqq.getSwFees().toString());
+            receiverCreditLeg.setFinalCHarges(rqq.getTransAmount().toString());
+            receiverCreditLeg.setNarration(narration);
+            receiverCreditLeg.setPhoneNumber(rq.getReceiver());
+            receiverCreditLeg.setTransAmount(rqq.getTransAmount().toString());
+            receiverCreditLeg.setTransactionId(rq.getProcessId() + "-RECEIVER_CR");
+            receiverCreditLeg.setAuth("Receiver");
 
-                //  System.out.println("Credit Response from core ::::::::::::::::  %S  " + new Gson().toJson(creditAcct));
-                //BaseResponse creditAcct = genLedgerProxy.creditOneTime(rqq);
-                if (creditAcct.getStatusCode() == 200) {
+            BatchPostingLegRequest cadGlCreditLeg = new BatchPostingLegRequest();
+            cadGlCreditLeg.setDirection("CREDIT");
+            cadGlCreditLeg.setRequestRef(rq.getProcessId() + "-CAD_GL_CR");
+            cadGlCreditLeg.setUserType("CAD_GL_RECV");
+            cadGlCreditLeg.setFees("0.00");
+            cadGlCreditLeg.setFinalCHarges(amount);
+            cadGlCreditLeg.setNarration("CAD_Deposit");
+            cadGlCreditLeg.setPhoneNumber(decryptData(utilMeth.getSETTING_KEY_WALLET_SYSTEM_SYSTEM_GG_CAD()));
+            cadGlCreditLeg.setTransAmount(amount);
+            cadGlCreditLeg.setTransactionId(rq.getProcessId() + "-CAD_GL_CR");
+            cadGlCreditLeg.setAuth("Receiver");
 
-                    // Credit BAAS CAD_GL
-                    CreditWalletCaller cadGLCredit = new CreditWalletCaller();
-                    cadGLCredit.setAuth("Receiver");
-                    cadGLCredit.setFees("0.00");
-                    cadGLCredit.setFinalCHarges(amount);
-                    cadGLCredit.setNarration("CAD_Deposit");
-                    cadGLCredit.setPhoneNumber(decryptData(utilMeth.getSETTING_KEY_WALLET_SYSTEM_SYSTEM_GG_CAD()));
-                    cadGLCredit.setTransAmount(amount);
-                    cadGLCredit.setTransactionId(rq.getProcessId() + "-CAD_GL_RECV");
-                    
-                    utilMeth.creditCustomerWithType(cadGLCredit, "CAD_GL_RECV");
-                    
-                    FinWealthPaymentTransaction kTrans2b = new FinWealthPaymentTransaction();
-                    kTrans2b.setAmmount(new BigDecimal(rq.getAmount()));
-                    kTrans2b.setCreatedDate(Instant.now().plusSeconds(1));
-                    kTrans2b.setFees(new BigDecimal(getKul.get().getFees()));
-                    kTrans2b.setPaymentType("Wallet to Wallet Transfer");
-                    kTrans2b.setReceiver(rq.getReceiver());
-                    kTrans2b.setSender(getDecoded.phoneNumber);
-                    kTrans2b.setTransactionId(rq.getProcessId());
-                    kTrans2b.setSenderTransactionType("Withdrawal");
-                    kTrans2b.setReceiverTransactionType("Deposit");
-                    kTrans2b.setReceiverBankName(rq.getReceiverName());
-                    kTrans2b.setWalletNo(getDecoded.phoneNumber);
-                    kTrans2b.setReceiverName(rq.getReceiverName());
-                    kTrans2b.setSenderName(senderName);
-                    kTrans2b.setSentAmount(amountToCredit.toString());
-                    kTrans2b.setTheNarration(getnarration);
-                    kTrans2b.setCurrencyCode(CCY);
+            BatchPostingRequest batchRq = new BatchPostingRequest();
+            batchRq.setGroupRef(rq.getProcessId());
+            batchRq.getLegs().add(senderDebitLeg);
+            batchRq.getLegs().add(cadGlDebitLeg);
+            batchRq.getLegs().add(receiverCreditLeg);
+            batchRq.getLegs().add(cadGlCreditLeg);
 
-                    // finWealthPaymentTransactionRepo.save(kTrans2b);
-                    transactionHistoryClientLocalT.publishFromTxn(kTrans2b);
+            BaseResponse batchPostRes = utilMeth.batchPost(batchRq, auth);
 
-                    //save to wallet to wallet log
-                    WToWaletTransfer saveWalletT = new WToWaletTransfer(
-                            rq.getProcessId(), true,
-                            rq.getSender(), new BigDecimal(rq.getAmount()),
-                            finalChrges, rq.getReceiver(),
-                            new BigDecimal(rq.getAmount()),
-                            kulFees,
-                            narration, getKul.get().getServiceType(), getNameLookUpDe.get(0).getLTransSessReceiverName());
-                    wToWaletTransferRepo.save(saveWalletT);
-                    //update regWalletCheck
-                    RegWalletCheckLog logTransUp = regWalletCheckLogRepo.findByPhoneNumberId(rq.getSender());
-                    logTransUp.setProcessIdStatus("2");
-                    logTransUp.setLastModifiedDate(Instant.now());
-                    String procWalletTransferCumm = getNameLookUpDe.get(0).getWalletTransferCumm() == null ? "0" : getNameLookUpDe.get(0).getWalletTransferCumm();
-                    logTransUp.setWalletTransferCumm(new BigDecimal(procWalletTransferCumm).add(finalChrges).toString());
-                    logTransUp.setLTransSessExpiry(expiry);
-                    //logTransUp.setLTransSessExpiry(nowMillis);
-                    regWalletCheckLogRepo.save(logTransUp);
-                    
-                    List<LocalTransferRequestLog> getDee = localTransferRequestLogRepo.findByProcesIdProcessStatus(rq.getProcessId(), "1");
-                    
-                    if (getDee.size() > 0) {
-                        
-                        LocalTransferRequestLog getDeeDE = localTransferRequestLogRepo.findByProcesIdProcessStatusDe(rq.getProcessId(), "1");
-                        getDeeDE.setLastModifiedDate(Instant.now());
-                        getDeeDE.setProcessIdStatus("2");
-                        getDeeDE.setProcessIdStatusDesc("completed");
-                        
-                        localTransferRequestLogRepo.save(getDeeDE);
-                        
-                    }
-                    
-                    List<LocalBeneficiaries> getSavedBen = localBeneficiariesRepo.findByWalletNoByBeneficiaryActive(rq.getSender(), rq.getReceiver(), "1");
-                    if (getSavedBen.size() > 0) {
-                        
-                        LocalBeneficiaries getSavedBenUp = localBeneficiariesRepo.findByWalletNoByBeneficiaryActiveUpdate(rq.getSender(), rq.getReceiver(), "1");
-                        getSavedBenUp.setTransactionCount(getSavedBen.get(0).getTransactionCount() + 1);
-                        getSavedBenUp.setLastModifiedDate(Instant.now());
-                        getSavedBenUp.setRequestSource("Wallet-To-Wallet-Transfer");
-                        localBeneficiariesRepo.save(getSavedBenUp);
-                        
-                    }
-                    LocalBeneficiariesIndividual logBene = new LocalBeneficiariesIndividual();
-                    
-                    logBene.setBeneficiaryName(rq.getReceiverName());
-                    logBene.setBeneficiaryNo(rq.getReceiver());
-                    logBene.setBeneficiaryStatus("1");
-                    logBene.setCreatedDate(Instant.now());
-                    logBene.setWalletNo(getDecoded.phoneNumber);
-                    logBene.setRequestSource("Wallet-To-Wallet-Transfer");
-                    localBeneficiariesIndividualRepo.save(logBene);
-                    
-                    List<RegWalletInfo> getReceiverName = regWalletInfoRepository.findByPhoneNumberData(rq.getReceiver());
-                    List<RegWalletInfo> getSenderName = regWalletInfoRepository.findByPhoneNumberData(getDecoded.phoneNumber);
-                    
-                    PushNotificationFireBase puFire = new PushNotificationFireBase();
-                    puFire.setBody(pushNotifyDebitWalletForWalletTransfer(new BigDecimal(rq.getAmount()),
-                            rq.getReceiverName(), getSenderName.get(0).getFirstName() + " " + getSenderName.get(0).getLastName()
-                    ));
-                    List<DeviceDetails> getDe = deviceDetailsRepo.findAllByWalletId(getReceiverName.get(0).getWalletId());
-                    
-                    puFire.setTitle("Wallet-To-Wallet-Transfer");
-                    if (getDe.size() > 0) {
-                        String getToken = getDe.get(0).getToken() == null ? "" : getDe.get(0).getToken();
-                        
-                        if (getToken != "") {
-                            System.out.println("Receiver has token::::::::::::::::  %S  ");
-                            
-                            puFire.setDeviceToken(getDe.get(0).getToken());
-                            Map<String, String> data = new HashMap<String, String>();
-                            data.put("type", "ALERT");            // sample custom data
-                            if (puFire.getData() != null) {
-                                data.putAll(puFire.getData());
-                            }
-                            
-                            messageCenterService.createAndPushToUser(getReceiverName.get(0).getWalletId(), puFire.getTitle(),
-                                    puFire.getBody(),
-                                    data, null, "");
+            if (batchPostRes.getStatusCode() == 200) {
+                FinWealthPaymentTransaction kTrans2b = new FinWealthPaymentTransaction();
+                kTrans2b.setAmmount(new BigDecimal(rq.getAmount()));
+                kTrans2b.setCreatedDate(Instant.now().plusSeconds(1));
+                kTrans2b.setFees(new BigDecimal(getKul.get().getFees()));
+                kTrans2b.setPaymentType("Wallet to Wallet Transfer");
+                kTrans2b.setReceiver(rq.getReceiver());
+                kTrans2b.setSender(getDecoded.phoneNumber);
+                kTrans2b.setTransactionId(rq.getProcessId());
+                kTrans2b.setSenderTransactionType("Withdrawal");
+                kTrans2b.setReceiverTransactionType("Deposit");
+                kTrans2b.setReceiverBankName(rq.getReceiverName());
+                kTrans2b.setWalletNo(getDecoded.phoneNumber);
+                kTrans2b.setReceiverName(rq.getReceiverName());
+                kTrans2b.setSenderName(senderName);
+                kTrans2b.setSentAmount(amountToCredit.toString());
+                kTrans2b.setTheNarration(getnarration);
+                kTrans2b.setCurrencyCode(CCY);
 
-                            /*fcmService.sendToToken(
-                                    puFire.getDeviceToken(),
-                                    puFire.getTitle(),
-                                    puFire.getBody(),
-                                    data
-                            );*/
-                        }
-                        
-                    }
-                    PushNotificationFireBase puFireSender = new PushNotificationFireBase();
-                    puFireSender.setBody(pushNotifyDebitWalletForWalletTransferSender(new BigDecimal(rq.getAmount()),
-                            rq.getReceiverName(), getSenderName.get(0).getFirstName() + " " + getSenderName.get(0).getLastName()
-                    ));
-                    List<DeviceDetails> getDepuFireSender = deviceDetailsRepo.findAllByWalletId(getSenderName.get(0).getWalletId());
-                    
-                    puFireSender.setTitle("Wallet-To-Wallet-Transfer");
-                    if (getDepuFireSender.size() > 0) {
-                        
-                        String getToken = getDepuFireSender.get(0).getToken() == null ? "" : getDepuFireSender.get(0).getToken();
-                        
-                        if (getToken != null && !getToken.trim().isEmpty()) {
-                            
-                            System.out.println("Sender has token::::::::::::::::  %S  ");
-                            
-                            puFireSender.setDeviceToken(getDepuFireSender.get(0).getToken());
-                            Map<String, String> data = new HashMap<String, String>();
-                            data.put("type", "ALERT");            // sample custom data
-                            if (puFireSender.getData() != null) {
-                                data.putAll(puFireSender.getData());
-                            }
+                transactionHistoryClientLocalT.publishFromTxn(kTrans2b);
 
-                            /*fcmService.sendToToken(
-                                    puFireSender.getDeviceToken(),
-                                    puFireSender.getTitle(),
-                                    puFireSender.getBody(),
-                                    data
-                            );*/
-                            messageCenterService.createAndPushToUser(getSenderName.get(0).getWalletId(), puFireSender.getTitle(),
-                                    puFireSender.getBody(),
-                                    data, null, "");
-                            
-                        }
-                    }
-                    responseModel.setDescription("Wallet to Wallet transfer, transfer performed successfully.");
-                    //    List<WToWaletTransfer> getExistRec = wToWaletTransferRepo.findBySenderAndReceiver(getDecoded.phoneNumber, rq.getReceiver());
+                WToWaletTransfer saveWalletT = new WToWaletTransfer(
+                        rq.getProcessId(), true,
+                        rq.getSender(), new BigDecimal(rq.getAmount()),
+                        finalChrges, rq.getReceiver(),
+                        new BigDecimal(rq.getAmount()),
+                        kulFees,
+                        narration, getKul.get().getServiceType(), getNameLookUpDe.get(0).getLTransSessReceiverName());
+                wToWaletTransferRepo.save(saveWalletT);
+                RegWalletCheckLog logTransUp = regWalletCheckLogRepo.findByPhoneNumberId(rq.getSender());
+                logTransUp.setProcessIdStatus("2");
+                logTransUp.setLastModifiedDate(Instant.now());
+                String procWalletTransferCumm = getNameLookUpDe.get(0).getWalletTransferCumm() == null ? "0" : getNameLookUpDe.get(0).getWalletTransferCumm();
+                logTransUp.setWalletTransferCumm(new BigDecimal(procWalletTransferCumm).add(finalChrges).toString());
+                logTransUp.setLTransSessExpiry(expiry);
+                regWalletCheckLogRepo.save(logTransUp);
 
-                    if (getSavedBen.size() > 0) {
-                        responseModel.addData("isBeneficiary", true);
-                    } else {
-                        responseModel.addData("isBeneficiary", false);
-                        responseModel.addData("receiverName", rq.getReceiverName());
-                    }
+                List<LocalTransferRequestLog> getDee = localTransferRequestLogRepo.findByProcesIdProcessStatus(rq.getProcessId(), "1");
 
-                    /* EmailRequest emailRe = new EmailRequest();
-                    emailRe.setBody(generateTopUpMsg(getReceiver.get(0).getFirstName() + " " + getReceiver.get(0).getLastName(), rq.getAmount()));
-                    emailRe.setSubject("KuleanPay Wallet Topup Notification");
-                    emailRe.setTo(getReceiver.get(0).getEmail());
-                    BaseResponse sendMail = utilitiesProxy.sendEmails(emailRe);
-                    System.out.println("sendMail response:::::::: req" + "   >>>>>>>>>>>>>>>>>> ::::::::::::::::::::: " + new Gson().toJson(sendMail));
-                    System.out.println("sendMail response:::::::: req" + "   >>>>>>>>>>>>>>>>>> ::::::::::::::::::::: ");
+                if (getDee.size() > 0) {
+                    LocalTransferRequestLog getDeeDE = localTransferRequestLogRepo.findByProcesIdProcessStatusDe(rq.getProcessId(), "1");
+                    getDeeDE.setLastModifiedDate(Instant.now());
+                    getDeeDE.setProcessIdStatus("2");
+                    getDeeDE.setProcessIdStatusDesc("completed");
 
-                    EmailRequest emailSe = new EmailRequest();
-                    emailSe.setBody(generateDebitAcctMsg(getSenderName.get(0).getFirstName() + " " + getSenderName.get(0).getLastName(), rq.getAmount()));
-                    emailSe.setSubject("KuleanPay Wallet Account Debit Notification");
-                    emailSe.setTo(getSenderName.get(0).getEmail());
-                    BaseResponse sendMailemailSe = utilitiesProxy.sendEmails(emailSe);
-                    System.out.println("sendMail sender response:::::::: req" + "   >>>>>>>>>>>>>>>>>> ::::::::::::::::::::: " + new Gson().toJson(sendMailemailSe));
-                    System.out.println("sendMail sender response:::::::: req" + "   >>>>>>>>>>>>>>>>>> ::::::::::::::::::::: ");
-                     */
-                    responseModel.setStatusCode(200);
-                    
-                    return responseModel;
-                    
-                } else {
-                    //roll back -> credit sender or log for retrial
-
-                    LocalTLogRetrialDebit logDeb = new LocalTLogRetrialDebit();
-                    logDeb.setCreatedDate(Instant.now());
-                    logDeb.setDescription(reqq.getDescription());
-                    logDeb.setFinalCharges(reqq.getFinalCharges());
-                    logDeb.setKuleanFees(reqq.getKuleanFess());
-                    logDeb.setNarration(reqq.getNarration());
-                    logDeb.setTransactionId(reqq.getTransactionId());
-                    logDeb.setWalletNo(reqq.getPhonenumber());
-                    logDeb.setProcessedStatus("1");
-                    logDeb.setProcessedStatusDesc("Pending");
-                    localTLogRetrialDebitRepo.save(logDeb);
-                    //log failed wallet-wallet
-                    RegWalletCheckLog logTransUp = regWalletCheckLogRepo.findByPhoneNumberId(rq.getSender());
-                    logTransUp.setProcessIdStatus("2");
-                    logTransUp.setLastModifiedDate(Instant.now());
-                    regWalletCheckLogRepo.save(logTransUp);
-                    
-                    List<LocalTransferRequestLog> getDee = localTransferRequestLogRepo.findByProcesIdProcessStatus(rq.getProcessId(), "1");
-                    
-                    if (getDee.size() > 0) {
-                        
-                        LocalTransferRequestLog getDeeDE = localTransferRequestLogRepo.findByProcesIdProcessStatusDe(rq.getProcessId(), "1");
-                        getDeeDE.setLastModifiedDate(Instant.now());
-                        getDeeDE.setProcessIdStatus("3");
-                        getDeeDE.setProcessIdStatusDesc("debit was successful, but credit failed!");
-                        
-                        localTransferRequestLogRepo.save(getDeeDE);
-                        
-                    }
-                    
-                    responseModel.setDescription("Wallet to Wallet transfer, transfer failed!");
-                    responseModel.setStatusCode(statusCode);
-                    return responseModel;
+                    localTransferRequestLogRepo.save(getDeeDE);
                 }
+
+                List<LocalBeneficiaries> getSavedBen = localBeneficiariesRepo.findByWalletNoByBeneficiaryActive(rq.getSender(), rq.getReceiver(), "1");
+                if (getSavedBen.size() > 0) {
+                    LocalBeneficiaries getSavedBenUp = localBeneficiariesRepo.findByWalletNoByBeneficiaryActiveUpdate(rq.getSender(), rq.getReceiver(), "1");
+                    getSavedBenUp.setTransactionCount(getSavedBen.get(0).getTransactionCount() + 1);
+                    getSavedBenUp.setLastModifiedDate(Instant.now());
+                    getSavedBenUp.setRequestSource("Wallet-To-Wallet-Transfer");
+                    localBeneficiariesRepo.save(getSavedBenUp);
+                }
+                LocalBeneficiariesIndividual logBene = new LocalBeneficiariesIndividual();
+
+                logBene.setBeneficiaryName(rq.getReceiverName());
+                logBene.setBeneficiaryNo(rq.getReceiver());
+                logBene.setBeneficiaryStatus("1");
+                logBene.setCreatedDate(Instant.now());
+                logBene.setWalletNo(getDecoded.phoneNumber);
+                logBene.setRequestSource("Wallet-To-Wallet-Transfer");
+                localBeneficiariesIndividualRepo.save(logBene);
+
+                List<RegWalletInfo> getReceiverName = regWalletInfoRepository.findByPhoneNumberData(rq.getReceiver());
+                List<RegWalletInfo> getSenderName = regWalletInfoRepository.findByPhoneNumberData(getDecoded.phoneNumber);
+
+                PushNotificationFireBase puFire = new PushNotificationFireBase();
+                puFire.setBody(pushNotifyDebitWalletForWalletTransfer(new BigDecimal(rq.getAmount()),
+                        rq.getReceiverName(), getSenderName.get(0).getFirstName() + " " + getSenderName.get(0).getLastName()
+                ));
+                List<DeviceDetails> getDe = deviceDetailsRepo.findAllByWalletId(getReceiverName.get(0).getWalletId());
+
+                puFire.setTitle("Wallet-To-Wallet-Transfer");
+                if (getDe.size() > 0) {
+                    String getToken = getDe.get(0).getToken() == null ? "" : getDe.get(0).getToken();
+
+                    if (getToken != "") {
+                        System.out.println("Receiver has token::::::::::::::::  %S  ");
+
+                        puFire.setDeviceToken(getDe.get(0).getToken());
+                        Map<String, String> data = new HashMap<String, String>();
+                        data.put("type", "ALERT");
+                        if (puFire.getData() != null) {
+                            data.putAll(puFire.getData());
+                        }
+
+                        messageCenterService.createAndPushToUser(getReceiverName.get(0).getWalletId(), puFire.getTitle(),
+                                puFire.getBody(),
+                                data, null, "");
+                    }
+                }
+                PushNotificationFireBase puFireSender = new PushNotificationFireBase();
+                puFireSender.setBody(pushNotifyDebitWalletForWalletTransferSender(new BigDecimal(rq.getAmount()),
+                        rq.getReceiverName(), getSenderName.get(0).getFirstName() + " " + getSenderName.get(0).getLastName()
+                ));
+                List<DeviceDetails> getDepuFireSender = deviceDetailsRepo.findAllByWalletId(getSenderName.get(0).getWalletId());
+
+                puFireSender.setTitle("Wallet-To-Wallet-Transfer");
+                if (getDepuFireSender.size() > 0) {
+                    String getToken = getDepuFireSender.get(0).getToken() == null ? "" : getDepuFireSender.get(0).getToken();
+
+                    if (getToken != null && !getToken.trim().isEmpty()) {
+                        System.out.println("Sender has token::::::::::::::::  %S  ");
+
+                        puFireSender.setDeviceToken(getDepuFireSender.get(0).getToken());
+                        Map<String, String> data = new HashMap<String, String>();
+                        data.put("type", "ALERT");
+                        if (puFireSender.getData() != null) {
+                            data.putAll(puFireSender.getData());
+                        }
+
+                        messageCenterService.createAndPushToUser(getSenderName.get(0).getWalletId(), puFireSender.getTitle(),
+                                puFireSender.getBody(),
+                                data, null, "");
+                    }
+                }
+                responseModel.setDescription("Wallet to Wallet transfer, transfer performed successfully.");
+
+                if (getSavedBen.size() > 0) {
+                    responseModel.addData("isBeneficiary", true);
+                } else {
+                    responseModel.addData("isBeneficiary", false);
+                    responseModel.addData("receiverName", rq.getReceiverName());
+                }
+
+                responseModel.setStatusCode(200);
+                return responseModel;
             } else {
                 RegWalletCheckLog logTransUp = regWalletCheckLogRepo.findByPhoneNumberId(rq.getSender());
                 logTransUp.setProcessIdStatus("2");
                 logTransUp.setLastModifiedDate(Instant.now());
                 regWalletCheckLogRepo.save(logTransUp);
-                
+
                 List<LocalTransferRequestLog> getDee = localTransferRequestLogRepo.findByProcesIdProcessStatus(rq.getProcessId(), "1");
-                
+
                 if (getDee.size() > 0) {
-                    
                     LocalTransferRequestLog getDeeDE = localTransferRequestLogRepo.findByProcesIdProcessStatusDe(rq.getProcessId(), "1");
                     getDeeDE.setLastModifiedDate(Instant.now());
                     getDeeDE.setProcessIdStatus("3");
                     getDeeDE.setProcessIdStatusDesc("transaction failed!");
-                    
+
                     localTransferRequestLogRepo.save(getDeeDE);
-                    
                 }
 
-                //log failed wallet-wallet
                 responseModel.setDescription("Wallet to Wallet transfer, transfer failed!");
                 responseModel.setStatusCode(statusCode);
                 return responseModel;
-                
             }
             
         } catch (Exception ex) {

@@ -14,7 +14,9 @@ Swagger should still be used as the live reference for trying requests, but this
 
 ## Base Notes
 
-- Base URL: use the deployed backoffice service base URL for your environment.
+- Public production base URL: `https://finacialwealth.com`.
+- Public gateway prefix: use `/bo` for frontend calls. The gateway may strip `/bo` before forwarding to the service.
+- Direct service/local paths may appear without `/bo`; the examples below use public production paths.
 - Auth style: JWT Bearer token in `Authorization: Bearer <accessToken>`.
 - Swagger/OpenAPI: available on the service and now grouped by `Investments`, `Customers`, `Approvals`, `Roles`, and `Permissions`.
 - Backend enforcement: the backend is the source of truth for authorization.
@@ -168,7 +170,7 @@ Typical shape:
 
 ### D. Approval responses
 
-Used by `/backoffice/approvals`.
+Used by `/bo/backoffice/approvals`.
 
 List shape:
 
@@ -233,7 +235,7 @@ Notes:
 
 #### List products
 
-`GET /backoffice/investments/products`
+`GET /bo/backoffice/investments/products`
 
 Notes:
 
@@ -242,7 +244,7 @@ Notes:
 
 #### Create product
 
-`POST /backoffice/investments/products`
+`POST /bo/backoffice/investments/products`
 
 Request body example:
 
@@ -265,13 +267,13 @@ Request body example:
 
 #### Update product
 
-`PUT /backoffice/investments/products/{productCode}`
+`PUT /bo/backoffice/investments/products/{productCode}`
 
 Use the same body as create. The path `productCode` wins over any body value.
 
 #### Export products
 
-`GET /backoffice/investments/products/export.csv`
+`GET /bo/backoffice/investments/products/export.csv`
 
 Response: CSV file download.
 
@@ -279,7 +281,7 @@ Response: CSV file download.
 
 #### Active liquidation table
 
-`GET /backoffice/investments/liquidations`
+`GET /bo/backoffice/investments/liquidations`
 
 Query params:
 
@@ -318,7 +320,7 @@ Typical `liquidationType` values:
 
 #### Historical liquidation table
 
-`GET /backoffice/investments/liquidations/history`
+`GET /bo/backoffice/investments/liquidations/history`
 
 Same query params and row shape as the active table.
 
@@ -333,7 +335,7 @@ Typical history statuses:
 
 #### Orders table
 
-`GET /backoffice/investments/orders`
+`GET /bo/backoffice/investments/orders`
 
 Query params:
 
@@ -380,7 +382,7 @@ Frontend note:
 
 #### List customers
 
-`GET /backoffice/profiling?page=0&size=20&sort=id,desc`
+`GET /bo/backoffice/profiling?page=0&size=20&sort=id,desc`
 
 Response envelope:
 
@@ -410,11 +412,11 @@ Customer object includes fields such as:
 
 #### Customer profile
 
-`GET /backoffice/profiling/{customerId}`
+`GET /bo/backoffice/profiling/{customerId}`
 
 #### Customer investment summary
 
-`GET /backoffice/profiling/{customerId}/investment-summary`
+`GET /bo/backoffice/profiling/{customerId}/investment-summary`
 
 Response shape:
 
@@ -431,7 +433,7 @@ This is the best endpoint for the main customer detail landing page.
 
 #### Customer orders
 
-`GET /backoffice/profiling/{customerId}/orders`
+`GET /bo/backoffice/profiling/{customerId}/orders`
 
 Query params:
 
@@ -442,7 +444,7 @@ Query params:
 
 #### Customer liquidations
 
-`GET /backoffice/profiling/{customerId}/liquidations`
+`GET /bo/backoffice/profiling/{customerId}/liquidations`
 
 Query params:
 
@@ -452,7 +454,7 @@ Query params:
 
 #### Customer positions
 
-`GET /backoffice/profiling/{customerId}/positions`
+`GET /bo/backoffice/profiling/{customerId}/positions`
 
 Query params:
 
@@ -481,11 +483,11 @@ Position row fields currently returned:
 
 #### Block customer
 
-`PATCH /backoffice/profiling/{id}/block`
+`PATCH /bo/backoffice/profiling/{id}/block`
 
 #### Unblock customer
 
-`PATCH /backoffice/profiling/{id}/unblock`
+`PATCH /bo/backoffice/profiling/{id}/unblock`
 
 Use the same request body already used by profiling block/unblock screens.
 
@@ -495,7 +497,7 @@ These are the new maker-checker endpoints.
 
 #### List approval inbox
 
-`GET /backoffice/approvals`
+`GET /bo/backoffice/approvals`
 
 Query params:
 
@@ -511,19 +513,19 @@ If `status` is omitted, the backend currently returns:
 
 #### Get approval detail
 
-`GET /backoffice/approvals/{approvalId}`
+`GET /bo/backoffice/approvals/{approvalId}`
 
 Use this for the approval detail drawer or page.
 
 #### Approve
 
-`POST /backoffice/approvals/{approvalId}/approve`
+`POST /bo/backoffice/approvals/{approvalId}/approve`
 
 No request body required.
 
 #### Reject
 
-`POST /backoffice/approvals/{approvalId}/reject`
+`POST /bo/backoffice/approvals/{approvalId}/reject`
 
 Request body:
 
@@ -535,7 +537,7 @@ Request body:
 
 #### Resubmit after remediation
 
-`POST /backoffice/approvals/{approvalId}/resubmit`
+`POST /bo/backoffice/approvals/{approvalId}/resubmit`
 
 Request body:
 
@@ -573,7 +575,9 @@ You may see the following event types in the detail response:
 
 #### List permission catalog
 
-`GET /api/admin/permissions`
+`GET /bo/admin/permissions`
+
+Gateway note: this is also mapped as `/admin/permissions` inside the service because production may strip the `/bo` prefix before forwarding.
 
 Response item shape:
 
@@ -590,7 +594,9 @@ Response item shape:
 
 #### List roles
 
-`GET /api/admin/roles`
+`GET /bo/admin/roles`
+
+Gateway note: this is also mapped as `/admin/roles` inside the service because production may strip the `/bo` prefix before forwarding.
 
 Response item shape:
 
@@ -607,7 +613,7 @@ Response item shape:
 
 #### Create role
 
-`POST /api/admin/roles`
+`POST /bo/admin/roles`
 
 Request body:
 
@@ -623,7 +629,7 @@ Request body:
 
 #### Replace role permissions
 
-`PUT /api/admin/roles/{roleId}/permissions`
+`PUT /bo/admin/roles/{roleId}/permissions`
 
 Request body:
 
@@ -637,6 +643,60 @@ Request body:
 }
 ```
 
+### 7. Admin User Management
+
+Admin user routes are available under `/bo/admin-users`, `/admin-users`, and `/backoffice/admin-users`. Prefer `/bo/admin-users` for production frontend work because the public gateway already routes the `/bo` prefix. Inside the service, the gateway may strip `/bo`, so `/admin-users` is also mapped.
+
+#### Create admin user
+
+`POST /bo/admin-users`
+
+Request body:
+
+```json
+{
+  "email": "checker@example.com",
+  "fullName": "Investment Checker",
+  "password": "Password@123",
+  "confirmPassword": "Password@123",
+  "roles": [
+    {
+      "id": 4,
+      "name": "INVESTMENT_CHECKER"
+    }
+  ]
+}
+```
+
+#### Update admin user
+
+`PATCH /bo/admin-users/{adminId}`
+
+Request body:
+
+```json
+{
+  "fullName": "Investment Checker",
+  "roles": [
+    {
+      "id": 4,
+      "name": "INVESTMENT_CHECKER"
+    }
+  ]
+}
+```
+
+#### Activate, suspend, and reset password
+
+- `POST /bo/admin-users/{adminId}/activate`
+- `POST /bo/admin-users/{adminId}/suspend`
+- `POST /bo/admin-users/{adminId}/password-reset`
+
+#### List and view admin users
+
+- `GET /bo/admin-users/admins?page=0&size=20&q=checker`
+- `GET /bo/admin-users/admins/{adminId}`
+
 ## Suggested Screen-to-Endpoint Mapping
 
 ### Login Page
@@ -646,22 +706,22 @@ Request body:
 
 ### Dashboard Counters
 
-- liquidation pending count: `GET /backoffice/investments/liquidations`
-- approval inbox count: `GET /backoffice/approvals`
+- liquidation pending count: `GET /bo/backoffice/investments/liquidations`
+- approval inbox count: `GET /bo/backoffice/approvals`
 
 ### Liquidation Queue Screen
 
-- table: `GET /backoffice/investments/liquidations`
-- history tab: `GET /backoffice/investments/liquidations/history`
-- if using maker-checker flow, actions should go through `/backoffice/approvals/*`
+- table: `GET /bo/backoffice/investments/liquidations`
+- history tab: `GET /bo/backoffice/investments/liquidations/history`
+- if using maker-checker flow, actions should go through `/bo/backoffice/approvals/*`
 
 ### Transactions / Orders Screen
 
-- table: `GET /backoffice/investments/orders`
+- table: `GET /bo/backoffice/investments/orders`
 
 ### Customer Detail Screen
 
-- shell load: `GET /backoffice/profiling/{customerId}/investment-summary`
+- shell load: `GET /bo/backoffice/profiling/{customerId}/investment-summary`
 - optional tab-specific pagination:
   - `/orders`
   - `/liquidations`
@@ -669,18 +729,28 @@ Request body:
 
 ### Approval Inbox Screen
 
-- list: `GET /backoffice/approvals`
-- detail: `GET /backoffice/approvals/{approvalId}`
-- approve: `POST /backoffice/approvals/{approvalId}/approve`
-- reject: `POST /backoffice/approvals/{approvalId}/reject`
-- resubmit: `POST /backoffice/approvals/{approvalId}/resubmit`
+- list: `GET /bo/backoffice/approvals`
+- detail: `GET /bo/backoffice/approvals/{approvalId}`
+- approve: `POST /bo/backoffice/approvals/{approvalId}/approve`
+- reject: `POST /bo/backoffice/approvals/{approvalId}/reject`
+- resubmit: `POST /bo/backoffice/approvals/{approvalId}/resubmit`
 
 ### Role Management Screen
 
-- permission picklist: `GET /api/admin/permissions`
-- role table: `GET /api/admin/roles`
-- create role: `POST /api/admin/roles`
-- edit role permissions: `PUT /api/admin/roles/{roleId}/permissions`
+- permission picklist: `GET /bo/admin/permissions`
+- role table: `GET /bo/admin/roles`
+- create role: `POST /bo/admin/roles`
+- edit role permissions: `PUT /bo/admin/roles/{roleId}/permissions`
+
+### Admin User Management Screen
+
+- table: `GET /bo/admin-users/admins`
+- detail: `GET /bo/admin-users/admins/{adminId}`
+- create user: `POST /bo/admin-users`
+- update user: `PATCH /bo/admin-users/{adminId}`
+- activate user: `POST /bo/admin-users/{adminId}/activate`
+- suspend user: `POST /bo/admin-users/{adminId}/suspend`
+- password reset: `POST /bo/admin-users/{adminId}/password-reset`
 
 ## Frontend Caveats
 

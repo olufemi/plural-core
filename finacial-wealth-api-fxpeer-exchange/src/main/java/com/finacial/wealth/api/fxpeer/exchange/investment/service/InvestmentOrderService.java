@@ -232,6 +232,13 @@ public class InvestmentOrderService {
                     getK.setLiquidationFeeType(readLiquidationFeeType(getKul).map(Enum::name).orElse(null));
                     getK.setLiquidationFeeRate(readLiquidationFeeRate(getKul));
                     getK.setMinLiquidationFee(readMinLiquidationFeeNew(getKul));
+                    getK.setLiquidationFeeCap(readLiquidationFeeCap(getKul));
+                    getK.setLockEnabled(readLockEnabled(getKul));
+                    getK.setLockDays(readLockDays(getKul));
+                    getK.setEarlyLiquidationFeeAppliedTo(readEarlyLiquidationFeeAppliedTo(getKul).map(Enum::name).orElse(null));
+                    getK.setEarlyLiquidationFeeType(readEarlyLiquidationFeeType(getKul).map(Enum::name).orElse(null));
+                    getK.setEarlyLiquidationFeeRate(readEarlyLiquidationFeeRate(getKul));
+                    getK.setEarlyLiquidationFeeCap(readEarlyLiquidationFeeCap(getKul));
                     getK.setYieldPa(getKul.getYieldPa());
                     getK.setYieldYtd(getKul.getYieldYtd());
                     mapAll.add(getK);
@@ -252,6 +259,32 @@ public class InvestmentOrderService {
 
         return ResponseEntity.ok(responseModel);
 
+    }
+
+    private BaseResponse creditAccount(String auth, String phoneNumber, BigDecimal amount, String transactionId,
+            String narration, String userType, String actor) {
+        CreditWalletCaller rq = new CreditWalletCaller();
+        rq.setAuth(actor);
+        rq.setFees("0.00");
+        rq.setFinalCHarges(amount.toPlainString());
+        rq.setNarration(narration);
+        rq.setPhoneNumber(phoneNumber);
+        rq.setTransAmount(amount.toPlainString());
+        rq.setTransactionId(transactionId);
+        return transactionServiceProxies.creditCustomerWithType(rq, userType, auth);
+    }
+
+    private BaseResponse debitAccount(String auth, String phoneNumber, BigDecimal amount, String transactionId,
+            String narration, String userType, String actor) {
+        DebitWalletCaller rq = new DebitWalletCaller();
+        rq.setAuth(actor);
+        rq.setFees("0.00");
+        rq.setFinalCHarges(amount.toPlainString());
+        rq.setNarration(narration);
+        rq.setPhoneNumber(phoneNumber);
+        rq.setTransAmount(amount.toPlainString());
+        rq.setTransactionId(transactionId);
+        return transactionServiceProxies.debitCustomerWithType(rq, userType, auth);
     }
 
     private PreDebitInvestmentResult debitAndAddToInvestmentWallet(
@@ -360,7 +393,12 @@ public class InvestmentOrderService {
                 }
             }
             if (GGL_ACCOUNT == null || AIRTIME_GGL_ACCOUNT == null || GGL_CODE == null) {
-                out.setError(new BaseResponse(500, "GL configuration missing for currency " + rq.getCurrencyCode()));
+                BaseResponse buyerRefund = creditAccount(auth, accountNumber, finCharges,
+                        processId + "-INV-REFUND", debitBuyer.getNarration() + "_REVERSAL", "CUSTOMER", "Money_Market");
+                out.setError(new BaseResponse(500,
+                        buyerRefund.getStatusCode() == 200
+                                ? "GL configuration missing for currency " + rq.getCurrencyCode() + ". Customer debit has been reversed."
+                                : "GL configuration missing for currency " + rq.getCurrencyCode() + ". Customer reversal failed; manual intervention required."));
                 return out;
             }
             String decryptedGL = utilService.decryptData(GGL_ACCOUNT);
@@ -380,7 +418,12 @@ public class InvestmentOrderService {
             System.out.println(" preDebitAndSettleAirtime debitGLRes ::::::::::::::::  %S  " + new Gson().toJson(debitGLRes));
 
             if (debitGLRes.getStatusCode() != 200) {
-                out.setError(new BaseResponse(debitGLRes.getStatusCode(), debitGLRes.getDescription()));
+                BaseResponse buyerRefund = creditAccount(auth, accountNumber, finCharges,
+                        processId + "-INV-REFUND", debitBuyer.getNarration() + "_REVERSAL", "CUSTOMER", "Money_Market");
+                out.setError(new BaseResponse(500,
+                        buyerRefund.getStatusCode() == 200
+                                ? "Investment debit failed at GL leg. Customer debit has been reversed."
+                                : "Investment debit failed at GL leg, and customer reversal also failed. Manual intervention required."));
                 return out;
             }
             out.setLegGLDebited(true);
@@ -1365,16 +1408,6 @@ public class InvestmentOrderService {
 
             System.out.println("Credit liquidation REQ :: " + new Gson().toJson(rqC));
 
-            BaseResponse creditCustomer
-                    = transactionServiceProxies.creditCustomerWithType(
-                            rqC, "CUSTOMER", "");
-
-            System.out.println("Credit liquidation RESP :: " + new Gson().toJson(creditCustomer));
-
-            if (creditCustomer.getStatusCode() != 200) {
-                throw new BusinessException("Customer wallet credit failed");
-            }
-
             // ---------------- GL credit ----------------
             String glAccount = appConfigRepo
                     .findByConfigName(order.getProduct().getCurrency())
@@ -1390,12 +1423,31 @@ public class InvestmentOrderService {
             gl.setNarration(rqC.getNarration());
             gl.setPhoneNumber(utilService.decryptData(glAccount));
             gl.setTransAmount(order.getNetAmount().toPlainString());
-            gl.setTransactionId(order.getOrderRef());
+            gl.setTransactionId(order.getOrderRef() + "-GL-CR");
 
             System.out.println("GL credit REQ :: " + new Gson().toJson(gl));
 
-            transactionServiceProxies.creditCustomerWithType(
+            BaseResponse glCreditRes = transactionServiceProxies.creditCustomerWithType(
                     gl, order.getProduct().getCurrency(), "");
+            if (glCreditRes.getStatusCode() != 200) {
+                throw new BusinessException("Investment liquidation GL credit failed");
+            }
+
+            BaseResponse creditCustomer
+                    = transactionServiceProxies.creditCustomerWithType(
+                            rqC, "CUSTOMER", "");
+
+            System.out.println("Credit liquidation RESP :: " + new Gson().toJson(creditCustomer));
+
+            if (creditCustomer.getStatusCode() != 200) {
+                BaseResponse reverseGl = debitAccount("", utilService.decryptData(glAccount), order.getNetAmount(),
+                        order.getOrderRef() + "-GL-REVERSAL", rqC.getNarration() + "_REVERSAL",
+                        order.getProduct().getCurrency(), "Receiver");
+                if (reverseGl.getStatusCode() != 200) {
+                    throw new BusinessException("Customer wallet credit failed after GL release; manual intervention required");
+                }
+                throw new BusinessException("Customer wallet credit failed");
+            }
 
             res.setStatusCode(200);
 
@@ -2010,6 +2062,106 @@ public class InvestmentOrderService {
         }
     }
 
+    private BigDecimal readLiquidationFeeCap(InvestmentProduct product) {
+        return readFeeAmount(product, "liquidationFee", "cap");
+    }
+
+    private Boolean readLockEnabled(InvestmentProduct product) {
+        try {
+            if (product == null || product.getMetaJson() == null || product.getMetaJson().isBlank()) {
+                return null;
+            }
+            JsonNode root = new ObjectMapper().readTree(product.getMetaJson());
+            JsonNode value = root.path("lockConfig").path("enabled");
+            if (value.isMissingNode() || value.isNull()) {
+                return null;
+            }
+            return value.asBoolean();
+        } catch (Exception ex) {
+            return null;
+        }
+    }
+
+    private Integer readLockDays(InvestmentProduct product) {
+        try {
+            if (product == null || product.getMetaJson() == null || product.getMetaJson().isBlank()) {
+                return null;
+            }
+            JsonNode root = new ObjectMapper().readTree(product.getMetaJson());
+            JsonNode value = root.path("lockConfig").path("days");
+            if (value.isMissingNode() || value.isNull() || value.asText().isBlank()) {
+                return null;
+            }
+            return value.asInt();
+        } catch (Exception ex) {
+            return null;
+        }
+    }
+
+    private Optional<LiquidationFeeAppliedTo> readEarlyLiquidationFeeAppliedTo(InvestmentProduct product) {
+        return readFeeAppliedTo(product, "earlyLiquidationFee");
+    }
+
+    private Optional<com.finacial.wealth.api.fxpeer.exchange.investment.ennum.LiquidationFeeType> readEarlyLiquidationFeeType(InvestmentProduct product) {
+        return readFeeType(product, "earlyLiquidationFee");
+    }
+
+    private BigDecimal readEarlyLiquidationFeeRate(InvestmentProduct product) {
+        return readFeeAmount(product, "earlyLiquidationFee", "rate");
+    }
+
+    private BigDecimal readEarlyLiquidationFeeCap(InvestmentProduct product) {
+        return readFeeAmount(product, "earlyLiquidationFee", "cap");
+    }
+
+    private Optional<LiquidationFeeAppliedTo> readFeeAppliedTo(InvestmentProduct product, String nodeName) {
+        try {
+            if (product == null || product.getMetaJson() == null || product.getMetaJson().isBlank()) {
+                return Optional.empty();
+            }
+            JsonNode root = new ObjectMapper().readTree(product.getMetaJson());
+            JsonNode value = root.path(nodeName).path("appliedTo");
+            if (value.isMissingNode() || value.asText().isBlank()) {
+                return Optional.empty();
+            }
+            return Optional.of(LiquidationFeeAppliedTo.valueOf(value.asText()));
+        } catch (Exception ex) {
+            return Optional.empty();
+        }
+    }
+
+    private Optional<com.finacial.wealth.api.fxpeer.exchange.investment.ennum.LiquidationFeeType> readFeeType(InvestmentProduct product, String nodeName) {
+        try {
+            if (product == null || product.getMetaJson() == null || product.getMetaJson().isBlank()) {
+                return Optional.empty();
+            }
+            JsonNode root = new ObjectMapper().readTree(product.getMetaJson());
+            JsonNode value = root.path(nodeName).path("type");
+            if (value.isMissingNode() || value.asText().isBlank()) {
+                return Optional.empty();
+            }
+            return Optional.of(com.finacial.wealth.api.fxpeer.exchange.investment.ennum.LiquidationFeeType.valueOf(value.asText()));
+        } catch (Exception ex) {
+            return Optional.empty();
+        }
+    }
+
+    private BigDecimal readFeeAmount(InvestmentProduct product, String nodeName, String fieldName) {
+        try {
+            if (product == null || product.getMetaJson() == null || product.getMetaJson().isBlank()) {
+                return null;
+            }
+            JsonNode root = new ObjectMapper().readTree(product.getMetaJson());
+            JsonNode value = root.path(nodeName).path(fieldName);
+            if (value.isMissingNode() || value.asText().isBlank()) {
+                return null;
+            }
+            return new BigDecimal(value.asText());
+        } catch (Exception ex) {
+            return null;
+        }
+    }
+
     private BigDecimal defaultPercent(InterestCapitalization cap) {
         return switch (cap) {
             case DAILY ->
@@ -2088,19 +2240,64 @@ public class InvestmentOrderService {
 
         BigDecimal percent = getFeePercentFromMeta(product, cap);
         BigDecimal minFee = getMinFeeFromMeta(product);
+        BigDecimal feeCap = readLiquidationFeeCap(product);
 
         BigDecimal fee = marketValue
                 .multiply(percent)
                 .divide(BigDecimal.valueOf(100), 8, RoundingMode.HALF_UP)
                 .setScale(2, RoundingMode.HALF_UP);
 
-        return fee.max(minFee);
+        return applyFeeBounds(fee, minFee, feeCap);
     }
 
     private BigDecimal computeLiquidationFee(InvestmentPosition position, BigDecimal liquidationAmount) {
         InvestmentProduct product = position.getProduct();
+        boolean lockEnabled = Boolean.TRUE.equals(readLockEnabled(product));
+        if (!lockEnabled) {
+            return computeStandardLiquidationFee(position, liquidationAmount);
+        }
+
+        if (!isEarlyLiquidation(position)) {
+            return BigDecimal.ZERO;
+        }
+
+        BigDecimal currentValue = nvl(position.getCurrentValue());
+        boolean isFullLiquidation = liquidationAmount != null
+                && currentValue.compareTo(BigDecimal.ZERO) > 0
+                && liquidationAmount.compareTo(currentValue) >= 0;
+        if (!isFullLiquidation) {
+            return BigDecimal.ZERO;
+        }
+
+        Optional<LiquidationFeeAppliedTo> appliedToOpt = readEarlyLiquidationFeeAppliedTo(product);
+        BigDecimal configuredRate = readEarlyLiquidationFeeRate(product);
+        if (appliedToOpt.isEmpty() || configuredRate == null) {
+            return BigDecimal.ZERO;
+        }
+
+        BigDecimal minFee = BigDecimal.ZERO;
+        BigDecimal feeCap = readEarlyLiquidationFeeCap(product);
+
+        BigDecimal feeBase = switch (appliedToOpt.get()) {
+            case TOTAL_VALUE -> liquidationAmount;
+            case CAPITAL -> deriveCapitalPortion(position, liquidationAmount);
+            case INTEREST -> deriveInterestPortion(position, liquidationAmount);
+        };
+
+        BigDecimal fee = feeBase
+                .multiply(configuredRate)
+                .divide(BigDecimal.valueOf(100), 8, RoundingMode.HALF_UP)
+                .setScale(2, RoundingMode.HALF_UP);
+
+        return applyFeeBounds(fee, minFee, feeCap);
+    }
+
+    private BigDecimal computeStandardLiquidationFee(InvestmentPosition position, BigDecimal liquidationAmount) {
+        InvestmentProduct product = position.getProduct();
         Optional<LiquidationFeeAppliedTo> appliedToOpt = readLiquidationFeeAppliedTo(product);
         BigDecimal configuredRate = readLiquidationFeeRate(product);
+        BigDecimal minFee = readMinLiquidationFeeNew(product);
+        BigDecimal feeCap = readLiquidationFeeCap(product);
 
         if (appliedToOpt.isEmpty() || configuredRate == null) {
             return computeEntireMarketValuesLiquidationFee(product, liquidationAmount);
@@ -2117,12 +2314,33 @@ public class InvestmentOrderService {
                 .divide(BigDecimal.valueOf(100), 8, RoundingMode.HALF_UP)
                 .setScale(2, RoundingMode.HALF_UP);
 
-        BigDecimal minFee = readMinLiquidationFeeNew(product);
-        if (minFee == null) {
-            minFee = BigDecimal.ZERO;
+        return applyFeeBounds(fee, minFee, feeCap);
+    }
+
+    private BigDecimal applyFeeBounds(BigDecimal fee, BigDecimal minFee, BigDecimal feeCap) {
+        BigDecimal resolvedFee = fee == null ? BigDecimal.ZERO : fee;
+        if (minFee != null) {
+            resolvedFee = resolvedFee.max(minFee);
+        }
+        if (feeCap != null) {
+            resolvedFee = resolvedFee.min(feeCap);
+        }
+        return resolvedFee.setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private boolean isEarlyLiquidation(InvestmentPosition position) {
+        Integer lockDays = readLockDays(position.getProduct());
+        Boolean lockEnabled = readLockEnabled(position.getProduct());
+        if (!Boolean.TRUE.equals(lockEnabled) || lockDays == null || lockDays <= 0) {
+            return false;
+        }
+        if (position.getSettlementAt() == null) {
+            return false;
         }
 
-        return fee.max(minFee);
+        LocalDate settlementDate = position.getSettlementAt().atZone(ZoneId.of("Africa/Lagos")).toLocalDate();
+        long daysHeld = java.time.temporal.ChronoUnit.DAYS.between(settlementDate, LocalDate.now(ZoneId.of("Africa/Lagos")));
+        return daysHeld < lockDays;
     }
 
     private BigDecimal deriveCapitalPortion(InvestmentPosition position, BigDecimal liquidationAmount) {

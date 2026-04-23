@@ -12,6 +12,8 @@ import com.financial.wealth.api.transactions.domain.DeviceDetails;
 import com.financial.wealth.api.transactions.domain.FinWealthPaymentTransaction;
 import com.financial.wealth.api.transactions.domain.RegWalletInfo;
 import com.financial.wealth.api.transactions.models.BaseResponse;
+import com.financial.wealth.api.transactions.models.BatchPostingLegRequest;
+import com.financial.wealth.api.transactions.models.BatchPostingRequest;
 import com.financial.wealth.api.transactions.models.CreditWalletCaller;
 import com.financial.wealth.api.transactions.models.DebitWalletCaller;
 import com.financial.wealth.api.transactions.models.PushNotificationFireBase;
@@ -34,6 +36,7 @@ import java.math.BigDecimal;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -144,10 +147,34 @@ public class GroupSavingWalletFacadeImpl implements WalletFacade {
         rqC.setNarration("Withdrawal");
         rqC.setPhoneNumber(getReg.get(0).getPhoneNumber());
         rqC.setTransAmount(amount.toString());
-        rqC.setTransactionId(reff);
+        rqC.setTransactionId(reff + "-CUSTOMER_DR");
         System.out.println("Credit Request TO core rqC ::::::::::::::::  %S  " + new Gson().toJson(rqC));
 
-        BaseResponse debitAcct = utilMeth.debitCustomerWithType(rqC, "CUSTOMER", CCY);
+        BatchPostingRequest batchRq = new BatchPostingRequest();
+        batchRq.setGroupRef(reff);
+        BatchPostingLegRequest customerLeg = new BatchPostingLegRequest();
+        customerLeg.setDirection("DEBIT");
+        customerLeg.setUserType("CUSTOMER");
+        customerLeg.setAuth("Receiver");
+        customerLeg.setFees("0.00");
+        customerLeg.setFinalCHarges(amount.toString());
+        customerLeg.setNarration("Withdrawal");
+        customerLeg.setPhoneNumber(getReg.get(0).getPhoneNumber());
+        customerLeg.setTransAmount(amount.toString());
+        customerLeg.setTransactionId(reff + "-CUSTOMER_CR");
+        BatchPostingLegRequest cadGlLeg = new BatchPostingLegRequest();
+        cadGlLeg.setDirection("DEBIT");
+        cadGlLeg.setUserType("CAD_GL");
+        cadGlLeg.setAuth("Receiver");
+        cadGlLeg.setFees("0.00");
+        cadGlLeg.setFinalCHarges(amount.toString());
+        cadGlLeg.setNarration("CAD_Withdrawal");
+        cadGlLeg.setPhoneNumber(decryptData(utilMeth.getSETTING_KEY_WALLET_SYSTEM_SYSTEM_GG_CAD()));
+        cadGlLeg.setTransAmount(amount.toString());
+        cadGlLeg.setTransactionId(reff+"-CAD_GL_DR");
+        batchRq.setLegs(Arrays.asList(customerLeg, cadGlLeg));
+
+        BaseResponse debitAcct = utilMeth.batchPost(batchRq, null);
 
         System.out.println("Debit Response from core debitAcct ::::::::::::::::  %S  " + new Gson().toJson(debitAcct));
 
@@ -161,7 +188,7 @@ public class GroupSavingWalletFacadeImpl implements WalletFacade {
             kTrans2b.setPaymentType("Withdrawal from Account");
             kTrans2b.setReceiver(rqC.getPhoneNumber());
             kTrans2b.setSender(rqC.getPhoneNumber());
-            kTrans2b.setTransactionId(reff);
+            kTrans2b.setTransactionId(reff + (amount.signum() >= 0 ? "-CUSTOMER" : "-CUSTOMER"));
             kTrans2b.setSenderTransactionType("");
             kTrans2b.setReceiverTransactionType("Withdrawal");
 
@@ -202,18 +229,6 @@ public class GroupSavingWalletFacadeImpl implements WalletFacade {
             }
 
         }
-
-        // Credit BAAS CAD_GL
-        DebitWalletCaller cadGLCredit = new DebitWalletCaller();
-        cadGLCredit.setAuth("Receiver");
-        cadGLCredit.setFees("0.00");
-        cadGLCredit.setFinalCHarges(amount.toString());
-        cadGLCredit.setNarration("CAD_Withdrawal");
-        cadGLCredit.setPhoneNumber(decryptData(utilMeth.getSETTING_KEY_WALLET_SYSTEM_SYSTEM_GG_CAD()));
-        cadGLCredit.setTransAmount(amount.toString());
-        cadGLCredit.setTransactionId(reff+"-CAD_GL");
-
-        utilMeth.debitCustomerWithType(cadGLCredit, "CAD_GL", CCY);
         txn.setWalletPocRef(reff);
         txn.setStatus(GroupSavingWalletTxnStatus.SUCCESS);
         txnRepo.save(txn);
@@ -268,10 +283,34 @@ public class GroupSavingWalletFacadeImpl implements WalletFacade {
         rqC.setNarration("Deposit");
         rqC.setPhoneNumber(getReg.get(0).getPhoneNumber());
         rqC.setTransAmount(amount.toString());
-        rqC.setTransactionId(reff);
+        rqC.setTransactionId(reff + (amount.signum() >= 0 ? "-CUSTOMER" : "-CUSTOMER"));
         System.out.println("Credit Request TO core rqC ::::::::::::::::  %S  " + new Gson().toJson(rqC));
 
-        BaseResponse creditAcct = utilMeth.creditCustomerWithType(rqC, "CUSTOMER");
+        BatchPostingRequest batchRq = new BatchPostingRequest();
+        batchRq.setGroupRef(reff);
+        BatchPostingLegRequest customerLeg = new BatchPostingLegRequest();
+        customerLeg.setDirection("CREDIT");
+        customerLeg.setUserType("CUSTOMER");
+        customerLeg.setAuth("Receiver");
+        customerLeg.setFees("0.00");
+        customerLeg.setFinalCHarges(amount.toString());
+        customerLeg.setNarration("Deposit");
+        customerLeg.setPhoneNumber(getReg.get(0).getPhoneNumber());
+        customerLeg.setTransAmount(amount.toString());
+        customerLeg.setTransactionId(reff + (amount.signum() >= 0 ? "-CUSTOMER" : "-CUSTOMER"));
+        BatchPostingLegRequest cadGlLeg = new BatchPostingLegRequest();
+        cadGlLeg.setDirection("CREDIT");
+        cadGlLeg.setUserType("CAD_GL");
+        cadGlLeg.setAuth("Receiver");
+        cadGlLeg.setFees("0.00");
+        cadGlLeg.setFinalCHarges(amount.toString());
+        cadGlLeg.setNarration("CAD_Deposit");
+        cadGlLeg.setPhoneNumber(decryptData(utilMeth.getSETTING_KEY_WALLET_SYSTEM_SYSTEM_GG_CAD()));
+        cadGlLeg.setTransAmount(amount.toString());
+        cadGlLeg.setTransactionId(reff+"-CAD_GL_CR");
+        batchRq.setLegs(Arrays.asList(customerLeg, cadGlLeg));
+
+        BaseResponse creditAcct = utilMeth.batchPost(batchRq, null);
 
         System.out.println("Credit Response from core creditAcct ::::::::::::::::  %S  " + new Gson().toJson(creditAcct));
 
@@ -285,7 +324,7 @@ public class GroupSavingWalletFacadeImpl implements WalletFacade {
             kTrans2b.setPaymentType("Deposit to Account");
             kTrans2b.setReceiver(rqC.getPhoneNumber());
             kTrans2b.setSender(rqC.getPhoneNumber());
-            kTrans2b.setTransactionId(reff);
+            kTrans2b.setTransactionId(reff + (amount.signum() >= 0 ? "-CUSTOMER" : "-CUSTOMER"));
             kTrans2b.setSenderTransactionType("");
             kTrans2b.setReceiverTransactionType("Deposit");
 
@@ -328,18 +367,6 @@ public class GroupSavingWalletFacadeImpl implements WalletFacade {
             }
 
         }
-
-        // Credit BAAS CAD_GL
-        CreditWalletCaller cadGLCredit = new CreditWalletCaller();
-        cadGLCredit.setAuth("Receiver");
-        cadGLCredit.setFees("0.00");
-        cadGLCredit.setFinalCHarges(amount.toString());
-        cadGLCredit.setNarration("CAD_Deposit");
-        cadGLCredit.setPhoneNumber(decryptData(utilMeth.getSETTING_KEY_WALLET_SYSTEM_SYSTEM_GG_CAD()));
-        cadGLCredit.setTransAmount(amount.toString());
-        cadGLCredit.setTransactionId(reff+"-CAD_GL");
-
-        utilMeth.creditCustomerWithType(cadGLCredit, "CAD_GL");
 
         /*Wallet wallet = walletRepo.findByIdForUpdate(walletId)
                 .orElseThrow(() -> new IllegalArgumentException("Wallet not found: " + walletId));

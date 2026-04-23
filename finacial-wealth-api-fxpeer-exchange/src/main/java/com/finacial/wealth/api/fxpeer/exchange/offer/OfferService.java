@@ -733,59 +733,75 @@ public class OfferService {
 
             System.out.println(" debitBuyerAcct RESPONSE ::::::::::::::::  %S  " + new Gson().toJson(debitBuyerAcct));
 
-            if (debitBuyerAcct.getStatusCode() == 200) {
-
-                FinWealthPaymentTransaction kTrans2b = new FinWealthPaymentTransaction();
-                kTrans2b.setAmmount(new BigDecimal(rqD.getFinalCHarges()));
-                kTrans2b.setCreatedDate(Instant.now().plusSeconds(1));
-                kTrans2b.setFees(new BigDecimal(rqD.getFees()));
-                kTrans2b.setPaymentType("FxPeer Transfer");
-                kTrans2b.setReceiver("FxPeer");
-                kTrans2b.setSender(accountToDebit);
-                kTrans2b.setTransactionId(rqD.getTransactionId());
-                kTrans2b.setSenderTransactionType("Withdrawal");
-                kTrans2b.setReceiverTransactionType("Deposit");
-                kTrans2b.setReceiverBankName("FxPeer");
-                kTrans2b.setWalletNo(accountToDebit);
-                kTrans2b.setReceiverName("FxPeer");
-                kTrans2b.setSenderName(senderName);
-                kTrans2b.setSentAmount(rqD.getFinalCHarges());
-                kTrans2b.setTheNarration("Fx Peer-Peer listing.");
-                kTrans2b.setCurrencyCode(rq.getCurrencySell().toString());
-                finWealthPaymentTransactionRepo.save(kTrans2b);
-
-                //  transactionHistoryClientLocalT.publishFromTxn(kTrans2b);
-                System.out.println("sellerId" + "  ::::::::::::::::::::: >>>>>>>>>>>>>>>>>>  " + sellerId);
-
-                DebitWalletCaller debGLCredit = new DebitWalletCaller();
-                debGLCredit.setAuth(rqD.getAuth());
-                debGLCredit.setFees("0.00");
-                debGLCredit.setFinalCHarges(rqD.getFinalCHarges());
-                debGLCredit.setNarration(rqD.getNarration());
-                List<AppConfig> getAppConf = appConfigRepo.findByConfigName(rq.getCurrencySell().toString());
-                String GGL_ACCOUNT = null;
-                String GGL_CODE = null;
-                for (AppConfig getConfDe : getAppConf) {
-                    if (getConfDe.getConfigName().equals(rq.getCurrencySell().toString())) {
-                        GGL_ACCOUNT = getConfDe.getConfigValue();
-                        GGL_CODE = rq.getCurrencySell().toString();
-                    }
-                }
-
-                //debGLCredit.setPhoneNumber(utilService.decryptData(utilService.getSETTING_KEY_WALLET_SYSTEM_SYSTEM_GG_NIG()));
-                debGLCredit.setPhoneNumber(utilService.decryptData(GGL_ACCOUNT));
-                debGLCredit.setTransAmount(rqD.getTransAmount());
-                debGLCredit.setTransactionId(correlationId + "-" + rq.getCurrencySell().toString());
-
-                System.out.println(" debitAcct_GL REQUEST ::::::::::::::::  %S  " + new Gson().toJson(debGLCredit));
-
-                BaseResponse debitAcct_GLRes = transactionServiceProxies.debitCustomerWithType(debGLCredit, rq.getCurrencySell().toString(), auth);
-                System.out.println(" debitAcct_GLRes RESPONSE ::::::::::::::::  %S  " + new Gson().toJson(debitAcct_GLRes));
-            } else {
-                res.setStatusCode(bRes.getStatusCode());
-                res.setDescription(bRes.getDescription());
+            if (debitBuyerAcct.getStatusCode() != 200) {
+                res.setStatusCode(debitBuyerAcct.getStatusCode());
+                res.setDescription(debitBuyerAcct.getDescription());
                 return res;
             }
+
+            List<AppConfig> getAppConf = appConfigRepo.findByConfigName(rq.getCurrencySell().toString());
+            String GGL_ACCOUNT = null;
+            String GGL_CODE = null;
+            for (AppConfig getConfDe : getAppConf) {
+                if (getConfDe.getConfigName().equals(rq.getCurrencySell().toString())) {
+                    GGL_ACCOUNT = getConfDe.getConfigValue();
+                    GGL_CODE = rq.getCurrencySell().toString();
+                }
+            }
+
+            if (GGL_ACCOUNT == null || GGL_CODE == null) {
+                BaseResponse sellerRefund = creditAccount(auth, accountToDebit, new BigDecimal(rqD.getFinalCHarges()),
+                        correlationId + "-SELLER-REFUND", rqD.getNarration() + "_REVERSAL", "CUSTOMER", "Seller");
+                res.setStatusCode(500);
+                res.setDescription(sellerRefund.getStatusCode() == 200
+                        ? "Offer reserve failed because GL configuration is missing. Seller debit has been reversed."
+                        : "Offer reserve failed because GL configuration is missing, and seller reversal also failed. Manual intervention required.");
+                return res;
+            }
+
+            DebitWalletCaller debGLCredit = new DebitWalletCaller();
+            debGLCredit.setAuth(rqD.getAuth());
+            debGLCredit.setFees("0.00");
+            debGLCredit.setFinalCHarges(rqD.getFinalCHarges());
+            debGLCredit.setNarration(rqD.getNarration());
+            debGLCredit.setPhoneNumber(utilService.decryptData(GGL_ACCOUNT));
+            debGLCredit.setTransAmount(rqD.getTransAmount());
+            debGLCredit.setTransactionId(correlationId + "-" + rq.getCurrencySell().toString() + "-GL-DR");
+
+            System.out.println(" debitAcct_GL REQUEST ::::::::::::::::  %S  " + new Gson().toJson(debGLCredit));
+
+            BaseResponse debitAcct_GLRes = transactionServiceProxies.debitCustomerWithType(debGLCredit, rq.getCurrencySell().toString(), auth);
+            System.out.println(" debitAcct_GLRes RESPONSE ::::::::::::::::  %S  " + new Gson().toJson(debitAcct_GLRes));
+            if (debitAcct_GLRes.getStatusCode() != 200) {
+                BaseResponse sellerRefund = creditAccount(auth, accountToDebit, new BigDecimal(rqD.getFinalCHarges()),
+                        correlationId + "-SELLER-REFUND", rqD.getNarration() + "_REVERSAL", "CUSTOMER", "Seller");
+                res.setStatusCode(500);
+                res.setDescription(sellerRefund.getStatusCode() == 200
+                        ? "Offer reserve failed at GL leg. Seller debit has been reversed."
+                        : "Offer reserve failed at GL leg, and seller reversal also failed. Manual intervention required.");
+                return res;
+            }
+
+            FinWealthPaymentTransaction kTrans2b = new FinWealthPaymentTransaction();
+            kTrans2b.setAmmount(new BigDecimal(rqD.getFinalCHarges()));
+            kTrans2b.setCreatedDate(Instant.now().plusSeconds(1));
+            kTrans2b.setFees(new BigDecimal(rqD.getFees()));
+            kTrans2b.setPaymentType("FxPeer Transfer");
+            kTrans2b.setReceiver("FxPeer");
+            kTrans2b.setSender(accountToDebit);
+            kTrans2b.setTransactionId(rqD.getTransactionId());
+            kTrans2b.setSenderTransactionType("Withdrawal");
+            kTrans2b.setReceiverTransactionType("Deposit");
+            kTrans2b.setReceiverBankName("FxPeer");
+            kTrans2b.setWalletNo(accountToDebit);
+            kTrans2b.setReceiverName("FxPeer");
+            kTrans2b.setSenderName(senderName);
+            kTrans2b.setSentAmount(rqD.getFinalCHarges());
+            kTrans2b.setTheNarration("Fx Peer-Peer listing.");
+            kTrans2b.setCurrencyCode(rq.getCurrencySell().toString());
+            finWealthPaymentTransactionRepo.save(kTrans2b);
+
+            System.out.println("sellerId" + "  ::::::::::::::::::::: >>>>>>>>>>>>>>>>>>  " + sellerId);
 
             Offer o = new Offer();
 
@@ -866,6 +882,32 @@ public class OfferService {
         return s == null || s.trim().isEmpty();
     }
 
+    private BaseResponse creditAccount(String auth, String phoneNumber, BigDecimal amount, String transactionId,
+            String narration, String userType, String actor) {
+        CreditWalletCaller rq = new CreditWalletCaller();
+        rq.setAuth(actor);
+        rq.setFees("0.00");
+        rq.setFinalCHarges(amount.toString());
+        rq.setNarration(narration);
+        rq.setPhoneNumber(phoneNumber);
+        rq.setTransAmount(amount.toString());
+        rq.setTransactionId(transactionId);
+        return transactionServiceProxies.creditCustomerWithType(rq, userType, auth);
+    }
+
+    private BaseResponse debitAccount(String auth, String phoneNumber, BigDecimal amount, String transactionId,
+            String narration, String userType, String actor) {
+        DebitWalletCaller rq = new DebitWalletCaller();
+        rq.setAuth(actor);
+        rq.setFees("0.00");
+        rq.setFinalCHarges(amount.toString());
+        rq.setNarration(narration);
+        rq.setPhoneNumber(phoneNumber);
+        rq.setTransAmount(amount.toString());
+        rq.setTransactionId(transactionId);
+        return transactionServiceProxies.debitCustomerWithType(rq, userType, auth);
+    }
+
     private ResponseEntity<ApiResponseModel> bad(ApiResponseModel res, String msg, int statusCode) {
         res.setStatusCode(statusCode);
         res.setDescription(msg);
@@ -943,38 +985,43 @@ public class OfferService {
 
                     System.out.println(" creditSellerAcct for Reversal REQ  ::::::::::::::::  %S  " + new Gson().toJson(rqC));
 
+                    String GGL_ACCOUNT = null;
+                    List<AppConfig> getAppConf = appConfigRepo.findByConfigName(getWalDeupdate.getCurrencyToSell());
+                    for (AppConfig getConfDe : getAppConf) {
+                        if (getConfDe.getConfigName().equals(getWalDeupdate.getCurrencyToSell())) {
+                            GGL_ACCOUNT = getConfDe.getConfigValue();
+                        }
+                    }
+                    if (GGL_ACCOUNT == null) {
+                        continue;
+                    }
+
+                    CreditWalletCaller GLCredit = new CreditWalletCaller();
+                    GLCredit.setAuth("Receiver");
+                    GLCredit.setFees("0.00");
+                    GLCredit.setFinalCHarges(rqC.getFinalCHarges());
+                    GLCredit.setNarration(rqC.getNarration());
+                    GLCredit.setPhoneNumber(utilService.decryptData(GGL_ACCOUNT));
+                    GLCredit.setTransAmount(rqC.getFinalCHarges());
+                    GLCredit.setTransactionId(rqC.getTransactionId() + "-REVERSAL");
+
+                    System.out.println(" creditAcct_GL seller for Reversal REQ  ::::::::::::::::  %S  " + new Gson().toJson(GLCredit));
+
+                    BaseResponse creditAcct_GL = transactionServiceProxies.creditCustomerWithType(GLCredit, getWalDeupdate.getCurrencyToSell(), "");
+
+                    System.out.println(" credit GL for seller for Reversal Response from core ::::::::::::::::  %S  " + new Gson().toJson(creditAcct_GL));
+                    if (creditAcct_GL.getStatusCode() != 200) {
+                        continue;
+                    }
+
                     BaseResponse creditSellerAcct = transactionServiceProxies.creditCustomerWithType(rqC, "CUSTOMER", "");
 
                     System.out.println(" creditSellerAcct Response from core ::::::::::::::::  %S  " + new Gson().toJson(creditSellerAcct));
-                    if (creditSellerAcct.getStatusCode() == 200) {
-
-                        // Credit BAAS NGN_GL
-                        CreditWalletCaller GLCredit = new CreditWalletCaller();
-                        GLCredit.setAuth("Receiver");
-                        GLCredit.setFees("0.00");
-                        GLCredit.setFinalCHarges(rqC.getFinalCHarges());
-                        GLCredit.setNarration(rqC.getNarration());
-                        String GGL_ACCOUNT = null;
-
-                        List<AppConfig> getAppConf = appConfigRepo.findByConfigName(getWalDeupdate.getCurrencyToSell());
-
-                        for (AppConfig getConfDe : getAppConf) {
-                            if (getConfDe.getConfigName().equals(getWalDeupdate.getCurrencyToSell())) {
-                                GGL_ACCOUNT = getConfDe.getConfigValue();
-
-                            }
-                        }
-                        //GLCredit.setPhoneNumber(utilService.decryptData(utilService.getSETTING_KEY_WALLET_SYSTEM_SYSTEM_GG_CAD()));
-                        GLCredit.setPhoneNumber(utilService.decryptData(GGL_ACCOUNT));
-                        GLCredit.setTransAmount(rqC.getFinalCHarges());
-                        GLCredit.setTransactionId(rqC.getTransactionId() + "-REVERSAL");
-
-                        System.out.println(" creditAcct_GL seller for Reversal REQ  ::::::::::::::::  %S  " + new Gson().toJson(GLCredit));
-
-                        BaseResponse creditAcct_GL = transactionServiceProxies.creditCustomerWithType(GLCredit, getWalDeupdate.getCurrencyToSell(), "");
-
-                        System.out.println(" credit GL for seller for Reversal Response from core ::::::::::::::::  %S  " + new Gson().toJson(creditAcct_GL));
-
+                    if (creditSellerAcct.getStatusCode() != 200) {
+                        debitAccount("", utilService.decryptData(GGL_ACCOUNT), new BigDecimal(rqC.getFinalCHarges()),
+                                rqC.getTransactionId() + "-GL-REVERSAL", rqC.getNarration() + "_REVERSAL",
+                                getWalDeupdate.getCurrencyToSell(), "Receiver");
+                        continue;
                     }
 
                     System.out.println(" On CANCEL SET availableQuantity to ZERO::::::::::::::::  %S  ");
@@ -1041,59 +1088,70 @@ public class OfferService {
 
             System.out.println(" creditSellerAcct for Reversal REQ  ::::::::::::::::  %S  " + new Gson().toJson(rqC));
 
+            String GGL_ACCOUNT = null;
+            List<AppConfig> getAppConf = appConfigRepo.findByConfigName(getWalDeupdate.getCurrencyToSell());
+
+            for (AppConfig getConfDe : getAppConf) {
+                if (getConfDe.getConfigName().equals(getWalDeupdate.getCurrencyToSell())) {
+                    GGL_ACCOUNT = getConfDe.getConfigValue();
+                }
+            }
+            if (GGL_ACCOUNT == null) {
+                return bad(res, "GL configuration missing for offer cancellation reversal.", 500);
+            }
+
+            CreditWalletCaller GLCredit = new CreditWalletCaller();
+            GLCredit.setAuth("Receiver");
+            GLCredit.setFees("0.00");
+            GLCredit.setFinalCHarges(rqC.getFinalCHarges());
+            GLCredit.setNarration(rqC.getNarration());
+            GLCredit.setPhoneNumber(utilService.decryptData(GGL_ACCOUNT));
+            GLCredit.setTransAmount(rqC.getFinalCHarges());
+            GLCredit.setTransactionId(rqC.getTransactionId() + "-REVERSAL");
+
+            System.out.println(" creditAcct_GL seller for Reversal REQ  ::::::::::::::::  %S  " + new Gson().toJson(GLCredit));
+
+            BaseResponse creditAcct_GL = transactionServiceProxies.creditCustomerWithType(GLCredit, getWalDeupdate.getCurrencyToSell(), auth);
+
+            System.out.println(" credit GL for seller for Reversal Response from core ::::::::::::::::  %S  " + new Gson().toJson(creditAcct_GL));
+            if (creditAcct_GL.getStatusCode() != 200) {
+                return bad(res, "Offer cancellation reversal failed at GL release.", 500);
+            }
+
             BaseResponse creditSellerAcct = transactionServiceProxies.creditCustomerWithType(rqC, "CUSTOMER", auth);
 
             System.out.println(" creditSellerAcct Response from core ::::::::::::::::  %S  " + new Gson().toJson(creditSellerAcct));
-            if (creditSellerAcct.getStatusCode() == 200) {
-
-                // Credit BAAS NGN_GL
-                CreditWalletCaller GLCredit = new CreditWalletCaller();
-                GLCredit.setAuth("Receiver");
-                GLCredit.setFees("0.00");
-                GLCredit.setFinalCHarges(rqC.getFinalCHarges());
-                GLCredit.setNarration(rqC.getNarration());
-                String GGL_ACCOUNT = null;
-
-                List<AppConfig> getAppConf = appConfigRepo.findByConfigName(getWalDeupdate.getCurrencyToSell());
-
-                for (AppConfig getConfDe : getAppConf) {
-                    if (getConfDe.getConfigName().equals(getWalDeupdate.getCurrencyToSell())) {
-                        GGL_ACCOUNT = getConfDe.getConfigValue();
-
-                    }
-                }
-                //GLCredit.setPhoneNumber(utilService.decryptData(utilService.getSETTING_KEY_WALLET_SYSTEM_SYSTEM_GG_CAD()));
-                GLCredit.setPhoneNumber(utilService.decryptData(GGL_ACCOUNT));
-                GLCredit.setTransAmount(rqC.getFinalCHarges());
-                GLCredit.setTransactionId(rqC.getTransactionId() + "-REVERSAL");
-
-                System.out.println(" creditAcct_GL seller for Reversal REQ  ::::::::::::::::  %S  " + new Gson().toJson(GLCredit));
-
-                BaseResponse creditAcct_GL = transactionServiceProxies.creditCustomerWithType(GLCredit, getWalDeupdate.getCurrencyToSell(), auth);
-
-                System.out.println(" credit GL for seller for Reversal Response from core ::::::::::::::::  %S  " + new Gson().toJson(creditAcct_GL));
-
-                FinWealthPaymentTransaction kTrans2b = new FinWealthPaymentTransaction();
-                kTrans2b.setAmmount(new BigDecimal(rqC.getFinalCHarges()));
-                kTrans2b.setCreatedDate(Instant.now().plusSeconds(1));
-                kTrans2b.setFees(new BigDecimal(rqC.getFees()));
-                kTrans2b.setPaymentType("FxPeer Reversal Transfer");
-                kTrans2b.setReceiver(rqC.getPhoneNumber());
-                kTrans2b.setSender("FxPeer");
-                kTrans2b.setTransactionId(rqC.getTransactionId());
-                kTrans2b.setSenderTransactionType("Withdrawal");
-                kTrans2b.setReceiverTransactionType("Deposit");
-                kTrans2b.setReceiverBankName("FxPeer");
-                kTrans2b.setWalletNo("FxPeer");
-                kTrans2b.setReceiverName(getWalDeupdate.getSellerName());
-                kTrans2b.setSenderName("FxPeer");
-                kTrans2b.setSentAmount(rqC.getFinalCHarges());
-                kTrans2b.setTheNarration("Fx Peer-Peer listing.");
-                kTrans2b.setCurrencyCode(getWalDeupdate.getCurrencyToSell());
-
-                finWealthPaymentTransactionRepo.save(kTrans2b);
-                // transactionHistoryClientLocalT.publishFromTxn(kTrans2b);
+            if (creditSellerAcct.getStatusCode() != 200) {
+                BaseResponse reverseGl = debitAccount(auth, utilService.decryptData(GGL_ACCOUNT), new BigDecimal(rqC.getFinalCHarges()),
+                        rqC.getTransactionId() + "-GL-REVERSAL", rqC.getNarration() + "_REVERSAL",
+                        getWalDeupdate.getCurrencyToSell(), "Receiver");
+                return bad(res,
+                        reverseGl.getStatusCode() == 200
+                                ? "Offer cancellation reversal failed at customer credit; GL release has been reversed."
+                                : "Offer cancellation reversal failed and GL reversal also failed. Manual intervention required.",
+                        500);
             }
+
+            FinWealthPaymentTransaction kTrans2b = new FinWealthPaymentTransaction();
+            kTrans2b.setAmmount(new BigDecimal(rqC.getFinalCHarges()));
+            kTrans2b.setCreatedDate(Instant.now().plusSeconds(1));
+            kTrans2b.setFees(new BigDecimal(rqC.getFees()));
+            kTrans2b.setPaymentType("FxPeer Reversal Transfer");
+            kTrans2b.setReceiver(rqC.getPhoneNumber());
+            kTrans2b.setSender("FxPeer");
+            kTrans2b.setTransactionId(rqC.getTransactionId());
+            kTrans2b.setSenderTransactionType("Withdrawal");
+            kTrans2b.setReceiverTransactionType("Deposit");
+            kTrans2b.setReceiverBankName("FxPeer");
+            kTrans2b.setWalletNo("FxPeer");
+            kTrans2b.setReceiverName(getWalDeupdate.getSellerName());
+            kTrans2b.setSenderName("FxPeer");
+            kTrans2b.setSentAmount(rqC.getFinalCHarges());
+            kTrans2b.setTheNarration("Fx Peer-Peer listing.");
+            kTrans2b.setCurrencyCode(getWalDeupdate.getCurrencyToSell());
+
+            finWealthPaymentTransactionRepo.save(kTrans2b);
+            // transactionHistoryClientLocalT.publishFromTxn(kTrans2b);
 
             getWalDeupdate.setLastModifiedDate(Instant.now());
             getWalDeupdate.setBuyerName(getRec.get().getFullName());

@@ -28,7 +28,7 @@ import org.springframework.web.bind.annotation.RestController;
  * @author olufemioshin
  */
 @RestController
-@RequestMapping("/api/admin/roles")
+@RequestMapping({"/admin/roles", "/backoffice/admin/roles", "/bo/admin/roles", "/api/admin/roles"})
 @RequiredArgsConstructor
 @Tag(name = "Roles", description = "Role management and permission assignment endpoints.")
 public class AdminRoleController {
@@ -61,7 +61,7 @@ public class AdminRoleController {
     @PutMapping("/{roleId}/permissions")
     @Operation(
             summary = "Replace role permissions",
-            description = "Replaces the permission set assigned to a role. Use permission codes from `/api/admin/permissions`.",
+            description = "Replaces the permission set assigned to a role. Use permission codes from `/backoffice/admin/permissions`.",
             security = @SecurityRequirement(name = "bearerAuth")
     )
     public ResponseEntity<AdminRoleDto> updatePermissions(

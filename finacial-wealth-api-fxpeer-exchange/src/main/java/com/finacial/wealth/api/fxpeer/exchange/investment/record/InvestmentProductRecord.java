@@ -37,6 +37,13 @@ public class InvestmentProductRecord {
     private String liquidationFeeType;
     private BigDecimal liquidationFeeRate;
     private BigDecimal minLiquidationFee;
+    private BigDecimal liquidationFeeCap;
+    private Boolean lockEnabled;
+    private Integer lockDays;
+    private String earlyLiquidationFeeAppliedTo;
+    private String earlyLiquidationFeeType;
+    private BigDecimal earlyLiquidationFeeRate;
+    private BigDecimal earlyLiquidationFeeCap;
 
     private Integer tenorDays;           // optional
 

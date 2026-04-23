@@ -17,6 +17,8 @@ import com.financial.wealth.api.transactions.domain.FinWealthPaymentTransaction;
 import com.financial.wealth.api.transactions.domain.RegWalletInfo;
 import com.financial.wealth.api.transactions.domain.SettlementFailureLog;
 import com.financial.wealth.api.transactions.models.BaseResponse;
+import com.financial.wealth.api.transactions.models.BatchPostingLegRequest;
+import com.financial.wealth.api.transactions.models.BatchPostingRequest;
 import com.financial.wealth.api.transactions.models.CreditWalletCaller;
 import com.financial.wealth.api.transactions.models.DebitWalletCaller;
 import com.financial.wealth.api.transactions.models.PushNotificationFireBase;
@@ -45,6 +47,7 @@ import java.security.SecureRandom;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.Base64;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -260,10 +263,34 @@ public class WebhookKeyService {
             rqC.setNarration("Withdrawal");
             rqC.setPhoneNumber(regWalletInfo.get(0).getPhoneNumber());
             rqC.setTransAmount(rqq.getAmount());
-            rqC.setTransactionId(rqq.getQuoteId());
+            rqC.setTransactionId(rqq.getQuoteId() + "-CUSTOMER_DR");
             System.out.println("Credit Request TO core rqC ::::::::::::::::  %S  " + new Gson().toJson(rqC));
 
-            BaseResponse debitAcct = utilMeth.debitCustomerWithType(rqC, "CUSTOMER", CCY);
+            BatchPostingRequest batchRq = new BatchPostingRequest();
+            batchRq.setGroupRef(rqq.getQuoteId());
+            BatchPostingLegRequest customerLeg = new BatchPostingLegRequest();
+            customerLeg.setDirection("DEBIT");
+            customerLeg.setUserType("CUSTOMER");
+            customerLeg.setAuth("Receiver");
+            customerLeg.setFees("0.00");
+            customerLeg.setFinalCHarges(rqq.getAmount());
+            customerLeg.setNarration("Withdrawal");
+            customerLeg.setPhoneNumber(regWalletInfo.get(0).getPhoneNumber());
+            customerLeg.setTransAmount(rqq.getAmount());
+            customerLeg.setTransactionId(rqq.getQuoteId() + "-CUSTOMER_DR");
+            BatchPostingLegRequest cadGlLeg = new BatchPostingLegRequest();
+            cadGlLeg.setDirection("DEBIT");
+            cadGlLeg.setUserType("CAD_GL");
+            cadGlLeg.setAuth("Receiver");
+            cadGlLeg.setFees("0.00");
+            cadGlLeg.setFinalCHarges(rqq.getAmount());
+            cadGlLeg.setNarration("CAD_Withdrawal");
+            cadGlLeg.setPhoneNumber(decryptData(utilMeth.getSETTING_KEY_WALLET_SYSTEM_SYSTEM_GG_CAD()));
+            cadGlLeg.setTransAmount(rqq.getAmount());
+            cadGlLeg.setTransactionId(rqq.getQuoteId()+"-CAD_GL_DR");
+            batchRq.setLegs(Arrays.asList(customerLeg, cadGlLeg));
+
+            BaseResponse debitAcct = utilMeth.batchPost(batchRq, null);
 
             System.out.println("Debit Response from core debitAcct ::::::::::::::::  %S  " + new Gson().toJson(debitAcct));
 
@@ -277,7 +304,7 @@ public class WebhookKeyService {
                 kTrans2b.setPaymentType("Withdrawal from Account");
                 kTrans2b.setReceiver(rqC.getPhoneNumber());
                 kTrans2b.setSender(rqC.getPhoneNumber());
-                kTrans2b.setTransactionId(rqq.getQuoteId());
+                kTrans2b.setTransactionId(rqq.getQuoteId() + "-CUSTOMER_DR");
                 kTrans2b.setSenderTransactionType("");
                 kTrans2b.setReceiverTransactionType("Withdrawal");
 
@@ -326,18 +353,6 @@ public class WebhookKeyService {
                 }
 
             }
-
-            // Credit BAAS CAD_GL
-            DebitWalletCaller cadGLCredit = new DebitWalletCaller();
-            cadGLCredit.setAuth("Receiver");
-            cadGLCredit.setFees("0.00");
-            cadGLCredit.setFinalCHarges(rqq.getAmount());
-            cadGLCredit.setNarration("CAD_Withdrawal");
-            cadGLCredit.setPhoneNumber(decryptData(utilMeth.getSETTING_KEY_WALLET_SYSTEM_SYSTEM_GG_CAD()));
-            cadGLCredit.setTransAmount(rqq.getAmount());
-            cadGLCredit.setTransactionId(rqq.getQuoteId()+"-CAD_GL");
-
-            utilMeth.debitCustomerWithType(cadGLCredit, "CAD_GL", CCY);
             responseModel.setDescription("Successful");
             responseModel.setStatusCode(200);
             return responseModel;
@@ -505,10 +520,34 @@ public class WebhookKeyService {
             rqC.setNarration("Deposit");
             rqC.setPhoneNumber(regWalletInfo.get(0).getPhoneNumber());
             rqC.setTransAmount(amount);
-            rqC.setTransactionId(quoteId);
+            rqC.setTransactionId(quoteId + "-CUSTOMER_CR");
             System.out.println("Credit Request TO core rqC ::::::::::::::::  %S  " + new Gson().toJson(rqC));
 
-            BaseResponse creditAcct = utilMeth.creditCustomerWithType(rqC, "CUSTOMER");
+            BatchPostingRequest batchRq = new BatchPostingRequest();
+            batchRq.setGroupRef(quoteId);
+            BatchPostingLegRequest customerLeg = new BatchPostingLegRequest();
+            customerLeg.setDirection("CREDIT");
+            customerLeg.setUserType("CUSTOMER");
+            customerLeg.setAuth("Receiver");
+            customerLeg.setFees("0.00");
+            customerLeg.setFinalCHarges(amount);
+            customerLeg.setNarration("Deposit");
+            customerLeg.setPhoneNumber(regWalletInfo.get(0).getPhoneNumber());
+            customerLeg.setTransAmount(amount);
+            customerLeg.setTransactionId(quoteId + "-CUSTOMER_CR");
+            BatchPostingLegRequest cadGlLeg = new BatchPostingLegRequest();
+            cadGlLeg.setDirection("CREDIT");
+            cadGlLeg.setUserType("CAD_GL");
+            cadGlLeg.setAuth("Receiver");
+            cadGlLeg.setFees("0.00");
+            cadGlLeg.setFinalCHarges(amount);
+            cadGlLeg.setNarration("CAD_Deposit");
+            cadGlLeg.setPhoneNumber(decryptData(utilMeth.getSETTING_KEY_WALLET_SYSTEM_SYSTEM_GG_CAD()));
+            cadGlLeg.setTransAmount(amount);
+            cadGlLeg.setTransactionId(quoteId+"-CAD_GL_CR");
+            batchRq.setLegs(Arrays.asList(customerLeg, cadGlLeg));
+
+            BaseResponse creditAcct = utilMeth.batchPost(batchRq, null);
 
             System.out.println("Credit Response from core creditAcct ::::::::::::::::  %S  " + new Gson().toJson(creditAcct));
 
@@ -522,7 +561,7 @@ public class WebhookKeyService {
                 kTrans2b.setPaymentType("Deposit to Account");
                 kTrans2b.setReceiver(rqC.getPhoneNumber());
                 kTrans2b.setSender(rqC.getPhoneNumber());
-                kTrans2b.setTransactionId(quoteId);
+                kTrans2b.setTransactionId(quoteId + "-CUSTOMER_CR");
                 kTrans2b.setSenderTransactionType("");
                 kTrans2b.setReceiverTransactionType("Deposit");
 
@@ -571,18 +610,6 @@ public class WebhookKeyService {
 
             }
 
-            // Credit BAAS CAD_GL
-            CreditWalletCaller cadGLCredit = new CreditWalletCaller();
-            cadGLCredit.setAuth("Receiver");
-            cadGLCredit.setFees("0.00");
-            cadGLCredit.setFinalCHarges(amount);
-            cadGLCredit.setNarration("CAD_Deposit");
-            cadGLCredit.setPhoneNumber(decryptData(utilMeth.getSETTING_KEY_WALLET_SYSTEM_SYSTEM_GG_CAD()));
-            cadGLCredit.setTransAmount(amount);
-            cadGLCredit.setTransactionId(quoteId+"-CAD_GL");
-
-            utilMeth.creditCustomerWithType(cadGLCredit, "CAD_GL");
-
             // Credit GLOBAL GL
             /*CreditWalletCaller globalGLCredit = new CreditWalletCaller();
             globalGLCredit.setAuth("Receiver");
@@ -591,7 +618,7 @@ public class WebhookKeyService {
             globalGLCredit.setNarration("GLOBAL_GL_Deposit");
             globalGLCredit.setPhoneNumber(decryptData(utilMeth.getSETTING_KEY_WALLET_SYSTEM_SYSTEM_GG_GLOBAL()));
             globalGLCredit.setTransAmount(amount);
-            globalGLCredit.setTransactionId(quoteId);
+            globalGLCredit.setTransactionId(quoteId + "-CUSTOMER_CR");
 
             utilMeth.creditCustomerWithType(globalGLCredit, "GLOBAL_GL");*/
             return ResponseEntity.ok(resp);

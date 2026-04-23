@@ -545,7 +545,8 @@ public class OrderService {
                 return bad(res, bResss.getDescription(), bResss.getStatusCode());
             }
 
-            //debit the buyer
+            // debit the buyer first, then keep the seller-facing credit until the seller GL leg is ready.
+            // This keeps the risk concentrated on system-controlled accounts and makes compensation saner.
             DebitWalletCaller rqD = new DebitWalletCaller();
             rqD.setAuth("Buyer");
             rqD.setFees(pFeesString);
@@ -565,68 +566,120 @@ public class OrderService {
                 return bad(res, debitBuyerAcct.getDescription(), debitBuyerAcct.getStatusCode());
             }
 
-            if (debitBuyerAcct.getStatusCode() == 200) {
-                DebitWalletCaller debGLCredit = new DebitWalletCaller();
-                debGLCredit.setAuth(off.get(0).getCurrencyReceive().toString());
-                debGLCredit.setFees("0.00");
-                debGLCredit.setFinalCHarges(receiveAmount.toString());
-                debGLCredit.setNarration(rqD.getNarration());
-                List<AppConfig> getAppConf = appConfigRepo.findByConfigName(off.get(0).getCurrencyReceive().toString());
-                String GGL_ACCOUNT = null;
-                String GGL_CODE = null;
-                for (AppConfig getConfDe : getAppConf) {
-                    if (getConfDe.getConfigName().equals(off.get(0).getCurrencyReceive().toString())) {
-                        GGL_ACCOUNT = getConfDe.getConfigValue();
-                        GGL_CODE = off.get(0).getCurrencyReceive().toString();
-                    }
+            List<AppConfig> getAppConf = appConfigRepo.findByConfigName(off.get(0).getCurrencyReceive().toString());
+            String GGL_ACCOUNT = null;
+            String GGL_CODE = null;
+            for (AppConfig getConfDe : getAppConf) {
+                if (getConfDe.getConfigName().equals(off.get(0).getCurrencyReceive().toString())) {
+                    GGL_ACCOUNT = getConfDe.getConfigValue();
+                    GGL_CODE = off.get(0).getCurrencyReceive().toString();
                 }
+            }
 
-                //debGLCredit.setPhoneNumber(utilService.decryptData(utilService.getSETTING_KEY_WALLET_SYSTEM_SYSTEM_GG_NIG()));
-                debGLCredit.setPhoneNumber(utilService.decryptData(GGL_ACCOUNT));
-                debGLCredit.setTransAmount(receiveAmount.toString());
-                debGLCredit.setTransactionId(transactionId + "-" + GGL_CODE);
-
-                System.out.println(" debitAcct_GL REQUEST ::::::::::::::::  %S  " + new Gson().toJson(debGLCredit));
-
-                BaseResponse debitAcct_GLRes = transactionServiceProxies.debitCustomerWithType(debGLCredit, off.get(0).getCurrencyReceive().toString(), auth);
-                System.out.println(" debitAcct_GLRes RESPONSE ::::::::::::::::  %S  " + new Gson().toJson(debitAcct_GLRes));
-
-                //logger.info(" debitAcct GL for buyerleg response ::::::::::::::::::::: ", debitAcct_GL);
-                //CREDIT SELLER
-                CreditWalletCaller rqC = new CreditWalletCaller();
-                rqC.setAuth("Seller");
-                rqC.setFees("00");
-                rqC.setFinalCHarges(receiveAmount.toString());
-                rqC.setNarration(off.get(0).getCurrencyReceive() + "_Deposit");
-                rqC.setPhoneNumber(sellerAcctNumber);
-                rqC.setTransAmount(receiveAmount.toString());
-                rqC.setTransactionId(transactionId + "-DEPOSIT");
-
-                System.out.println(" CREDIT SELLER Credit REQUEST  ::::::::::::::::  %S  " + new Gson().toJson(rqC));
-
-                BaseResponse creditSellerAcct = transactionServiceProxies.creditCustomerWithType(rqC, "CUSTOMER", auth);
-
-                System.out.println(" CREDIT SELLER Credit Response from core ::::::::::::::::  %S  " + new Gson().toJson(creditSellerAcct));
-                if (creditSellerAcct.getStatusCode() == 200) {
-
-                    // Credit BAAS NGN_GL
-                    CreditWalletCaller gLCredit = new CreditWalletCaller();
-                    gLCredit.setAuth(off.get(0).getCurrencyReceive().toString());
-                    gLCredit.setFees("0.00");
-                    gLCredit.setFinalCHarges(receiveAmount.toString());
-                    gLCredit.setNarration(off.get(0).getCurrencyReceive() + "_Deposit");
-                    //gLCredit.setPhoneNumber(utilService.decryptData(utilService.getSETTING_KEY_WALLET_SYSTEM_SYSTEM_GG_NIG()));
-                    gLCredit.setPhoneNumber(utilService.decryptData(GGL_ACCOUNT));
-                    gLCredit.setTransAmount(receiveAmount.toString());
-                    gLCredit.setTransactionId(rqC.getTransactionId() + "-" + off.get(0).getCurrencyReceive().toString() + "-DEPOSIT");
-
-                    System.out.println(" CREDIT GL SLLER LEG REQUEST  ::::::::::::::::  %S  " + new Gson().toJson(gLCredit));
-
-                    BaseResponse creditAcctNGN_GL = transactionServiceProxies.creditCustomerWithType(gLCredit, GGL_CODE + "_GL", auth);
-
-                    System.out.println(" CREDIT GL SLLER LEG Response from core ::::::::::::::::  %S  " + new Gson().toJson(creditAcctNGN_GL));
-
+            if (GGL_ACCOUNT == null || GGL_CODE == null) {
+                BaseResponse buyerRefund = creditAccount(auth, accountNumber, finCharges,
+                        transactionId + "-BUYER-REFUND",
+                        off.get(0).getCurrencyReceive() + "_Withdrawal_Reversal",
+                        "CUSTOMER", "Buyer");
+                String msg = "Buyer debit posted but GL configuration is missing for " + off.get(0).getCurrencyReceive();
+                if (buyerRefund.getStatusCode() == 200) {
+                    return bad(res, msg + ". Buyer debit has been reversed.", 500);
                 }
+                return bad(res, msg + ". Manual intervention required.", 500);
+            }
+
+            String decryptedGglAccount = utilService.decryptData(GGL_ACCOUNT);
+
+            DebitWalletCaller debGLCredit = new DebitWalletCaller();
+            debGLCredit.setAuth(off.get(0).getCurrencyReceive().toString());
+            debGLCredit.setFees("0.00");
+            debGLCredit.setFinalCHarges(receiveAmount.toString());
+            debGLCredit.setNarration(rqD.getNarration());
+            debGLCredit.setPhoneNumber(decryptedGglAccount);
+            debGLCredit.setTransAmount(receiveAmount.toString());
+            debGLCredit.setTransactionId(transactionId + "-" + GGL_CODE + "-BUYER-GL-DR");
+
+            System.out.println(" debitAcct_GL REQUEST ::::::::::::::::  %S  " + new Gson().toJson(debGLCredit));
+
+            BaseResponse debitAcct_GLRes = transactionServiceProxies.debitCustomerWithType(debGLCredit, off.get(0).getCurrencyReceive().toString(), auth);
+            System.out.println(" debitAcct_GLRes RESPONSE ::::::::::::::::  %S  " + new Gson().toJson(debitAcct_GLRes));
+
+            if (debitAcct_GLRes.getStatusCode() != 200) {
+                BaseResponse buyerRefund = creditAccount(auth, accountNumber, finCharges,
+                        transactionId + "-BUYER-REFUND",
+                        off.get(0).getCurrencyReceive() + "_Withdrawal_Reversal",
+                        "CUSTOMER", "Buyer");
+                if (buyerRefund.getStatusCode() == 200) {
+                    return bad(res, "Buyer debit posted but buyer GL debit failed. Buyer debit has been reversed.", 500);
+                }
+                return bad(res, "Buyer debit posted but buyer GL debit failed, and buyer reversal also failed. Manual intervention required.", 500);
+            }
+
+            CreditWalletCaller sellerGlCredit = new CreditWalletCaller();
+            sellerGlCredit.setAuth(off.get(0).getCurrencyReceive().toString());
+            sellerGlCredit.setFees("0.00");
+            sellerGlCredit.setFinalCHarges(receiveAmount.toString());
+            sellerGlCredit.setNarration(off.get(0).getCurrencyReceive() + "_Deposit");
+            sellerGlCredit.setPhoneNumber(decryptedGglAccount);
+            sellerGlCredit.setTransAmount(receiveAmount.toString());
+            sellerGlCredit.setTransactionId(transactionId + "-" + GGL_CODE + "-SELLER-GL-CR");
+
+            System.out.println(" CREDIT GL SELLER LEG REQUEST  ::::::::::::::::  %S  " + new Gson().toJson(sellerGlCredit));
+
+            BaseResponse creditAcctNGN_GL = transactionServiceProxies.creditCustomerWithType(sellerGlCredit, GGL_CODE + "_GL", auth);
+
+            System.out.println(" CREDIT GL SELLER LEG Response from core ::::::::::::::::  %S  " + new Gson().toJson(creditAcctNGN_GL));
+
+            if (creditAcctNGN_GL.getStatusCode() != 200) {
+                BaseResponse reverseBuyerGl = creditAccount(auth, decryptedGglAccount, receiveAmount,
+                        transactionId + "-BUYER-GL-REVERSAL",
+                        off.get(0).getCurrencyReceive() + "_GL_Debit_Reversal",
+                        off.get(0).getCurrencyReceive().toString(),
+                        off.get(0).getCurrencyReceive().toString());
+                BaseResponse buyerRefund = creditAccount(auth, accountNumber, finCharges,
+                        transactionId + "-BUYER-REFUND",
+                        off.get(0).getCurrencyReceive() + "_Withdrawal_Reversal",
+                        "CUSTOMER", "Buyer");
+                if (reverseBuyerGl.getStatusCode() == 200 && buyerRefund.getStatusCode() == 200) {
+                    return bad(res, "Seller GL credit failed. Buyer debit and buyer GL debit have been reversed.", 500);
+                }
+                return bad(res, "Seller GL credit failed and compensation was incomplete. Manual intervention required.", 500);
+            }
+
+            CreditWalletCaller rqC = new CreditWalletCaller();
+            rqC.setAuth("Seller");
+            rqC.setFees("00");
+            rqC.setFinalCHarges(receiveAmount.toString());
+            rqC.setNarration(off.get(0).getCurrencyReceive() + "_Deposit");
+            rqC.setPhoneNumber(sellerAcctNumber);
+            rqC.setTransAmount(receiveAmount.toString());
+            rqC.setTransactionId(transactionId + "-SELLER-CR");
+
+            System.out.println(" CREDIT SELLER Credit REQUEST  ::::::::::::::::  %S  " + new Gson().toJson(rqC));
+
+            BaseResponse creditSellerAcct = transactionServiceProxies.creditCustomerWithType(rqC, "CUSTOMER", auth);
+
+            System.out.println(" CREDIT SELLER Credit Response from core ::::::::::::::::  %S  " + new Gson().toJson(creditSellerAcct));
+            if (creditSellerAcct.getStatusCode() != 200) {
+                BaseResponse reverseSellerGl = debitAccount(auth, decryptedGglAccount, receiveAmount,
+                        transactionId + "-SELLER-GL-REVERSAL",
+                        off.get(0).getCurrencyReceive() + "_Deposit_Reversal",
+                        GGL_CODE + "_GL",
+                        off.get(0).getCurrencyReceive().toString());
+                BaseResponse reverseBuyerGl = creditAccount(auth, decryptedGglAccount, receiveAmount,
+                        transactionId + "-BUYER-GL-REVERSAL",
+                        off.get(0).getCurrencyReceive() + "_GL_Debit_Reversal",
+                        off.get(0).getCurrencyReceive().toString(),
+                        off.get(0).getCurrencyReceive().toString());
+                BaseResponse buyerRefund = creditAccount(auth, accountNumber, finCharges,
+                        transactionId + "-BUYER-REFUND",
+                        off.get(0).getCurrencyReceive() + "_Withdrawal_Reversal",
+                        "CUSTOMER", "Buyer");
+                if (reverseSellerGl.getStatusCode() == 200 && reverseBuyerGl.getStatusCode() == 200 && buyerRefund.getStatusCode() == 200) {
+                    return bad(res, "Seller credit failed. Prior ledger legs have been reversed.", 500);
+                }
+                return bad(res, "Seller credit failed and compensation was incomplete. Manual intervention required.", 500);
+            }
 
                 FinWealthPaymentTransaction kTrans2b = new FinWealthPaymentTransaction();
                 kTrans2b.setAmmount(new BigDecimal(rqC.getFinalCHarges()));
@@ -777,10 +830,6 @@ public class OrderService {
                 res.setDescription("Trade Fx Purchase was successful.");
                 res.setData(orddd); // or map to a lightweight DTO
 
-            } else {
-                return bad(res, "Transaction failed", debitBuyerAcct.getStatusCode());
-            }
-
             return ResponseEntity.ok(res);
 
         } /*catch (BusinessException be) {
@@ -790,6 +839,32 @@ public class OrderService {
             ex.printStackTrace();
             return bad(res, "An error occurred, please try again.", 500);
         }
+    }
+
+    private BaseResponse creditAccount(String auth, String phoneNumber, BigDecimal amount, String transactionId,
+            String narration, String userType, String actor) {
+        CreditWalletCaller rq = new CreditWalletCaller();
+        rq.setAuth(actor);
+        rq.setFees("0.00");
+        rq.setFinalCHarges(amount.toString());
+        rq.setNarration(narration);
+        rq.setPhoneNumber(phoneNumber);
+        rq.setTransAmount(amount.toString());
+        rq.setTransactionId(transactionId);
+        return transactionServiceProxies.creditCustomerWithType(rq, userType, auth);
+    }
+
+    private BaseResponse debitAccount(String auth, String phoneNumber, BigDecimal amount, String transactionId,
+            String narration, String userType, String actor) {
+        DebitWalletCaller rq = new DebitWalletCaller();
+        rq.setAuth(actor);
+        rq.setFees("0.00");
+        rq.setFinalCHarges(amount.toString());
+        rq.setNarration(narration);
+        rq.setPhoneNumber(phoneNumber);
+        rq.setTransAmount(amount.toString());
+        rq.setTransactionId(transactionId);
+        return transactionServiceProxies.debitCustomerWithType(rq, userType, auth);
     }
 
     @Transactional
@@ -910,30 +985,37 @@ public class OrderService {
 
         System.out.println(" creditBuyerAcct REQ  ::::::::::::::::  %S  " + new Gson().toJson(rqC));
 
+        CreditWalletCaller glCredit = new CreditWalletCaller();
+        glCredit.setAuth("Receiver");
+        glCredit.setFees("0.00");
+        glCredit.setFinalCHarges(rqC.getFinalCHarges());
+        glCredit.setNarration(rqC.getNarration());
+        glCredit.setPhoneNumber(utilService.decryptData(GGL_ACCOUNT));
+        glCredit.setTransAmount(rqC.getFinalCHarges());
+        glCredit.setTransactionId(transactionId + "-BUYER-GL-CR");
+
+        System.out.println(" creditAcct_GL buyer legCredit REQ  ::::::::::::::::  %S  " + new Gson().toJson(glCredit));
+
+        BaseResponse creditAcct_GL = transactionServiceProxies.creditCustomerWithType(glCredit, off.get(0).getCurrencySell().toString(), auth);
+
+        System.out.println(" credit GL for buyer legCredit Response from core ::::::::::::::::  %S  " + new Gson().toJson(creditAcct_GL));
+
+        if (creditAcct_GL.getStatusCode() != 200) {
+            throw new BusinessException("Buyer GL credit failed");
+        }
+
         BaseResponse creditBuyerAcct = transactionServiceProxies.creditCustomerWithType(rqC, "CUSTOMER", auth);
 
         System.out.println(" creditBuyerAcct Response from core ::::::::::::::::  %S  " + new Gson().toJson(creditBuyerAcct));
-        if (creditBuyerAcct.getStatusCode() == 200) {
-
-            // Credit BAAS NGN_GL
-            CreditWalletCaller GLCredit = new CreditWalletCaller();
-            GLCredit.setAuth("Receiver");
-            GLCredit.setFees("0.00");
-            GLCredit.setFinalCHarges(rqC.getFinalCHarges());
-            GLCredit.setNarration(rqC.getNarration());
-            //GLCredit.setPhoneNumber(utilService.decryptData(utilService.getSETTING_KEY_WALLET_SYSTEM_SYSTEM_GG_CAD()));
-            GLCredit.setPhoneNumber(utilService.decryptData(GGL_ACCOUNT));
-            GLCredit.setTransAmount(rqC.getFinalCHarges());
-            GLCredit.setTransactionId(rqC.getTransactionId() + "-DEPOSIT-GL" + "2");
-
-            System.out.println(" creditAcct_GL buyer legCredit REQ  ::::::::::::::::  %S  " + new Gson().toJson(GLCredit));
-
-            BaseResponse creditAcct_GL = transactionServiceProxies.creditCustomerWithType(GLCredit, off.get(0).getCurrencySell().toString(), auth);
-
-            System.out.println(" credit GL for buyer legCredit Response from core ::::::::::::::::  %S  " + new Gson().toJson(creditAcct_GL));
-
+        if (creditBuyerAcct.getStatusCode() != 200) {
+            BaseResponse reverseBuyerGl = debitAccount(auth, utilService.decryptData(GGL_ACCOUNT), new BigDecimal(rqC.getFinalCHarges()),
+                    transactionId + "-BUYER-GL-CR-REVERSAL", rqC.getNarration() + "_REVERSAL",
+                    off.get(0).getCurrencySell().toString(), "Receiver");
+            if (reverseBuyerGl.getStatusCode() != 200) {
+                throw new BusinessException("Buyer wallet credit failed after GL release; manual intervention required");
+            }
+            throw new BusinessException("Buyer wallet credit failed");
         }
-        // }
 
         FinWealthPaymentTransaction kTrans2b = new FinWealthPaymentTransaction();
         kTrans2b.setAmmount(new BigDecimal(rqC.getFinalCHarges()));

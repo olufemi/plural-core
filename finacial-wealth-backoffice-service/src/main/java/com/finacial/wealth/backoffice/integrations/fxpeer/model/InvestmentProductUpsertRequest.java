@@ -33,6 +33,13 @@ public class InvestmentProductUpsertRequest {
     private LiquidationFeeType liquidationFeeType;
     private BigDecimal liquidationFeeRate;
     private BigDecimal minLiquidationFee;
+    private BigDecimal liquidationFeeCap;
+    private Boolean lockEnabled;
+    private Integer lockDays;
+    private LiquidationFeeAppliedTo earlyLiquidationFeeAppliedTo;
+    private LiquidationFeeType earlyLiquidationFeeType;
+    private BigDecimal earlyLiquidationFeeRate;
+    private BigDecimal earlyLiquidationFeeCap;
 
     private String partnerProductCode;
     private String prospectusUrl;

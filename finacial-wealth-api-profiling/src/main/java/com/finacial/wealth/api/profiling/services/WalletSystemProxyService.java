@@ -486,7 +486,7 @@ public class WalletSystemProxyService {
         try {
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
-            headers.set("Authorization", token);   // important: standard header name
+            headers.setBearerAuth(token);
             headers.set("channel", CHANNEL);
 
             HttpEntity<LedgerSummaryRequest> entity = new HttpEntity<>(request, headers);

@@ -22,6 +22,8 @@ import com.finacial.wealth.api.fxpeer.exchange.inter.airtime.transaction.TopupPu
 import com.finacial.wealth.api.fxpeer.exchange.inter.airtime.val.msisdn.NumberNormalizeResponse;
 import com.finacial.wealth.api.fxpeer.exchange.model.AddAccountObj;
 import com.finacial.wealth.api.fxpeer.exchange.model.ApiResponseModel;
+import com.finacial.wealth.api.fxpeer.exchange.model.BatchPostingLegRequest;
+import com.finacial.wealth.api.fxpeer.exchange.model.BatchPostingRequest;
 import com.finacial.wealth.api.fxpeer.exchange.model.BaseResponse;
 import com.finacial.wealth.api.fxpeer.exchange.model.CreditWalletCaller;
 import com.finacial.wealth.api.fxpeer.exchange.model.DebitWalletCaller;
@@ -1383,8 +1385,12 @@ public class ProcSochitelServices {
                 return out;
             }
 
-            // Debit buyer
-            DebitWalletCaller debitBuyer = new DebitWalletCaller();
+            BatchPostingRequest batchRq = new BatchPostingRequest();
+            batchRq.setGroupRef(processId);
+
+            BatchPostingLegRequest debitBuyer = new BatchPostingLegRequest();
+            debitBuyer.setDirection("DEBIT");
+            debitBuyer.setUserType("CUSTOMER");
             debitBuyer.setAuth("Airtime_Buyer");
             debitBuyer.setFees(feesStr);
             debitBuyer.setFinalCHarges(finCharges.toString());
@@ -1392,15 +1398,6 @@ public class ProcSochitelServices {
             debitBuyer.setPhoneNumber(accountNumber);
             debitBuyer.setTransAmount(finCharges.toString());
             debitBuyer.setTransactionId(processId + "-" + rq.getCurrencyCode());
-
-            BaseResponse debitBuyerRes = transactionServiceProxies.debitCustomerWithType(debitBuyer, "CUSTOMER", auth);
-            System.out.println(" preDebitAndSettleAirtime debitBuyerRes ::::::::::::::::  %S  " + new Gson().toJson(debitBuyerRes));
-
-            if (debitBuyerRes.getStatusCode() != 200) {
-                out.setError(new BaseResponse(debitBuyerRes.getStatusCode(), debitBuyerRes.getDescription()));
-                return out;
-            }
-            out.setLegBuyerDebited(true);
 
             // GL + Seller
             List<AppConfig> confs = appConfigRepo.findByConfigName(rq.getCurrencyCode());
@@ -1420,7 +1417,9 @@ public class ProcSochitelServices {
             String sellerAcctNumber = utilService.decryptData(AIRTIME_GGL_ACCOUNT);
 
             // Debit GL (buyer leg)
-            DebitWalletCaller debGLCredit = new DebitWalletCaller();
+            BatchPostingLegRequest debGLCredit = new BatchPostingLegRequest();
+            debGLCredit.setDirection("DEBIT");
+            debGLCredit.setUserType(rq.getCurrencyCode());
             debGLCredit.setAuth(rq.getCurrencyCode());
             debGLCredit.setFees("0.00");
             debGLCredit.setFinalCHarges(receiveAmount.toString());
@@ -1429,17 +1428,10 @@ public class ProcSochitelServices {
             debGLCredit.setTransAmount(receiveAmount.toString());
             debGLCredit.setTransactionId(processId);
 
-            BaseResponse debitGLRes = transactionServiceProxies.debitCustomerWithType(debGLCredit, rq.getCurrencyCode(), auth);
-            System.out.println(" preDebitAndSettleAirtime debitGLRes ::::::::::::::::  %S  " + new Gson().toJson(debitGLRes));
-
-            if (debitGLRes.getStatusCode() != 200) {
-                out.setError(new BaseResponse(debitGLRes.getStatusCode(), debitGLRes.getDescription()));
-                return out;
-            }
-            out.setLegGLDebited(true);
-
             // Credit Seller
-            CreditWalletCaller creditSeller = new CreditWalletCaller();
+            BatchPostingLegRequest creditSeller = new BatchPostingLegRequest();
+            creditSeller.setDirection("CREDIT");
+            creditSeller.setUserType("CUSTOMER");
             creditSeller.setAuth("Bills_Account");
             creditSeller.setFees("00");
             creditSeller.setFinalCHarges(receiveAmount.toString());
@@ -1448,17 +1440,10 @@ public class ProcSochitelServices {
             creditSeller.setTransAmount(receiveAmount.toString());
             creditSeller.setTransactionId(processId + "-" + rq.getCurrencyCode());
 
-            BaseResponse creditBillsAccount = transactionServiceProxies.creditCustomerWithType(creditSeller, "CUSTOMER", auth);
-            System.out.println(" preDebitAndSettleAirtime creditBillsAccount ::::::::::::::::  %S  " + new Gson().toJson(creditBillsAccount));
-
-            if (creditBillsAccount.getStatusCode() != 200) {
-                out.setError(new BaseResponse(creditBillsAccount.getStatusCode(), creditBillsAccount.getDescription()));
-                return out;
-            }
-            out.setLegSellerCredited(true);
-
             // Credit GL (seller leg)
-            CreditWalletCaller glCredit = new CreditWalletCaller();
+            BatchPostingLegRequest glCredit = new BatchPostingLegRequest();
+            glCredit.setDirection("CREDIT");
+            glCredit.setUserType(GGL_CODE + "_GL");
             glCredit.setAuth(rq.getCurrencyCode());
             glCredit.setFees("0.00");
             glCredit.setFinalCHarges(receiveAmount.toString());
@@ -1467,13 +1452,17 @@ public class ProcSochitelServices {
             glCredit.setTransAmount(receiveAmount.toString());
             glCredit.setTransactionId(creditSeller.getTransactionId() + "-" + "DEPOSIT");
 
-            BaseResponse creditGLRes = transactionServiceProxies.creditCustomerWithType(glCredit, GGL_CODE + "_GL", auth);
-            System.out.println(" preDebitAndSettleAirtime creditGLRes ::::::::::::::::  %S  " + new Gson().toJson(creditGLRes));
+            batchRq.setLegs(List.of(debitBuyer, debGLCredit, creditSeller, glCredit));
+            BaseResponse batchRes = transactionServiceProxies.batchPostWithType(batchRq, auth);
+            System.out.println(" preDebitAndSettleAirtime batchRes ::::::::::::::::  %S  " + new Gson().toJson(batchRes));
 
-            if (creditGLRes.getStatusCode() != 200) {
-                out.setError(new BaseResponse(creditGLRes.getStatusCode(), creditGLRes.getDescription()));
+            if (batchRes.getStatusCode() != 200) {
+                out.setError(new BaseResponse(batchRes.getStatusCode(), batchRes.getDescription()));
                 return out;
             }
+            out.setLegBuyerDebited(true);
+            out.setLegGLDebited(true);
+            out.setLegSellerCredited(true);
             out.setLegGLCredited(true);
 
             // success payload

@@ -6,6 +6,7 @@ package com.financial.wealth.api.transactions.controllers;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.financial.wealth.api.transactions.models.BaseResponse;
+import com.financial.wealth.api.transactions.models.BatchPostingRequest;
 import com.financial.wealth.api.transactions.models.CreditWalletCaller;
 import com.financial.wealth.api.transactions.models.DebitWalletCaller;
 import com.financial.wealth.api.transactions.models.LeaveGroupRequest;
@@ -65,6 +66,15 @@ public class FXPeerToPeerController {
             @RequestBody @Valid CreditWalletCaller rq) throws MalformedURLException, JsonProcessingException {
 
         BaseResponse baseResponse = utilMeth.creditCustomerWithType(rq, userType);
+        return new ResponseEntity<>(baseResponse, HttpStatus.OK);
+    }
+
+    @PostMapping("/batch-post-with-type")
+    public ResponseEntity<BaseResponse> batchPostWithType(
+            @RequestBody @Valid BatchPostingRequest rq,
+            @RequestHeader(value = "Authorization", required = false) String authorization) throws JsonProcessingException {
+
+        BaseResponse baseResponse = utilMeth.batchPost(rq, authorization);
         return new ResponseEntity<>(baseResponse, HttpStatus.OK);
     }
 

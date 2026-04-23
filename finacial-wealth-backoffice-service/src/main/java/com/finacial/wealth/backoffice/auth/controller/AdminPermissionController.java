@@ -14,7 +14,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/api/admin/permissions")
+@RequestMapping({"/admin/permissions", "/backoffice/admin/permissions", "/bo/admin/permissions", "/api/admin/permissions"})
 @RequiredArgsConstructor
 @Tag(name = "Permissions", description = "Permission catalog endpoints used for role and approval setup.")
 public class AdminPermissionController {

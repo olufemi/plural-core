@@ -14,6 +14,8 @@ import com.financial.wealth.api.transactions.domain.FailedDebitLog;
 import com.financial.wealth.api.transactions.domain.SuccessDebitLog;
 import com.financial.wealth.api.transactions.enumm.CreditLogStatus;
 import com.financial.wealth.api.transactions.models.BaseResponse;
+import com.financial.wealth.api.transactions.models.BatchPostingLegRequest;
+import com.financial.wealth.api.transactions.models.BatchPostingRequest;
 import com.financial.wealth.api.transactions.models.CreditWalletCaller;
 import com.financial.wealth.api.transactions.models.DebitWalletCaller;
 import com.financial.wealth.api.transactions.repo.CreateCreditLogRepository;
@@ -42,12 +44,14 @@ import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.Base64;
 import java.util.Collections;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
+import java.util.Map;
 import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -70,8 +74,14 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
+import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.web.client.RestTemplate;
 
 /**
@@ -505,6 +515,135 @@ public class UttilityMethods {
             // your method signature doesn't declare Exception, so wrap it
             throw new RuntimeException("creditWallet failed for txId=" + caller.getTransactionId(), ex);
         }
+    }
+
+    public BaseResponse batchPost(BatchPostingRequest request, String authorization) throws JsonProcessingException {
+        BaseResponse baseResponse = new BaseResponse();
+        int statusCode = 500;
+        String statusMessage = "Unable to process batch post now";
+
+        try {
+            if (request == null || request.getLegs() == null || request.getLegs().isEmpty()) {
+                return new BaseResponse(HttpServletResponse.SC_BAD_REQUEST, "Batch post requires at least one leg");
+            }
+
+            String authHeader = resolveWalletSystemAuthorization(authorization);
+            String productCode = getClaimFromJwt(authHeader, "productCode");
+            if (!StringUtils.hasText(productCode)) {
+                return new BaseResponse(HttpServletResponse.SC_BAD_REQUEST, "Unable to resolve product code for batch post");
+            }
+
+            List<Map<String, Object>> items = new ArrayList<>();
+            for (BatchPostingLegRequest leg : request.getLegs()) {
+                items.add(buildBatchPostItem(leg, productCode));
+            }
+
+            Map<String, Object> payload = new LinkedHashMap<>();
+            payload.put("groupRef", StringUtils.hasText(request.getGroupRef()) ? request.getGroupRef() : UUID.randomUUID().toString());
+            payload.put("items", items);
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            headers.setAccept(Collections.singletonList(MediaType.APPLICATION_JSON));
+            headers.add("channel", "API");
+            headers.set("Authorization", authHeader);
+
+            HttpEntity<Map<String, Object>> entity = new HttpEntity<>(payload, headers);
+            ResponseEntity<BaseResponse> response = restTemplate.exchange(
+                    getWALLET_SYSTEM_BASE_URL() + "/generalledger/v2/batch-post",
+                    HttpMethod.POST,
+                    entity,
+                    BaseResponse.class);
+
+            if (response.getBody() != null) {
+                return response.getBody();
+            }
+
+            baseResponse.setStatusCode(statusCode);
+            baseResponse.setDescription(statusMessage);
+            return baseResponse;
+        } catch (HttpStatusCodeException ex) {
+            try {
+                BaseResponse response = objectMapper.readValue(ex.getResponseBodyAsString(), BaseResponse.class);
+                if (response != null) {
+                    return response;
+                }
+            } catch (Exception ignored) {
+            }
+            baseResponse.setStatusCode(ex.getStatusCode().value());
+            baseResponse.setDescription(StringUtils.hasText(ex.getResponseBodyAsString()) ? ex.getResponseBodyAsString() : statusMessage);
+            return baseResponse;
+        } catch (Exception ex) {
+            baseResponse.setDescription(statusMessage);
+            baseResponse.setStatusCode(statusCode);
+            ex.printStackTrace();
+            return baseResponse;
+        }
+    }
+
+    private Map<String, Object> buildBatchPostItem(BatchPostingLegRequest leg, String productCode) {
+        String direction = leg.getDirection() == null ? "" : leg.getDirection().trim().toUpperCase(Locale.ROOT);
+        if (!"DEBIT".equals(direction) && !"CREDIT".equals(direction)) {
+            throw new IllegalArgumentException("Batch posting leg direction must be DEBIT or CREDIT");
+        }
+
+        Map<String, Object> item = new LinkedHashMap<>();
+        item.put("requestRef", StringUtils.hasText(leg.getRequestRef()) ? leg.getRequestRef() : leg.getTransactionId());
+        item.put("direction", direction);
+        item.put("productCode", productCode);
+        item.put("transType", "DEBIT".equals(direction) ? "Withdrawal" : "Deposit");
+        item.put("accountNumber", leg.getPhoneNumber());
+        item.put("narration", leg.getNarration());
+        item.put("amount", leg.getTransAmount());
+        item.put("fees", leg.getFees());
+        item.put("finalCharges", leg.getFinalCHarges());
+        if (StringUtils.hasText(leg.getUserType())) {
+            item.put("legTag", leg.getUserType());
+        }
+        return item;
+    }
+
+    private String resolveWalletSystemAuthorization(String authorization) throws Exception {
+        if (StringUtils.hasText(authorization)) {
+            return normalizeBearerToken(authorization);
+        }
+
+        BaseResponse authRes = authenticateWalletSystemUser();
+        if (authRes == null || authRes.getStatusCode() != 200 || authRes.getData() == null) {
+            throw new IllegalStateException("Wallet system authentication failed for batch post");
+        }
+
+        Object token = authRes.getData().get("idToken");
+        if (token == null || !StringUtils.hasText(String.valueOf(token))) {
+            throw new IllegalStateException("Wallet system authentication did not return token");
+        }
+        return normalizeBearerToken(String.valueOf(token));
+    }
+
+    private BaseResponse authenticateWalletSystemUser() throws Exception {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("emailAddress", getWALLET_SYSTEM_EMAIL());
+        payload.put("password", decryptData(getWALLET_SYSTEM_PASSWORD()));
+
+        return restTemplate.postForObject(
+                getWALLET_SYSTEM_BASE_URL() + "/session-manager/session/authenticate/user",
+                payload,
+                BaseResponse.class);
+    }
+
+    private String decryptData(String data) throws NoSuchAlgorithmException, NoSuchPaddingException, InvalidKeyException, IllegalBlockSizeException, BadPaddingException {
+
+        String decryptData = StrongAES.decrypt(data, encryptionKey);
+
+        return decryptData;
+    }
+
+    private String normalizeBearerToken(String authorization) {
+        String token = authorization == null ? "" : authorization.trim();
+        if (token.toLowerCase(Locale.ROOT).startsWith("bearer ")) {
+            return token;
+        }
+        return "Bearer " + token;
     }
 
     private boolean isTimeout(Throwable ex) {

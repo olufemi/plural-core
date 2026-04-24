@@ -1,6 +1,7 @@
 package com.finacial.wealth.backoffice.controller;
 
 import com.finacial.wealth.backoffice.integrations.fxpeer.FxPeerExchangeClient;
+import com.finacial.wealth.backoffice.integrations.fxpeer.model.FeaturedServicesConfigRequest;
 import com.finacial.wealth.backoffice.integrations.fxpeer.model.InvestmentProductUpsertRequest;
 import com.finacial.wealth.backoffice.integrations.fxpeer.model.LiquidationApprovalRequest;
 import com.finacial.wealth.backoffice.reports.CsvWriter;
@@ -42,6 +43,45 @@ public class BoInvestmentController {
     public Map<String, Object> getProducts(HttpServletRequest req) {
         String auth = req.getHeader("Authorization"); // preserve case
         return fxPeerClient.getInvestmentProducts(auth);
+    }
+
+    @GetMapping("/featured-services")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','ADMIN','OPERATIONS','FINANCE')")
+    @Operation(
+            summary = "List featured service cards",
+            description = "Returns the mobile featured service cards resolved by the exchange service.",
+            security = @SecurityRequirement(name = "bearerAuth")
+    )
+    public Map<String, Object> getFeaturedServices(HttpServletRequest req) {
+        String auth = req.getHeader("Authorization");
+        return fxPeerClient.getFeaturedServices(auth);
+    }
+
+    @GetMapping("/featured-services/config")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','ADMIN','OPERATIONS','FINANCE')")
+    @Operation(
+            summary = "Fetch featured services config",
+            description = "Returns the stored featured-card configuration managed by backoffice.",
+            security = @SecurityRequirement(name = "bearerAuth")
+    )
+    public Map<String, Object> getFeaturedServicesConfig(HttpServletRequest req) {
+        String auth = req.getHeader("Authorization");
+        return fxPeerClient.getFeaturedServicesConfig(auth);
+    }
+
+    @PostMapping("/featured-services/config")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','ADMIN','OPERATIONS','FINANCE')")
+    @Operation(
+            summary = "Save featured services config",
+            description = "Creates or updates the featured-card configuration used by the mobile services screen.",
+            security = @SecurityRequirement(name = "bearerAuth")
+    )
+    public Map<String, Object> saveFeaturedServicesConfig(
+            HttpServletRequest req,
+            @RequestBody FeaturedServicesConfigRequest request
+    ) {
+        String auth = req.getHeader("Authorization");
+        return fxPeerClient.saveFeaturedServicesConfig(auth, request);
     }
 
     @PostMapping("/products")

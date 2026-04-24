@@ -7,5 +7,6 @@ import lombok.Data;
 @Data
 public class BatchPostingRequest {
     private String groupRef;
+    private String productCode;
     private List<BatchPostingLegRequest> legs = new ArrayList<>();
 }

@@ -128,6 +128,10 @@ public class UttilityMethods {
     @Autowired
     private RestTemplate restTemplate;
 
+    @Qualifier("withoutEureka")
+    @Autowired
+    private RestTemplate externalRestTemplate;
+
     @Value("${fin.wealth.otp.encrypt.key}")
     private String encryptionKey;
 
@@ -231,6 +235,7 @@ public class UttilityMethods {
             }
 
         } catch (Exception ex) {
+            System.out.println("batchPost unexpected error ::::::::  " + ex.getMessage());
             baseResponse.setDescription(statusMessage);
             baseResponse.setStatusCode(statusCode);
 
@@ -320,6 +325,7 @@ public class UttilityMethods {
             if (code == 200) {
                 creLog.setStatus(CreditLogStatus.SUCCESS);
                 creLog.setResolved(true);
+                upsertSuccessDebitLog(rq, type, countryCode);
 
             } else if (code >= 400 && code < 600) {
                 creLog.setStatus(CreditLogStatus.FAILED);
@@ -342,6 +348,29 @@ public class UttilityMethods {
             // your method signature doesn't declare Exception, so wrap it
             throw new RuntimeException("debitWallet failed for txId=" + rq.getTransactionId(), ex);
         }
+    }
+
+    private void upsertSuccessDebitLog(DebitWalletCaller rq, String type, String countryCode) throws JsonProcessingException {
+        SuccessDebitLog log = successDebitLogRepo.findFirstByTransactionId(rq.getTransactionId());
+        if (log == null) {
+            log = new SuccessDebitLog();
+            log.setTransactionId(rq.getTransactionId());
+            log.setCreatedDate(Instant.now());
+        }
+
+        log.setPayloadType(type);
+        log.setRequestJson(objectMapper.writeValueAsString(rq));
+        log.setNarration(rq.getNarration());
+        log.setRetryCount(0);
+        log.setResolved(true);
+        log.setCountryCode(countryCode);
+        log.setMarkForRollBack(0);
+        log.setReversalStatus("NONE");
+        log.setReversalRequestedAt(null);
+        log.setReversalCompletedAt(null);
+        log.setReversalLastError(null);
+        log.setLastModifiedDate(Instant.now());
+        successDebitLogRepo.save(log);
     }
 
     public BaseResponse creditCustomer(CreditWalletCaller caller)
@@ -528,7 +557,9 @@ public class UttilityMethods {
             }
 
             String authHeader = resolveWalletSystemAuthorization(authorization);
-            String productCode = getClaimFromJwt(authHeader, "productCode");
+            String productCode = resolveBatchPostProductCode(request, authHeader);
+            //System.out.println("batchPost auth token productCode ::::::::  " + getClaimFromJwt(authHeader, "productCode"));
+            //System.out.println("batchPost resolved productCode ::::::::  " + productCode);
             if (!StringUtils.hasText(productCode)) {
                 return new BaseResponse(HttpServletResponse.SC_BAD_REQUEST, "Unable to resolve product code for batch post");
             }
@@ -548,8 +579,9 @@ public class UttilityMethods {
             headers.add("channel", "API");
             headers.set("Authorization", authHeader);
 
+           // System.out.println("batchPost final payload ::::::::  " + objectMapper.writeValueAsString(payload));
             HttpEntity<Map<String, Object>> entity = new HttpEntity<>(payload, headers);
-            ResponseEntity<BaseResponse> response = restTemplate.exchange(
+            ResponseEntity<BaseResponse> response = externalRestTemplate.exchange(
                     getWALLET_SYSTEM_BASE_URL() + "/generalledger/v2/batch-post",
                     HttpMethod.POST,
                     entity,
@@ -563,6 +595,8 @@ public class UttilityMethods {
             baseResponse.setDescription(statusMessage);
             return baseResponse;
         } catch (HttpStatusCodeException ex) {
+            System.out.println("batchPost smartcore error status ::::::::  " + ex.getStatusCode().value());
+            System.out.println("batchPost smartcore error body ::::::::  " + ex.getResponseBodyAsString());
             try {
                 BaseResponse response = objectMapper.readValue(ex.getResponseBodyAsString(), BaseResponse.class);
                 if (response != null) {
@@ -581,6 +615,19 @@ public class UttilityMethods {
         }
     }
 
+    private String resolveBatchPostProductCode(BatchPostingRequest request, String authHeader) {
+        String productCode = getClaimFromJwt(authHeader, "productCode");
+        if (StringUtils.hasText(productCode)) {
+            return productCode.trim();
+        }
+
+        if (request != null && StringUtils.hasText(request.getProductCode())) {
+            return request.getProductCode().trim();
+        }
+
+        return null;
+    }
+
     private Map<String, Object> buildBatchPostItem(BatchPostingLegRequest leg, String productCode) {
         String direction = leg.getDirection() == null ? "" : leg.getDirection().trim().toUpperCase(Locale.ROOT);
         if (!"DEBIT".equals(direction) && !"CREDIT".equals(direction)) {
@@ -597,19 +644,26 @@ public class UttilityMethods {
         item.put("amount", leg.getTransAmount());
         item.put("fees", leg.getFees());
         item.put("finalCharges", leg.getFinalCHarges());
-        if (StringUtils.hasText(leg.getUserType())) {
-            item.put("legTag", leg.getUserType());
+        String legTag = StringUtils.hasText(leg.getRequestRef()) ? leg.getRequestRef() : leg.getTransactionId();
+        if (StringUtils.hasText(legTag)) {
+            item.put("legTag", legTag);
         }
         return item;
     }
 
     private String resolveWalletSystemAuthorization(String authorization) throws Exception {
         if (StringUtils.hasText(authorization)) {
-            return normalizeBearerToken(authorization);
+            String normalized = normalizeBearerToken(authorization);
+            String productCode = getClaimFromJwt(normalized, "productCode");
+            if (StringUtils.hasText(productCode)) {
+                return normalized;
+            }
         }
 
         BaseResponse authRes = authenticateWalletSystemUser();
-        if (authRes == null || authRes.getStatusCode() != 200 || authRes.getData() == null) {
+        System.out.println("authenticateWalletSystemUser :::::::: " + " " + new Gson().toJson(authRes));
+
+        if (authRes == null || authRes.getStatusCode() != 200) {
             throw new IllegalStateException("Wallet system authentication failed for batch post");
         }
 
@@ -625,10 +679,18 @@ public class UttilityMethods {
         payload.put("emailAddress", getWALLET_SYSTEM_EMAIL());
         payload.put("password", decryptData(getWALLET_SYSTEM_PASSWORD()));
 
-        return restTemplate.postForObject(
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.setAccept(Collections.singletonList(MediaType.APPLICATION_JSON));
+        headers.add("channel", "API");
+
+        HttpEntity<Map<String, Object>> entity = new HttpEntity<>(payload, headers);
+        ResponseEntity<BaseResponse> response = externalRestTemplate.exchange(
                 getWALLET_SYSTEM_BASE_URL() + "/session-manager/session/authenticate/user",
-                payload,
+                HttpMethod.POST,
+                entity,
                 BaseResponse.class);
+        return response.getBody();
     }
 
     private String decryptData(String data) throws NoSuchAlgorithmException, NoSuchPaddingException, InvalidKeyException, IllegalBlockSizeException, BadPaddingException {

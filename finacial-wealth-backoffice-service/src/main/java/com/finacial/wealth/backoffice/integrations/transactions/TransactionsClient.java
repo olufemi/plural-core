@@ -13,4 +13,10 @@ public interface TransactionsClient {
 
   @PostMapping("/api/transactions/interbank/name-enquiry")
   Map<String, Object> interbankNameEnquiry(@RequestBody Map<String, Object> request);
+
+  @GetMapping("/api/transactions/admin/reversals/summary")
+  Map<String, Object> getReversalSummary();
+
+  @GetMapping("/api/transactions/admin/reversals")
+  Map<String, Object> getReversalCases(@RequestParam(required = false) String status);
 }

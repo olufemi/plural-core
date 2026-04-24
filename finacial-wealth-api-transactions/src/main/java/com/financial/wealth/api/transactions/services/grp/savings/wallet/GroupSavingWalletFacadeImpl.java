@@ -152,8 +152,10 @@ public class GroupSavingWalletFacadeImpl implements WalletFacade {
 
         BatchPostingRequest batchRq = new BatchPostingRequest();
         batchRq.setGroupRef(reff);
+        // productCode resolved from Smart-Core auth token in batchPost
         BatchPostingLegRequest customerLeg = new BatchPostingLegRequest();
         customerLeg.setDirection("DEBIT");
+        customerLeg.setRequestRef(reff + "-CUSTOMER_DR");
         customerLeg.setUserType("CUSTOMER");
         customerLeg.setAuth("Receiver");
         customerLeg.setFees("0.00");
@@ -161,9 +163,10 @@ public class GroupSavingWalletFacadeImpl implements WalletFacade {
         customerLeg.setNarration("Withdrawal");
         customerLeg.setPhoneNumber(getReg.get(0).getPhoneNumber());
         customerLeg.setTransAmount(amount.toString());
-        customerLeg.setTransactionId(reff + "-CUSTOMER_CR");
+        customerLeg.setTransactionId(reff + "-CUSTOMER_DR");
         BatchPostingLegRequest cadGlLeg = new BatchPostingLegRequest();
         cadGlLeg.setDirection("DEBIT");
+        cadGlLeg.setRequestRef(reff + "-CAD_GL_DR");
         cadGlLeg.setUserType("CAD_GL");
         cadGlLeg.setAuth("Receiver");
         cadGlLeg.setFees("0.00");
@@ -188,7 +191,7 @@ public class GroupSavingWalletFacadeImpl implements WalletFacade {
             kTrans2b.setPaymentType("Withdrawal from Account");
             kTrans2b.setReceiver(rqC.getPhoneNumber());
             kTrans2b.setSender(rqC.getPhoneNumber());
-            kTrans2b.setTransactionId(reff + (amount.signum() >= 0 ? "-CUSTOMER" : "-CUSTOMER"));
+            kTrans2b.setTransactionId(reff + "-CUSTOMER_CR");
             kTrans2b.setSenderTransactionType("");
             kTrans2b.setReceiverTransactionType("Withdrawal");
 
@@ -290,6 +293,7 @@ public class GroupSavingWalletFacadeImpl implements WalletFacade {
         batchRq.setGroupRef(reff);
         BatchPostingLegRequest customerLeg = new BatchPostingLegRequest();
         customerLeg.setDirection("CREDIT");
+        customerLeg.setRequestRef(reff + "-CUSTOMER_CR");
         customerLeg.setUserType("CUSTOMER");
         customerLeg.setAuth("Receiver");
         customerLeg.setFees("0.00");
@@ -297,7 +301,7 @@ public class GroupSavingWalletFacadeImpl implements WalletFacade {
         customerLeg.setNarration("Deposit");
         customerLeg.setPhoneNumber(getReg.get(0).getPhoneNumber());
         customerLeg.setTransAmount(amount.toString());
-        customerLeg.setTransactionId(reff + (amount.signum() >= 0 ? "-CUSTOMER" : "-CUSTOMER"));
+        customerLeg.setTransactionId(reff + "-CUSTOMER_CR");
         BatchPostingLegRequest cadGlLeg = new BatchPostingLegRequest();
         cadGlLeg.setDirection("CREDIT");
         cadGlLeg.setUserType("CAD_GL");
@@ -324,7 +328,7 @@ public class GroupSavingWalletFacadeImpl implements WalletFacade {
             kTrans2b.setPaymentType("Deposit to Account");
             kTrans2b.setReceiver(rqC.getPhoneNumber());
             kTrans2b.setSender(rqC.getPhoneNumber());
-            kTrans2b.setTransactionId(reff + (amount.signum() >= 0 ? "-CUSTOMER" : "-CUSTOMER"));
+            kTrans2b.setTransactionId(reff + "-CUSTOMER_CR");
             kTrans2b.setSenderTransactionType("");
             kTrans2b.setReceiverTransactionType("Deposit");
 

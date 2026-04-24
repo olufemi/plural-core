@@ -8,6 +8,7 @@ import com.financial.wealth.api.transactions.domain.CreateQuoteResLog;
 import com.financial.wealth.api.transactions.domain.FailedCreditLog;
 import com.financial.wealth.api.transactions.domain.FailedDebitLog;
 import com.financial.wealth.api.transactions.domain.SuccessDebitLog;
+import java.util.Collection;
 import java.util.List;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.CrudRepository;
@@ -22,6 +23,14 @@ public interface SuccessDebitLogRepo extends
     List<SuccessDebitLog> findByResolvedFalse();
     
     List<SuccessDebitLog> findByMarkForRollBack(int markForRollBack);
+
+    List<SuccessDebitLog> findByReversalStatus(String reversalStatus);
+
+    List<SuccessDebitLog> findByReversalStatusIn(Collection<String> reversalStatuses);
+
+    List<SuccessDebitLog> findByReversalStatusNot(String reversalStatus);
+
+    SuccessDebitLog findFirstByTransactionId(String transactionId);
 
     @Query("SELECT config from SuccessDebitLog config where config.transactionId=:transactionId")
     List<SuccessDebitLog> findByTransactionId(String transactionId);

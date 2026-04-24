@@ -268,8 +268,10 @@ public class WebhookKeyService {
 
             BatchPostingRequest batchRq = new BatchPostingRequest();
             batchRq.setGroupRef(rqq.getQuoteId());
+            // productCode resolved from Smart-Core auth token in batchPost
             BatchPostingLegRequest customerLeg = new BatchPostingLegRequest();
             customerLeg.setDirection("DEBIT");
+            customerLeg.setRequestRef(rqq.getQuoteId() + "-CUSTOMER_DR");
             customerLeg.setUserType("CUSTOMER");
             customerLeg.setAuth("Receiver");
             customerLeg.setFees("0.00");
@@ -280,6 +282,7 @@ public class WebhookKeyService {
             customerLeg.setTransactionId(rqq.getQuoteId() + "-CUSTOMER_DR");
             BatchPostingLegRequest cadGlLeg = new BatchPostingLegRequest();
             cadGlLeg.setDirection("DEBIT");
+            cadGlLeg.setRequestRef(rqq.getQuoteId() + "-CAD_GL_DR");
             cadGlLeg.setUserType("CAD_GL");
             cadGlLeg.setAuth("Receiver");
             cadGlLeg.setFees("0.00");
@@ -525,8 +528,10 @@ public class WebhookKeyService {
 
             BatchPostingRequest batchRq = new BatchPostingRequest();
             batchRq.setGroupRef(quoteId);
+            // productCode resolved from Smart-Core auth token in batchPost
             BatchPostingLegRequest customerLeg = new BatchPostingLegRequest();
             customerLeg.setDirection("CREDIT");
+            customerLeg.setRequestRef(quoteId + "-CUSTOMER_CR");
             customerLeg.setUserType("CUSTOMER");
             customerLeg.setAuth("Receiver");
             customerLeg.setFees("0.00");
@@ -537,6 +542,7 @@ public class WebhookKeyService {
             customerLeg.setTransactionId(quoteId + "-CUSTOMER_CR");
             BatchPostingLegRequest cadGlLeg = new BatchPostingLegRequest();
             cadGlLeg.setDirection("CREDIT");
+            cadGlLeg.setRequestRef(quoteId + "-CAD_GL_CR");
             cadGlLeg.setUserType("CAD_GL");
             cadGlLeg.setAuth("Receiver");
             cadGlLeg.setFees("0.00");

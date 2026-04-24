@@ -26,6 +26,8 @@ import com.financial.wealth.api.transactions.utils.UttilityMethods;
 
 import java.math.BigDecimal;
 
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
@@ -149,6 +151,8 @@ public class WalletCreditRetryScheduler {
         }
     }
 
+    @Scheduled(cron = "${pool.process.retry.success.debit.rollback.cron:0 */2 * * * *}", zone = "${transactions.timezone:Africa/Lagos}")
+    @SchedulerLock(name = "WalletCreditRetryScheduler.retrySuccessfulDebitsMarkForRoolBack", lockAtMostFor = "10m", lockAtLeastFor = "30s")
     public void retrySuccessfulDebitsMarkForRoolBack() {
         System.out.println("schedule retrySuccessfulDebitsMarkForRoolBack ::::::::::::::::  %S");
         List<SuccessDebitLog> markForRollBackLogs = successDebitLogRepo.findByMarkForRollBack(1);
@@ -166,9 +170,15 @@ public class WalletCreditRetryScheduler {
                 if (res != null && res.getStatusCode() == 200) {
                     log.setMarkForRollBack(0);
                     log.setResolved(true);
+                    log.setReversalStatus("SUCCESS");
+                    log.setReversalCompletedAt(Instant.now());
+                    log.setReversalLastError(null);
                     log.setLastModifiedDate(Instant.now());
                 } else {
                     log.setRetryCount(log.getRetryCount() + 1);
+                    log.setResolved(false);
+                    log.setReversalStatus("FAILED");
+                    log.setReversalLastError(res == null ? "Rollback credit returned null response" : res.getDescription());
                     log.setLastModifiedDate(Instant.now());
                 }
 
@@ -176,6 +186,9 @@ public class WalletCreditRetryScheduler {
             } catch (Exception ex) {
                 // bump retry and persist so the job can try again later
                 log.setRetryCount(log.getRetryCount() + 1);
+                log.setResolved(false);
+                log.setReversalStatus("FAILED");
+                log.setReversalLastError(ex.getMessage());
                 log.setLastModifiedDate(Instant.now());
                 successDebitLogRepo.save(log);
                 ex.printStackTrace();

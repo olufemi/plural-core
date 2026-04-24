@@ -246,6 +246,22 @@ public class NipBankService {
         return commissionCfgRepo.findAllByTransactionType(transType);
     }
 
+    private void markForRollback(String transactionId, String errorMessage) {
+        SuccessDebitLog log = successDebitLogRepo.findFirstByTransactionId(transactionId);
+        if (log == null) {
+            return;
+        }
+
+        log.setMarkForRollBack(1);
+        log.setResolved(false);
+        log.setReversalStatus("PENDING");
+        log.setReversalRequestedAt(Instant.now());
+        log.setReversalCompletedAt(null);
+        log.setReversalLastError(errorMessage);
+        log.setLastModifiedDate(Instant.now());
+        successDebitLogRepo.save(log);
+    }
+
     public BaseResponse nameLookUp(NameLookUpInterBank rq, String channel, String auth) {
 
         BaseResponse responseModel = new BaseResponse();
@@ -1452,7 +1468,7 @@ public class NipBankService {
                     nipCre = breezePayVirtAcctProxy.makePayment(nipReq, authorization, subscriptionKey);
                     System.out.println(" NipCreditTransferResponse :::::::::::::::: %S " + new Gson().toJson(nipCre));
 
-                    if (nipCre.getResponseCode() != "00") {
+                    if (!"00".equals(nipCre.getResponseCode())) {
                         nipReqLog.setResponseCode(nipCre.getResponseCode());
                         nipReqLog.setResponseMessage(nipCre.getResponseMessage());
                         nipReqLog.setResponseReference(nipCre.getTransactionReference());
@@ -1460,16 +1476,8 @@ public class NipBankService {
                         nipReqLog.setCreditBankName("Access Bank");
                         nipCredAcccTranLogRepo.save(nipReqLog);
 
-                        //mark for roll back
-                        List<SuccessDebitLog> getSucc = successDebitLogRepo.findByTransactionId(rq.getProcessId());
-                        if (getSucc.size() > 0) {
-
-                            SuccessDebitLog getSuccUpDate = successDebitLogRepo.findByTransactionIdUpdate(rq.getProcessId());
-                            getSuccUpDate.setMarkForRollBack(1);
-                            getSuccUpDate.setLastModifiedDate(Instant.now());
-                            successDebitLogRepo.save(getSuccUpDate);
-
-                        }
+                        markForRollback(rq.getProcessId(), nipCre.getResponseMessage());
+                        markForRollback(rq.getProcessId() + "-NGN_GL", nipCre.getResponseMessage());
                         responseModel.setDescription("Wallet to Bank transfer, your request is being processed, Thank you.");
                         responseModel.setStatusCode(statusCode);
 

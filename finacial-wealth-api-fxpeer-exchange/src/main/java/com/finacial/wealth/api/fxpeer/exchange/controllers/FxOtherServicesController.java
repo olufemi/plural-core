@@ -4,9 +4,12 @@
  */
 package com.finacial.wealth.api.fxpeer.exchange.controllers;
 
+import com.finacial.wealth.api.fxpeer.exchange.featured.FeaturedServicesConfigRequest;
+import com.finacial.wealth.api.fxpeer.exchange.featured.FeaturedServicesService;
 import com.finacial.wealth.api.fxpeer.exchange.model.ApiResponseModel;
 import com.finacial.wealth.api.fxpeer.exchange.model.BaseResponse;
 
+import com.finacial.wealth.api.fxpeer.exchange.inter.airtime.security.AirtimeRollbackService;
 import com.finacial.wealth.api.fxpeer.exchange.inter.airtime.security.ProcSochitelServices;
 import com.finacial.wealth.api.fxpeer.exchange.inter.airtime.security.ProcessTrnsactionReq;
 import com.finacial.wealth.api.fxpeer.exchange.inter.airtime.security.ValidatePhoneNumber;
@@ -49,16 +52,22 @@ public class FxOtherServicesController {
     private final ConsentVerificationCoordinator consentVerificationCoordinator;
     private final IntUtilitiesFulfilmentPayloadHasher intUtilitiesFulfilmentPayloadHasher;
     private final DefaultRawConsentPayloadHasher defaultRawConsentPayloadHasher;
+    private final FeaturedServicesService featuredServicesService;
+    private final AirtimeRollbackService airtimeRollbackService;
 
     public FxOtherServicesController(ProcSochitelServices procSochitelServices,
             UttilityMethods uttilityMethods, ConsentVerificationCoordinator consentVerificationCoordinator,
             IntUtilitiesFulfilmentPayloadHasher intUtilitiesFulfilmentPayloadHasher,
-            DefaultRawConsentPayloadHasher defaultRawConsentPayloadHasher) {
+            DefaultRawConsentPayloadHasher defaultRawConsentPayloadHasher,
+            FeaturedServicesService featuredServicesService,
+            AirtimeRollbackService airtimeRollbackService) {
         this.procSochitelServices = procSochitelServices;
         this.uttilityMethods = uttilityMethods;
         this.consentVerificationCoordinator = consentVerificationCoordinator;
         this.intUtilitiesFulfilmentPayloadHasher = intUtilitiesFulfilmentPayloadHasher;
         this.defaultRawConsentPayloadHasher = defaultRawConsentPayloadHasher;
+        this.featuredServicesService = featuredServicesService;
+        this.airtimeRollbackService = airtimeRollbackService;
 
     }
 
@@ -109,6 +118,59 @@ public class FxOtherServicesController {
     @GetMapping(path = "/__ping", produces = MediaType.TEXT_PLAIN_VALUE)
     public String ping() {
         return "fxothers:ok";
+    }
+
+    @GetMapping(
+            path = "/services/featured",
+            produces = MediaType.APPLICATION_JSON_VALUE
+    )
+    public ResponseEntity<ApiResponseModel> getFeaturedServices(
+            @RequestHeader(name = "authorization", required = true) String auth
+    ) {
+        return featuredServicesService.getFeaturedServices();
+    }
+
+    @GetMapping(
+            path = "/admin/featured-services-config",
+            produces = MediaType.APPLICATION_JSON_VALUE
+    )
+    public ResponseEntity<ApiResponseModel> getFeaturedServicesConfig(
+            @RequestHeader(name = "authorization", required = true) String auth
+    ) {
+        return featuredServicesService.getFeaturedServicesConfig();
+    }
+
+    @PostMapping(
+            path = "/admin/featured-services-config",
+            consumes = MediaType.APPLICATION_JSON_VALUE,
+            produces = MediaType.APPLICATION_JSON_VALUE
+    )
+    public ResponseEntity<ApiResponseModel> saveFeaturedServicesConfig(
+            @RequestHeader(name = "authorization", required = true) String auth,
+            @RequestBody @Valid FeaturedServicesConfigRequest request
+    ) {
+        return featuredServicesService.saveFeaturedServicesConfig(request);
+    }
+
+    @GetMapping(
+            path = "/admin/airtime-reversals/summary",
+            produces = MediaType.APPLICATION_JSON_VALUE
+    )
+    public ResponseEntity<ApiResponseModel> getAirtimeReversalSummary(
+            @RequestHeader(name = "authorization", required = true) String auth
+    ) {
+        return new ResponseEntity<>(airtimeRollbackService.getSummary(), HttpStatus.OK);
+    }
+
+    @GetMapping(
+            path = "/admin/airtime-reversals",
+            produces = MediaType.APPLICATION_JSON_VALUE
+    )
+    public ResponseEntity<ApiResponseModel> getAirtimeReversalCases(
+            @RequestHeader(name = "authorization", required = true) String auth,
+            @org.springframework.web.bind.annotation.RequestParam(required = false) String status
+    ) {
+        return new ResponseEntity<>(airtimeRollbackService.getCases(status), HttpStatus.OK);
     }
 
     @GetMapping(

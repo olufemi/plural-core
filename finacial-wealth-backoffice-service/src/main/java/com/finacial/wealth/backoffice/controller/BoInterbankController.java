@@ -19,4 +19,17 @@ public class BoInterbankController {
   public Map<String, Object> nameEnquiry(@RequestBody Map<String, Object> request) {
     return transactionsClient.interbankNameEnquiry(request);
   }
+
+  @GetMapping("/reversals/summary")
+  @PreAuthorize("hasAnyRole('SUPER_ADMIN','ADMIN','OPERATIONS','FINANCE')")
+  public Map<String, Object> reversalSummary() {
+    return transactionsClient.getReversalSummary();
+  }
+
+  @GetMapping("/reversals")
+  @PreAuthorize("hasAnyRole('SUPER_ADMIN','ADMIN','OPERATIONS','FINANCE')")
+  public Map<String, Object> reversalCases(@RequestParam(required = false) String status) {
+    return transactionsClient.getReversalCases(status);
+  }
+
 }

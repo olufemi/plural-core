@@ -95,9 +95,9 @@ import org.springframework.web.client.RestTemplate;
  */
 @Service
 public class LocalTransferService {
-    
+
     private static final Logger log = LoggerFactory.getLogger(LocalTransferService.class);
-    
+
     private final LocalTransFailedTransInfoRepo localTransFailedTransInfoRepo;
     private final RegWalletInfoRepository regWalletInfoRepository;
     private final UserLimitConfigRepo userLimitConfigRepo;
@@ -120,19 +120,19 @@ public class LocalTransferService {
     private final MessageCenterService messageCenterService;
     private static final String CCY = "CAD";
     private final TransactionHistoryClientLocalT transactionHistoryClientLocalT;
-    
+
     private final ReceiptSigningFacade receiptSigningFacade;
-    
+
     @Qualifier("withEureka")
     @Autowired
     private RestTemplate restTemplate;
-    
+
     @Value("${fin.wealth.otp.encrypt.key}")
     private String encryptionKey;
-    
+
     @Value("${fin.wealth.allow.inflow.above.limits}")
     private String allowInflowAboveLimits;
-    
+
     @Autowired
     public LocalTransferService(LocalTransFailedTransInfoRepo localTransFailedTransInfoRepo,
             RegWalletInfoRepository regWalletInfoRepository,
@@ -151,7 +151,7 @@ public class LocalTransferService {
             MessageCenterService messageCenterService,
             TransactionHistoryClientLocalT transactionHistoryClientLocalT,
             ReceiptSigningFacade receiptSigningFacade) {
-        
+
         this.localTransFailedTransInfoRepo = localTransFailedTransInfoRepo;
         this.regWalletInfoRepository = regWalletInfoRepository;
         this.userLimitConfigRepo = userLimitConfigRepo;
@@ -173,7 +173,7 @@ public class LocalTransferService {
         this.transactionHistoryClientLocalT = transactionHistoryClientLocalT;
         this.receiptSigningFacade = receiptSigningFacade;
     }
-    
+
     private static int parseDaysSafely(String raw, int fallback) {
         if (raw == null || raw.trim().isEmpty()) {
             return fallback;
@@ -184,21 +184,21 @@ public class LocalTransferService {
             return fallback;
         }
     }
-    
+
     private String safeStr(String str) {
         return (str == null) ? "0" : str;
     }
-    
+
     public BaseResponse getTotalBal(String auth) {
         BaseResponse baseResponse = new BaseResponse();
         int statusCode = 500;
         String statusMessage = "An error occured,please try again";
         try {
             statusCode = 400;
-            
+
             GetActBalReq reeeq = new GetActBalReq();
             reeeq.setAuth(auth);
-            
+
             BaseResponse reqres = restTemplate.postForObject("http://" + "utilities-service" + "/walletmgt/account/balance",
                     reeeq, BaseResponse.class);
             if (reqres.getStatusCode() == HttpServletResponse.SC_OK) {
@@ -209,28 +209,28 @@ public class LocalTransferService {
                 baseResponse.setDescription(reqres.getDescription());
                 baseResponse.setStatusCode(HttpServletResponse.SC_BAD_REQUEST);
             }
-            
+
         } catch (Exception ex) {
             baseResponse.setDescription(statusMessage);
             baseResponse.setStatusCode(statusCode);
-            
+
             ex.printStackTrace();
         }
-        
+
         return baseResponse;
-        
+
     }
-    
+
     public BaseResponse getTotalBalByPhoneNumb(String phoneNumber) {
         BaseResponse baseResponse = new BaseResponse();
         int statusCode = 500;
         String statusMessage = "An error occured,please try again";
         try {
             statusCode = 400;
-            
+
             GetActBalPhoneNumber reeeq = new GetActBalPhoneNumber();
             reeeq.setPhoneNumber(phoneNumber);
-            
+
             BaseResponse reqres = restTemplate.postForObject("http://" + "utilities-service" + "/get-account-bal-phone",
                     reeeq, BaseResponse.class);
             if (reqres.getStatusCode() == HttpServletResponse.SC_OK) {
@@ -241,55 +241,55 @@ public class LocalTransferService {
                 baseResponse.setDescription(reqres.getDescription());
                 baseResponse.setStatusCode(HttpServletResponse.SC_BAD_REQUEST);
             }
-            
+
         } catch (Exception ex) {
             baseResponse.setDescription(statusMessage);
             baseResponse.setStatusCode(statusCode);
-            
+
             ex.printStackTrace();
         }
-        
+
         return baseResponse;
-        
+
     }
-    
+
     public static boolean betweenTransBand(BigDecimal i, BigDecimal minValueInclusive, BigDecimal maxValueInclusive) {
         return i.subtract(minValueInclusive).signum() >= 0 && i.subtract(maxValueInclusive).signum() <= 0;
-        
+
     }
-    
+
     public List<CommissionCfg> findAllByTransactionType(String transType) {
-        
+
         List<CommissionCfg> getAllPartActiveNoti = commissionCfgRepo.findAllByTransactionType(transType);
-        
+
         return getAllPartActiveNoti;
     }
-    
+
     public BaseResponse nameLookUp(NameLookUp rq, String channel, String auth) {
-        
+
         BaseResponse responseModel = new BaseResponse();
         int statusCode = 500;
         String statusMessage = "An error occured,please try again";
         try {
             statusCode = 400;
             System.out.println("NameLookUp req :::::::: " + "    ::::::::::::::::::::: " + new Gson().toJson(rq));
-            
+
             DecodedJWTToken getDecoded = DecodedJWTToken.getDecoded(auth);
             String processId = String.valueOf(GlobalMethods.generateTransactionId());
             boolean isWalletId = true;
             boolean isPhonenUmber = false;
-            
+
             boolean isWalletIdSender = true;
             boolean isPhonenUmberSender = false;
             String receiverPhoneNumber = null;
             String senderPhoneNumber = null;
             List<RegWalletInfo> getReceiver = null;
             List<RegWalletInfo> getSender = null;
-            
+
             if (GlobalMethods.isTenDigits(rq.getReceiver().trim()) == false) {
                 isWalletId = false;
                 isPhonenUmber = true;
-                
+
             }
 
             /* if (!GlobalMethods.isElevenDigits(rq.getReceiver().trim()) == true) {
@@ -298,182 +298,182 @@ public class LocalTransferService {
 
             }*/
             System.out.println("isWalletIdBool :::::::: " + "     " + isWalletId);
-            
+
             System.out.println("isPhonenUmberBool :::::::: " + "     " + isPhonenUmber);
-            
+
             if (isWalletId == false && isPhonenUmber == false) {
-                
+
                 LocalTransFailedTransInfo procFailedTrans = new LocalTransFailedTransInfo(
                         "Wallet-Wallet-Transfer", "Wallet to Wallet transfer, invalid Receiver!",
                         String.valueOf(GlobalMethods.generateTransactionId()), "", channel,
                         "Local-Transfer-Service"
                 );
-                
+
                 responseModel.setDescription("Wallet to Wallet transfer, invalid Receiver");
                 responseModel.setStatusCode(statusCode);
-                
+
                 localTransFailedTransInfoRepo.save(procFailedTrans);
                 return responseModel;
-                
+
             }
             if (isWalletId) {
-                
+
                 System.out.println("isWalletId :::::::: " + "     ");
-                
+
                 getReceiver = regWalletInfoRepository.findByWalletIdList(rq.getReceiver());
-                
+
                 if (getReceiver.size() <= 0) {
-                    
+
                     LocalTransFailedTransInfo procFailedTrans = new LocalTransFailedTransInfo(
                             "Wallet-Wallet-Transfer", "Wallet to Wallet transfer, Receiver does not exists!",
                             String.valueOf(GlobalMethods.generateTransactionId()), "", channel,
                             "Local-Transfer-Service"
                     );
-                    
+
                     responseModel.setDescription("Wallet to Wallet transfer, Receiver does not exists!");
                     responseModel.setStatusCode(statusCode);
-                    
+
                     localTransFailedTransInfoRepo.save(procFailedTrans);
                     return responseModel;
-                    
+
                 }
                 receiverPhoneNumber = getReceiver.get(0).getPhoneNumber();
             }
-            
+
             if (isPhonenUmber) {
-                
+
                 System.out.println("isPhonenUmber :::::::: " + "     ");
-                
+
                 getReceiver = regWalletInfoRepository.findByPhoneNumberData(rq.getReceiver());
-                
+
                 if (getReceiver.size() <= 0) {
-                    
+
                     LocalTransFailedTransInfo procFailedTrans = new LocalTransFailedTransInfo(
                             "Wallet-Wallet-Transfer", "Wallet to Wallet transfer, Receiver does not exists!",
                             String.valueOf(GlobalMethods.generateTransactionId()), "", channel,
                             "Local-Transfer-Service"
                     );
-                    
+
                     responseModel.setDescription("Wallet to Wallet transfer, Receiver does not exists!");
                     responseModel.setStatusCode(statusCode);
-                    
+
                     localTransFailedTransInfoRepo.save(procFailedTrans);
                     return responseModel;
-                    
+
                 }
-                
+
                 receiverPhoneNumber = getReceiver.get(0).getPhoneNumber();
-                
+
             }
-            
+
             if (GlobalMethods.isTenDigits(rq.getSender().trim()) == false) {
                 isWalletIdSender = false;
                 isPhonenUmberSender = true;
-                
+
             }
-            
+
             System.out.println("iisWalletIdSenderBool :::::::: " + "     " + isWalletIdSender);
-            
+
             System.out.println("isPhonenUmberSenderBool :::::::: " + "     " + isPhonenUmberSender);
-            
+
             if (isWalletIdSender == false && isPhonenUmberSender == false) {
-                
+
                 LocalTransFailedTransInfo procFailedTrans = new LocalTransFailedTransInfo(
                         "Wallet-Wallet-Transfer", "Wallet to Wallet transfer, invalid Sender!",
                         String.valueOf(GlobalMethods.generateTransactionId()), "", channel,
                         "Local-Transfer-Service"
                 );
-                
+
                 responseModel.setDescription("Wallet to Wallet transfer, invalid Sender");
                 responseModel.setStatusCode(statusCode);
-                
+
                 localTransFailedTransInfoRepo.save(procFailedTrans);
                 return responseModel;
-                
+
             }
             if (isWalletIdSender) {
-                
+
                 System.out.println("isWalletIdSender :::::::: " + "     ");
-                
+
                 getSender = regWalletInfoRepository.findByWalletIdList(rq.getSender());
-                
+
                 if (getSender.size() <= 0) {
-                    
+
                     LocalTransFailedTransInfo procFailedTrans = new LocalTransFailedTransInfo(
                             "Wallet-Wallet-Transfer", "Wallet to Wallet transfer, Sender does not exists!",
                             String.valueOf(GlobalMethods.generateTransactionId()), "", channel,
                             "Local-Transfer-Service"
                     );
-                    
+
                     responseModel.setDescription("Wallet to Wallet transfer, Sender does not exists!");
                     responseModel.setStatusCode(statusCode);
-                    
+
                     localTransFailedTransInfoRepo.save(procFailedTrans);
                     return responseModel;
-                    
+
                 }
                 senderPhoneNumber = getSender.get(0).getPhoneNumber();
             }
-            
+
             if (isPhonenUmberSender) {
-                
+
                 System.out.println("isPhonenUmberSender :::::::: " + "     ");
-                
+
                 getSender = regWalletInfoRepository.findByPhoneNumberData(rq.getSender());
-                
+
                 if (getSender.size() <= 0) {
-                    
+
                     LocalTransFailedTransInfo procFailedTrans = new LocalTransFailedTransInfo(
                             "Wallet-Wallet-Transfer", "Wallet to Wallet transfer, Sender does not exists!",
                             String.valueOf(GlobalMethods.generateTransactionId()), "", channel,
                             "Local-Transfer-Service"
                     );
-                    
+
                     responseModel.setDescription("Wallet to Wallet transfer, Sender does not exists!");
                     responseModel.setStatusCode(statusCode);
-                    
+
                     localTransFailedTransInfoRepo.save(procFailedTrans);
                     return responseModel;
-                    
+
                 }
-                
+
                 senderPhoneNumber = getSender.get(0).getPhoneNumber();
-                
+
             }
-            
+
             if (receiverPhoneNumber.equals(getDecoded.phoneNumber)) {
-                
+
                 LocalTransFailedTransInfo procFailedTrans = new LocalTransFailedTransInfo(
                         "Wallet-Wallet-Transfer", "Wallet to Wallet transfer, invalid transaction, Customer cannot transfer to self!",
                         String.valueOf(GlobalMethods.generateTransactionId()), "", channel,
                         "Local-Transfer-Service"
                 );
-                
+
                 responseModel.setDescription("Wallet to Wallet transfer, invalid transaction, Customer cannot transfer to self!");
                 responseModel.setStatusCode(statusCode);
-                
+
                 localTransFailedTransInfoRepo.save(procFailedTrans);
                 return responseModel;
-                
+
             }
-            
+
             if (!getReceiver.get(0).isCompleted()) {
-                
+
                 LocalTransFailedTransInfo procFailedTrans = new LocalTransFailedTransInfo(
                         "Wallet-Wallet-Transfer", "Wallet to Wallet transfer, Receiver has not completed registration!",
                         String.valueOf(GlobalMethods.generateTransactionId()), "", channel,
                         "Local-Transfer-Service"
                 );
-                
+
                 responseModel.setDescription("Wallet to Wallet transfer, Receiver has not completed registration!");
                 responseModel.setStatusCode(statusCode);
-                
+
                 localTransFailedTransInfoRepo.save(procFailedTrans);
                 return responseModel;
             }
-            
+
             System.out.println("Phone number :::::::: " + "     " + getDecoded.phoneNumber);
-            
+
             getSender = regWalletInfoRepository.findByPhoneNumberData(getDecoded.phoneNumber);
             //System.out.println("getSender :::::::: " + "    ::::::::::::::::::::: " + new Gson().toJson(getSender));
 
@@ -486,49 +486,49 @@ public class LocalTransferService {
             if (deviceLimit1 != null && !deviceLimit1.isEmpty()) {
                 final DeviceChangeLimitConfig dl = deviceLimit1.get(0);
                 final Date refDate = (dl.getLastModifiedDate() != null) ? dl.getLastModifiedDate() : dl.getCreatedDate();
-                
+
                 final int days = parseDaysSafely(utilMeth.getSETTING_DEVICE_LIM_CHECK_PERIOD(), DEFAULT_DEVICE_LIMIT_DAYS);
-                
+
                 System.out.println("Customer exists in the Device Limit Tbl ::::::::");
                 System.out.println("Customer last device Date ::::::::      " + (refDate != null ? refDate : "<none>"));
                 System.out.println("Configured no of Day(s) ::::::::        " + days);
-                
+
                 boolean tooOld = false;
                 if (refDate != null) {
                     org.joda.time.DateTime ref = new org.joda.time.DateTime(refDate);
                     org.joda.time.DateTime cutoff = org.joda.time.DateTime.now().minusDays(days);
                     tooOld = ref.isBefore(cutoff);
                 }
-                
+
                 System.out.println("Customer not within Limit days?? :::::::: " + tooOld);
-                
+
                 if (!tooOld && dl.getTierCategory() != null) {
                     getActiveCat1 = dl.getTierCategory();
                 }
             }
-            
+
             List<GlobalLimitConfig> getG1 = globalLimitConfigRepo.findByLimitCategory(getActiveCat1);
-            
+
             BaseResponse getTotalBal = this.getTotalBal(auth);
-            
+
             if (getTotalBal.getStatusCode() != 200) {
                 LocalTransFailedTransInfo procFailedTrans = new LocalTransFailedTransInfo(
                         "Wallet-Wallet-Transfer", getTotalBal.getDescription(),
                         String.valueOf(GlobalMethods.generateTransactionId()), "", channel,
                         "Local-Transfer-Service"
                 );
-                
+
                 responseModel.setDescription(getTotalBal.getDescription());
                 responseModel.setStatusCode(statusCode);
-                
+
                 localTransFailedTransInfoRepo.save(procFailedTrans);
                 return responseModel;
-                
+
             }
-            
+
             Object amountObj = getTotalBal.getData().get("accountBalance");
             BigDecimal amount = BigDecimal.ZERO;
-            
+
             if (amountObj instanceof BigDecimal) {
                 amount = (BigDecimal) amountObj;
             } else if (amountObj instanceof Number) {
@@ -538,7 +538,7 @@ public class LocalTransferService {
             } else {
                 amount = BigDecimal.ZERO; // default or throw exception
             }
-            
+
             System.out.println("Gotten account balance: " + amount);
 
             //get account balance
@@ -547,19 +547,19 @@ public class LocalTransferService {
             //a.compareTo(b) 
             if (isBeforeYesterday == true) {
                 if (accountBal1.compareTo(new BigDecimal(getG1.get(0).getMaximumBalance())) > 0) {
-                    
+
                     LocalTransFailedTransInfo procFailedTrans = new LocalTransFailedTransInfo(
                             "Wallet-Wallet-Transfer", "Wallet to wALLET transfer - Sorry, your account balance is greater than your Tier's, kindly upgrade to higher Tier. Your maximum account balance is: " + getG1.get(0).getMaximumBalance(),
                             String.valueOf(GlobalMethods.generateTransactionId()), "", channel,
                             "Local-Transfer-Service"
                     );
-                    
+
                     localTransFailedTransInfoRepo.save(procFailedTrans);
-                    
+
                     responseModel.setStatusCode(400);
                     responseModel.setDescription("Wallet to Wallet transfer - Sorry, your account balance is greater than your Tier's, kindly upgrade to higher Tier. Your maximum account balance is: " + getG1.get(0).getMaximumBalance());
                     return responseModel;
-                    
+
                 }
             }
 
@@ -572,13 +572,13 @@ public class LocalTransferService {
                 System.out.println("Customer exists in the Device Limit Tbl :::::::: " + "     ");
                 System.out.println("Customer last device Date :::::::: " + "     " + deviceLimit.get(0).getLastModifiedDate() == null ? deviceLimit.get(0).getCreatedDate() : deviceLimit.get(0).getLastModifiedDate());
                 System.out.println("Configured no of Day(s) :::::::: " + "     " + utilMeth.getSETTING_DEVICE_LIM_CHECK_PERIOD());
-                
+
                 isBeforeYesterday = new DateTime(deviceLimit.get(0).getLastModifiedDate() == null ? deviceLimit.get(0).getCreatedDate() : deviceLimit.get(0).getLastModifiedDate()).isBefore(DateTime.now().minusDays(Integer.valueOf(utilMeth.getSETTING_DEVICE_LIM_CHECK_PERIOD())));
                 System.out.println("Customer not within Limit days?? :::::::: " + "     " + isBeforeYesterday);
                 if (isBeforeYesterday != true) {
                     getActiveCat = deviceLimit.get(0).getTierCategory();
                 }
-                
+
             }
             List<GlobalLimitConfig> getG = globalLimitConfigRepo.findByLimitCategory(getActiveCat);
             BigDecimal accountBalRec;
@@ -594,18 +594,18 @@ public class LocalTransferService {
                         String.valueOf(GlobalMethods.generateTransactionId()), "", channel,
                         "Local-Transfer-Service"
                 );
-                
+
                 responseModel.setDescription(getTotalBal.getDescription());
                 responseModel.setStatusCode(statusCode);
-                
+
                 localTransFailedTransInfoRepo.save(procFailedTrans);
                 return responseModel;
-                
+
             }
-            
+
             Object amountObjRec = getTotalBalRec.getData().get("accountBalance");
             BigDecimal amountRec = BigDecimal.ZERO;
-            
+
             if (amountObjRec instanceof BigDecimal) {
                 amountRec = (BigDecimal) amountObjRec;
             } else if (amountObj instanceof Number) {
@@ -615,14 +615,14 @@ public class LocalTransferService {
             } else {
                 amountRec = BigDecimal.ZERO; // default or throw exception
             }
-            
+
             accountBalRec = amountRec;
 
             //get account balance
             BigDecimal newAcctBalance;
-            
+
             newAcctBalance = accountBalRec.add(new BigDecimal(rq.getAmount()));
-            
+
             System.out.println("current receiver AcctBalance :::::::: " + "     " + accountBalRec);
             System.out.println("new receiver  newAcctBalance:::::::: " + "     " + newAcctBalance);
             System.out.println("new receiver  getMaxAcctBal:::::::: " + "     " + getMaxAcctBal);
@@ -630,13 +630,13 @@ public class LocalTransferService {
                 if (newAcctBalance.compareTo(getMaxAcctBal) > 0) {
                     responseModel.setStatusCode(400);
                     System.out.println("Receiver newAcctBalance " + newAcctBalance + " will be greater than Maximuim bal: :::::::: " + "     " + newAcctBalance);
-                    
+
                     LocalTransFailedTransInfo procFailedTrans = new LocalTransFailedTransInfo(
                             "Wallet-Wallet-Transfer", "Wallet to Wallet transfer - Sorry this transaction cannot be processed, Thank you.",
                             String.valueOf(GlobalMethods.generateTransactionId()), "", channel,
                             "Local-Transfer-Service"
                     );
-                    
+
                     localTransFailedTransInfoRepo.save(procFailedTrans);
                     responseModel.setDescription("Wallet to Wallet transfer - Sorry this transaction cannot be processed, Thank you.");
                     return responseModel;
@@ -645,91 +645,91 @@ public class LocalTransferService {
             rq.setSender(senderPhoneNumber);
             System.out.println("getDecoded.phoneNumber :::::::: " + "     " + getDecoded.phoneNumber);
             System.out.println("rq.getSender() :::::::: " + "     " + rq.getSender());
-            
+
             if (!rq.getSender().trim().equals(getDecoded.phoneNumber.trim())) {
-                
+
                 LocalTransFailedTransInfo procFailedTrans = new LocalTransFailedTransInfo(
                         "Wallet-Wallet-Transfer", "Wallet to Wallet transfer, invalid sender!",
                         String.valueOf(GlobalMethods.generateTransactionId()), "", channel,
                         "Local-Transfer-Service"
                 );
-                
+
                 responseModel.setDescription("Wallet to Wallet transfer, invalid sender!");
                 responseModel.setStatusCode(statusCode);
-                
+
                 localTransFailedTransInfoRepo.save(procFailedTrans);
                 return responseModel;
-                
+
             }
-            
+
             List<FinWealthPayServiceConfig> getKulList = kuleanPayServiceConfigRepo.findByServiceTypeEnable("localtransfer");
             List<CommissionCfg> pullData = findAllByTransactionType("localtransfer");
             if (pullData.size() > 0) {
                 if (pullData.isEmpty()) {
-                    
+
                     LocalTransFailedTransInfo procFailedTrans = new LocalTransFailedTransInfo(
                             "Wallet-Wallet-Transfer", "Wallet to Wallet transfer, Transaction Type does not exist!",
                             String.valueOf(GlobalMethods.generateTransactionId()), "", channel,
                             "Local-Transfer-Service"
                     );
                     localTransFailedTransInfoRepo.save(procFailedTrans);
-                    
+
                     responseModel.setStatusCode(400);
                     responseModel.setDescription("Transaction Type does not exist!");
                     return responseModel;
-                    
+
                 }
             } else {
-                
+
                 LocalTransFailedTransInfo procFailedTrans = new LocalTransFailedTransInfo(
                         "Wallet-Wallet-Transfer", "Wallet to Wallet transfer, Transaction Type does not exist!",
                         String.valueOf(GlobalMethods.generateTransactionId()), "", channel,
                         "Local-Transfer-Service"
                 );
                 localTransFailedTransInfoRepo.save(procFailedTrans);
-                
+
                 responseModel.setStatusCode(400);
                 responseModel.setDescription("Transaction Type does not exist!");
                 return responseModel;
             }
-            
+
             boolean transTypeExist = false;
-            
+
             for (CommissionCfg partData : pullData) {
-                
+
                 if (betweenTransBand(new BigDecimal(rq.getAmount()), new BigDecimal(partData.getAmountMin()), new BigDecimal(partData.getAmountMax())) == true) {
-                    
+
                     transTypeExist = true;
                 }
-                
+
             }
-            
+
             if (transTypeExist == false) {
-                
+
                 LocalTransFailedTransInfo procFailedTrans = new LocalTransFailedTransInfo(
                         "Wallet-Wallet-Transfer", "Amount is not within the transaction band, please check!",
                         String.valueOf(GlobalMethods.generateTransactionId()), "", channel,
                         "Local-Transfer-Service"
                 );
                 localTransFailedTransInfoRepo.save(procFailedTrans);
-                
+
                 responseModel.setStatusCode(statusCode);
                 responseModel.setDescription("Amount is not within the transaction band, please check!");
                 return responseModel;
             }
-            
+
             BigDecimal pFees = BigDecimal.ZERO;
-            
+
             for (CommissionCfg partData : pullData) {
                 if (getKulList.get(0).getServiceType().trim().equals(partData.getTransType())) {
-                    
+
                     if (betweenTransBand(new BigDecimal(rq.getAmount()), new BigDecimal(partData.getAmountMin()), new BigDecimal(partData.getAmountMax())) == true) {
 
                         //compute the fees
                         //1.8% + 100 (convenience fee)
                         System.out.println("rq.getAmount()" + "  :::::::::::::::::::::   " + rq.getAmount());
                         System.out.println("pullData.get(0).getFee()" + "  :::::::::::::::::::::   " + partData.getFee());
-                        
+
                         pFees = partData.getFee();
                         System.out.println("pFees" + "  :::::::::::::::::::::   " + pFees);
                         if (getKulList.size() <= 0) {
@@ -739,47 +739,47 @@ public class LocalTransferService {
                                     "Local-Transfer-Service"
                             );
                             localTransFailedTransInfoRepo.save(procFailedTrans);
-                            
+
                             responseModel.setDescription("Wallet to Wallet transfer, service type not configured!");
                             responseModel.setStatusCode(statusCode);
-                            
+
                             localTransFailedTransInfoRepo.save(procFailedTrans);
                             return responseModel;
                         }
-                        
+
                         if (!getKulList.get(0).isEnabled()) {
-                            
+
                             LocalTransFailedTransInfo procFailedTrans = new LocalTransFailedTransInfo(
                                     "Wallet-Wallet-Transfer", "Wallet to Wallet transfer, service type is disabled!",
                                     String.valueOf(GlobalMethods.generateTransactionId()), "", channel,
                                     "Local-Transfer-Service"
                             );
-                            
+
                             localTransFailedTransInfoRepo.save(procFailedTrans);
-                            
+
                             responseModel.setDescription("Wallet to Wallet transfer, service type is disabled!");
                             responseModel.setStatusCode(statusCode);
-                            
+
                             return responseModel;
-                            
+
                         }
-                        
+
                         Optional<FinWealthPayServiceConfig> getKul = kuleanPayServiceConfigRepo.findAllByServiceType("localtransfer");
-                        
+
                         String flagMinAmt = "amount cannot be less than N" + getKul.get().getMinimumAmmount() + ".00, please check!";
                         if (new BigDecimal(rq.getAmount()).compareTo(new BigDecimal(getKul.get().getMinimumAmmount())) == -1) {
-                            
+
                             LocalTransFailedTransInfo procFailedTrans = new LocalTransFailedTransInfo(
                                     "Wallet-Wallet-Transfer", "Wallet to Wallet transfer, " + flagMinAmt,
                                     String.valueOf(GlobalMethods.generateTransactionId()), "", channel,
                                     "Local-Transfer-Service"
                             );
-                            
+
                             localTransFailedTransInfoRepo.save(procFailedTrans);
-                            
+
                             responseModel.setDescription("Wallet to Wallet transfer, " + flagMinAmt);
                             responseModel.setStatusCode(statusCode);
-                            
+
                             return responseModel;
                         }
 
@@ -811,9 +811,9 @@ public class LocalTransferService {
                         //List<WalletTierVerifyBvn> getBvnName = walletTierVerifyBvnRepo.findByWalletNo(rq.getReceiver());
                         List<RegWalletCheckLog> logTransUpList = regWalletCheckLogRepo.findByPhoneNumberIdList(rq.getSender());
                         receiverName = getReceiver.get(0).getFirstName() + " " + getReceiver.get(0).getLastName();
-                        
+
                         if (logTransUpList.size() > 0) {
-                            
+
                             RegWalletCheckLog logTransUp = regWalletCheckLogRepo.findByPhoneNumberId(rq.getSender());
                             logTransUp.setLTransServiceType(getKulList.get(0).getServiceType() == null ? "localtransfer" : getKulList.get(0).getServiceType());
                             logTransUp.setLTransSessAmount(new BigDecimal(rq.getAmount()));
@@ -827,13 +827,13 @@ public class LocalTransferService {
                             logTransUp.setLastModifiedDate(Instant.now());
                             logTransUp.setTheNarration(rq.getTheNarration());
                             regWalletCheckLogRepo.save(logTransUp);
-                            
+
                         } else {
                             RegWalletCheckLog logTransUp = new RegWalletCheckLog();
                             logTransUp.setLTransServiceType(getKulList.get(0).getServiceType() == null ? "localtransfer" : getKulList.get(0).getServiceType());
                             logTransUp.setLTransSessAmount(new BigDecimal(rq.getAmount()));
                             logTransUp.setLTransSessFees(new BigDecimal(pFees.toString()));
-                            
+
                             logTransUp.setLTransSessReceiverName(receiverName);
                             logTransUp.setLTransSessReceiverWalletNo(receiverPhoneNumber);
                             logTransUp.setLTransSessSenderWalletNo(getDecoded.phoneNumber);
@@ -843,9 +843,9 @@ public class LocalTransferService {
                             logTransUp.setCreatedDate(Instant.now());
                             logTransUp.setTheNarration(rq.getTheNarration());
                             regWalletCheckLogRepo.save(logTransUp);
-                            
+
                         }
-                        
+
                         LocalTransferRequestLog reqLog = new LocalTransferRequestLog();
                         reqLog.setCreatedDate(Instant.now());
                         reqLog.setLTransServiceType(getKulList.get(0).getServiceType());
@@ -859,7 +859,7 @@ public class LocalTransferService {
                         reqLog.setRequestChannel(channel);
                         reqLog.setTheNarration(rq.getTheNarration());
                         localTransferRequestLogRepo.save(reqLog);
-                        
+
                         responseModel.addData("processId", processId);
                         responseModel.addData("transactionType", getKulList.get(0).getServiceType() == null ? "localtransfer" : getKulList.get(0).getServiceType());
                         responseModel.addData("fees", pFees.toString());
@@ -869,25 +869,25 @@ public class LocalTransferService {
                         responseModel.addData("receiver", rq.getReceiver());
                         responseModel.setDescription("Name lookup was successful.");
                         responseModel.setStatusCode(200);
-                        
+
                         return responseModel;
-                        
+
                     }
                 }
             }
-            
+
         } catch (Exception ex) {
             responseModel.setDescription(statusMessage);
             responseModel.setStatusCode(statusCode);
-            
+
             ex.printStackTrace();
         }
-        
+
         return responseModel;
     }
-    
+
     public BaseResponse saveBeneficiary(SaveBeneficiary rq, String channel, String auth) {
-        
+
         BaseResponse responseModel = new BaseResponse();
         int statusCode = 500;
         String statusMessage = "An error occured,please try again";
@@ -947,73 +947,73 @@ public class LocalTransferService {
         } catch (Exception ex) {
             responseModel.setDescription(statusMessage);
             responseModel.setStatusCode(statusCode);
-            
+
             ex.printStackTrace();
         }
-        
+
         return responseModel;
         //find frequentlyusedBeneficiaries
     }
-    
+
     public ApiResponseModel findSavedBeneficiaries(String channel, String auth) {
-        
+
         ApiResponseModel responseModel = new ApiResponseModel();
         int statusCode = 500;
         String statusMessage = "An error occured,please try again";
         try {
             statusCode = 400;
             DecodedJWTToken getDecoded = DecodedJWTToken.getDecoded(auth);
-            
+
             List<LocalBeneficiaries> getLocalBen = localBeneficiariesRepo.findByWalletNoActive(getDecoded.phoneNumber, "1");
             if (getLocalBen.size() <= 0) {
-                
+
                 LocalTransFailedTransInfo procFailedTrans = new LocalTransFailedTransInfo(
                         "Wallet-Wallet-Transfer", "Wallet to Wallet transfer, Customer has no Beneficiary!",
                         String.valueOf(GlobalMethods.generateTransactionId()), "", channel,
                         "Local-Transfer-Service"
                 );
-                
+
                 responseModel.setDescription("Wallet to Wallet transfer, Customer has no Beneficiary!");
                 responseModel.setStatusCode(statusCode);
-                
+
                 localTransFailedTransInfoRepo.save(procFailedTrans);
                 return responseModel;
-                
+
             }
             //LocalBeneficiariesFind
             List<Object> mapAll = new ArrayList<Object>();
             // AllKycLevelsData allData = new AllKycLevelsData();
             if (getLocalBen.size() > 0) {
-                
+
                 for (LocalBeneficiaries gConfig : getLocalBen) {
-                    
+
                     LocalBeneficiariesFind lData = new LocalBeneficiariesFind();
-                    
+
                     lData.setBeneficiaryName(gConfig.getBeneficiaryName());
                     lData.setBeneficiaryNo(gConfig.getBeneficiaryNo());
                     mapAll.add(lData);
-                    
+
                 }
-                
+
                 responseModel.setDescription("List of Beneficiaries.");
                 responseModel.setStatusCode(200);
                 responseModel.setData(mapAll);
-                
+
             } else {
-                
+
                 responseModel.setDescription("Customer has no Beneficiary!");
                 responseModel.setStatusCode(statusCode);
             }
         } catch (Exception ex) {
             responseModel.setDescription(statusMessage);
             responseModel.setStatusCode(statusCode);
-            
+
             ex.printStackTrace();
         }
-        
+
         return responseModel;
     }
-    
+
     public BaseResponse validateTransferOthers(LocalTransferRequest rq, String channel, String auth) {
         BaseResponse responseModel = new BaseResponse();
         int statusCode = 500;
@@ -1066,10 +1066,10 @@ public class LocalTransferService {
                         String.valueOf(GlobalMethods.generateTransactionId()), "", channel,
                         "Local-Transfer-Service"
                 );
-                
+
                 responseModel.setDescription("Wallet to Wallet transfer, Customer has not activated email address!");
                 responseModel.setStatusCode(statusCode);
-                
+
                 localTransFailedTransInfoRepo.save(procFailedTrans);
                 return responseModel;
             }
@@ -1083,7 +1083,7 @@ public class LocalTransferService {
                 System.out.println("Sender exists in the Device Limit Tbl :::::::: " + "     ");
                 System.out.println("Sender last device Date :::::::: " + "     " + deviceLimit.get(0).getLastModifiedDate());
                 System.out.println("Sender last device created Date :::::::: " + "     " + deviceLimit.get(0).getCreatedDate());
-                
+
                 System.out.println("Configured no of Day(s) :::::::: " + "     " + utilMeth.getSETTING_DEVICE_LIM_CHECK_PERIOD());
 //(str == null) ? "0" : str
                 boolean isBeforeYesterday = new DateTime(deviceLimit.get(0).getLastModifiedDate() == null ? deviceLimit.get(0).getCreatedDate() : deviceLimit.get(0).getLastModifiedDate()).isBefore(DateTime.now().minusDays(Integer.valueOf(utilMeth.getSETTING_DEVICE_LIM_CHECK_PERIOD())));
@@ -1091,7 +1091,7 @@ public class LocalTransferService {
                 if (isBeforeYesterday != true) {
                     getActiveCat = deviceLimit.get(0).getTierCategory();
                 }
-                
+
             }
             List<GlobalLimitConfig> getG = globalLimitConfigRepo.findByLimitCategory(getActiveCat);
             String transType = (rq.getTransactionType() != null) ? rq.getTransactionType() : "localtransfer";
@@ -1099,31 +1099,31 @@ public class LocalTransferService {
             BigDecimal transTypeCummulative = BigDecimal.ZERO;
             BigDecimal configAmount = BigDecimal.ZERO;
             BigDecimal singleLimit = BigDecimal.ZERO;
-            
+
             BigDecimal configuredReceiverMaxBalance = BigDecimal.ZERO;
             BigDecimal transAmt = (!StringUtils.isEmpty(rq.getFees())) ? new BigDecimal(rq.getAmount()).add(new BigDecimal(rq.getFees())) : new BigDecimal(rq.getAmount());
             BigDecimal transAmount = BigDecimal.ZERO;
             List<RegWalletCheckLog> getNameLookUpDe = regWalletCheckLogRepo.findByProcessIdList(rq.getProcessId());
             BaseResponse getTotalBal = this.getTotalBalByPhoneNumb(rq.getReceiver());
-            
+
             if (getTotalBal.getStatusCode() != 200) {
                 LocalTransFailedTransInfo procFailedTrans = new LocalTransFailedTransInfo(
                         "Wallet-Wallet-Transfer", getTotalBal.getDescription(),
                         String.valueOf(GlobalMethods.generateTransactionId()), "", channel,
                         "Local-Transfer-Service"
                 );
-                
+
                 responseModel.setDescription(getTotalBal.getDescription());
                 responseModel.setStatusCode(statusCode);
-                
+
                 localTransFailedTransInfoRepo.save(procFailedTrans);
                 return responseModel;
-                
+
             }
-            
+
             Object amountObj = getTotalBal.getData().get("accountBalance");
             BigDecimal accBalAmount = BigDecimal.ZERO;
-            
+
             if (amountObj instanceof BigDecimal) {
                 accBalAmount = (BigDecimal) amountObj;
             } else if (amountObj instanceof Number) {
@@ -1133,7 +1133,7 @@ public class LocalTransferService {
             } else {
                 accBalAmount = BigDecimal.ZERO; // default or throw exception
             }
-            
+
             System.out.println("Gotten receiver account balance: " + accBalAmount);
 
             //(receiver maximum amount limit)
@@ -1141,12 +1141,12 @@ public class LocalTransferService {
             List<RegWalletInfo> receiverWalletdetails = regWalletInfoRepository.findByPhoneNumberData(rq.getReceiver());
             if (!receiverWalletdetails.get(0).isEmailVerification()) {
                 System.out.println("!receiverWalletdetails.get(0).isEmailVerification() :::::::: ");
-                
+
                 getReciverG = globalLimitConfigRepo.findByLimitCategory(utilMeth.getTier1());
                 configuredReceiverMaxBalance = new BigDecimal(getReciverG.get(0).getMaximumBalance());
-                
+
                 System.out.println("genLedCum.get(0).getTotalBalance():::::::: " + "     " + accBalAmount);
-                
+
                 System.out.println("configuredReceiverMaxBalance :::::::: " + "     " + configuredReceiverMaxBalance);
                 System.out.println("genLedCum.get(0).getTotalBalance().compareTo() :::::::: " + "     " + accBalAmount.compareTo(configuredReceiverMaxBalance));
                 if (!allowInflowAboveLimits.equals("1")) {
@@ -1162,7 +1162,7 @@ public class LocalTransferService {
                         return responseModel;
                     }
                 }
-                
+
             } else {
                 List<UserLimitConfig> userLimitReceiver = userLimitConfigRepo.findByWalletNumber(receiverWalletdetails.get(0).getWalletId());
                 List<DeviceChangeLimitConfig> deviceLimitRec = deviceChangeLimitConfigRepo.findByWalletNumberList(receiverWalletdetails.get(0).getWalletId());
@@ -1172,19 +1172,19 @@ public class LocalTransferService {
                     System.out.println("Receiver exists in the Device Limit Tbl :::::::: " + "     ");
                     System.out.println("Receiver last device Date :::::::: " + "     " + deviceLimitRec.get(0).getLastModifiedDate());
                     System.out.println("Receiver last device created Date :::::::: " + "     " + deviceLimitRec.get(0).getCreatedDate());
-                    
+
                     System.out.println("Configured no of Day(s) :::::::: " + "     " + utilMeth.getSETTING_DEVICE_LIM_CHECK_PERIOD());
-                    
+
                     boolean isBeforeYesterday = new DateTime(deviceLimitRec.get(0).getLastModifiedDate() == null ? deviceLimitRec.get(0).getCreatedDate() : deviceLimitRec.get(0).getLastModifiedDate()).isBefore(DateTime.now().minusDays(Integer.valueOf(utilMeth.getSETTING_DEVICE_LIM_CHECK_PERIOD())));
                     System.out.println("Receiver not within Limit days :::::::: " + "     " + isBeforeYesterday);
                     if (isBeforeYesterday != true) {
                         getActiveCatRec = deviceLimitRec.get(0).getTierCategory();
                     }
-                    
+
                 }
                 getReciverG = globalLimitConfigRepo.findByLimitCategory(getActiveCatRec);
                 configuredReceiverMaxBalance = new BigDecimal(getReciverG.get(0).getMaximumBalance());
-                
+
                 System.out.println("configuredReceiverMaxBalance :::::::: " + "     " + configuredReceiverMaxBalance);
                 System.out.println("genLedCum.get(0).getTotalBalance().compareTo() :::::::: " + "     " + accBalAmount.compareTo(configuredReceiverMaxBalance));
                 if (!allowInflowAboveLimits.equals("1")) {
@@ -1200,9 +1200,9 @@ public class LocalTransferService {
                         return responseModel;
                     }
                 }
-                
+
             }
-            
+
             switch (transType) {
                 case "localtransfer":
                     transAmount = transAmt;
@@ -1211,7 +1211,7 @@ public class LocalTransferService {
                     //getNameLookUpDe.get(0).setWalletTransferCumm(cummulative.toString());
                     configAmount = new BigDecimal(safeStr(getG.get(0).getDailyLimit()));
                     singleLimit = new BigDecimal(safeStr(getG.get(0).getWalletSingleTransfer()));
-                    
+
                     break;
                 default:
                     responseModel.setStatusCode(400);
@@ -1228,25 +1228,25 @@ public class LocalTransferService {
             //(daily transaction limit)
 
             BaseResponse getTotalBalSender = this.getTotalBalByPhoneNumb(rq.getSender());
-            
+
             if (getTotalBalSender.getStatusCode() != 200) {
                 LocalTransFailedTransInfo procFailedTrans = new LocalTransFailedTransInfo(
                         "Wallet-Wallet-Transfer", getTotalBalSender.getDescription(),
                         String.valueOf(GlobalMethods.generateTransactionId()), "", channel,
                         "Local-Transfer-Service"
                 );
-                
+
                 responseModel.setDescription(getTotalBalSender.getDescription());
                 responseModel.setStatusCode(statusCode);
-                
+
                 localTransFailedTransInfoRepo.save(procFailedTrans);
                 return responseModel;
-                
+
             }
-            
+
             Object amountObjSender = getTotalBalSender.getData().get("accountBalance");
             BigDecimal accBalAmountSender = BigDecimal.ZERO;
-            
+
             if (amountObjSender instanceof BigDecimal) {
                 accBalAmountSender = (BigDecimal) amountObjSender;
             } else if (amountObjSender instanceof Number) {
@@ -1256,7 +1256,7 @@ public class LocalTransferService {
             } else {
                 accBalAmountSender = BigDecimal.ZERO; // default or throw exception
             }
-            
+
             System.out.println("Gotten sender account balance: " + accBalAmountSender);
 
             //get account balance
@@ -1265,7 +1265,7 @@ public class LocalTransferService {
             //a.compareTo(b) 
             accountBal = accBalAmountSender;
             if (new BigDecimal(utilMeth.minAcctBalance()).compareTo(accountBal) == 1) {
-                
+
                 LocalTransFailedTransInfo procFailedTrans = new LocalTransFailedTransInfo(
                         "Wallet-Wallet-Transfer", "Wallet to Wallet transfer - Sorry, your account balance is insufficient. Your minimum account balance is:  " + utilMeth.minAcctBalance(),
                         String.valueOf(GlobalMethods.generateTransactionId()), "", channel,
@@ -1275,11 +1275,11 @@ public class LocalTransferService {
                 responseModel.setStatusCode(400);
                 responseModel.setDescription("Wallet to Wallet transfer - Sorry, your account balance is insufficient. Your minimum account balance is:  " + utilMeth.minAcctBalance());
                 return responseModel;
-                
+
             }
-            
+
             if (new BigDecimal(utilMeth.minAcctBalance()).compareTo(accountBal) == 0) {
-                
+
                 LocalTransFailedTransInfo procFailedTrans = new LocalTransFailedTransInfo(
                         "Wallet-Wallet-Transfer", "Wallet to Wallet transfer - Sorry, your account balance is insufficient. Your minimum account balance is:  " + utilMeth.minAcctBalance(),
                         String.valueOf(GlobalMethods.generateTransactionId()), "", channel,
@@ -1289,11 +1289,11 @@ public class LocalTransferService {
                 responseModel.setStatusCode(400);
                 responseModel.setDescription("Wallet to Wallet transfer - Sorry, your account balance is insufficient. Your minimum account balance is:  " + utilMeth.minAcctBalance());
                 return responseModel;
-                
+
             }
-            
+
             if (transAmount.compareTo(accountBal) == 1) {
-                
+
                 LocalTransFailedTransInfo procFailedTrans = new LocalTransFailedTransInfo(
                         "Wallet-Wallet-Transfer", "Wallet to Wallet transfer - Sorry, your account balance is insufficient. Your account balance is " + accountBal.toString(),
                         String.valueOf(GlobalMethods.generateTransactionId()), "", channel,
@@ -1303,11 +1303,11 @@ public class LocalTransferService {
                 responseModel.setStatusCode(400);
                 responseModel.setDescription("Wallet to Wallet transfer - Sorry, your account balance is insufficient. Your account balance is " + accountBal.toString());
                 return responseModel;
-                
+
             }
-            
+
             if (transAmount.compareTo(accountBal) == 0) {
-                
+
                 LocalTransFailedTransInfo procFailedTrans = new LocalTransFailedTransInfo(
                         "Wallet-Wallet-Transfer", "Wallet to Wallet transfer - Sorry insufficient fund, Your minimum account balance is:  " + utilMeth.minAcctBalance(),
                         String.valueOf(GlobalMethods.generateTransactionId()), "", channel,
@@ -1317,7 +1317,7 @@ public class LocalTransferService {
                 responseModel.setStatusCode(400);
                 responseModel.setDescription("Wallet to Wallet transfer - Sorry insufficient fund, Your minimum account balance is:  " + utilMeth.minAcctBalance());
                 return responseModel;
-                
+
             }
 
             // ensure config amount is set
@@ -1342,7 +1342,7 @@ public class LocalTransferService {
                         "Local-Transfer-Service"
                 );
                 localTransFailedTransInfoRepo.save(procFailedTrans);
-                
+
                 responseModel.setDescription("Wallet to Wallet transfer - Sorry, your transfer amount exceed single transfer limit of " + singleLimit.toString());
                 return responseModel;
             }
@@ -1361,21 +1361,21 @@ public class LocalTransferService {
                 responseModel.setDescription("Wallet to Wallet transfer, you have Exceeded Your Daily Transaction Limit!");
                 return responseModel;
             }
-            
+
             responseModel.setStatusCode(200);
-            
+
         } catch (Exception ex) {
             responseModel.setDescription(statusMessage);
             responseModel.setStatusCode(statusCode);
-            
+
             ex.printStackTrace();
         }
-        
+
         return responseModel;
     }
-    
+
     public BaseResponse processTransfer(LocalTransferRequest rq, String channel, String auth) {
-        
+
         BaseResponse responseModel = new BaseResponse();
         int statusCode = 500;
         String statusMessage = "An error occured,please try again";
@@ -1384,7 +1384,7 @@ public class LocalTransferService {
             DecodedJWTToken getDecoded = DecodedJWTToken.getDecoded(auth);
             String processId = String.valueOf(GlobalMethods.generateTransactionId());
             boolean isWalletId = true;
-            
+
             boolean isPhonenUmber = false;
             String receiverPhoneNumber = null;
             boolean isWalletIdSender = true;
@@ -1392,27 +1392,27 @@ public class LocalTransferService {
             String senderPhoneNumber = null;
             List<RegWalletInfo> getSender = null;
             List<RegWalletInfo> getReceiver = null;
-            
+
             if (!regWalletCheckLogRepo.existsByProcessId(rq.getProcessId())) {
-                
+
                 LocalTransFailedTransInfo procFailedTrans = new LocalTransFailedTransInfo(
                         "Wallet-Wallet-Transfer", "Wallet to Wallet transfer, Transaction has not been initiated!",
                         String.valueOf(GlobalMethods.generateTransactionId()), "", channel,
                         "Local-Transfer-Service"
                 );
-                
+
                 responseModel.setDescription("Wallet to Wallet transfer, Transaction has not been initiated!");
                 responseModel.setStatusCode(statusCode);
-                
+
                 localTransFailedTransInfoRepo.save(procFailedTrans);
                 return responseModel;
-                
+
             }
-            
+
             if (GlobalMethods.isTenDigits(rq.getReceiver().trim()) == false) {
                 isWalletId = false;
                 isPhonenUmber = true;
-                
+
             }
 
             /* if (!GlobalMethods.isElevenDigits(rq.getReceiver().trim()) == true) {
@@ -1421,172 +1421,172 @@ public class LocalTransferService {
 
             }*/
             System.out.println("isWalletIdBool :::::::: " + "     " + isWalletId);
-            
+
             System.out.println("isPhonenUmberBool :::::::: " + "     " + isPhonenUmber);
-            
+
             if (isWalletId == false && isPhonenUmber == false) {
-                
+
                 LocalTransFailedTransInfo procFailedTrans = new LocalTransFailedTransInfo(
                         "Wallet-Wallet-Transfer", "Wallet to Wallet transfer, invalid Receiver!",
                         String.valueOf(GlobalMethods.generateTransactionId()), "", channel,
                         "Local-Transfer-Service"
                 );
-                
+
                 responseModel.setDescription("Wallet to Wallet transfer, invalid Receiver");
                 responseModel.setStatusCode(statusCode);
-                
+
                 localTransFailedTransInfoRepo.save(procFailedTrans);
                 return responseModel;
-                
+
             }
             if (isWalletId) {
-                
+
                 System.out.println("isWalletId :::::::: " + "     ");
-                
+
                 getReceiver = regWalletInfoRepository.findByWalletIdList(rq.getReceiver());
-                
+
                 if (getReceiver.size() <= 0) {
-                    
+
                     LocalTransFailedTransInfo procFailedTrans = new LocalTransFailedTransInfo(
                             "Wallet-Wallet-Transfer", "Wallet to Wallet transfer, Receiver does not exists!",
                             String.valueOf(GlobalMethods.generateTransactionId()), "", channel,
                             "Local-Transfer-Service"
                     );
-                    
+
                     responseModel.setDescription("Wallet to Wallet transfer, Receiver does not exists!");
                     responseModel.setStatusCode(statusCode);
-                    
+
                     localTransFailedTransInfoRepo.save(procFailedTrans);
                     return responseModel;
-                    
+
                 }
                 receiverPhoneNumber = getReceiver.get(0).getPhoneNumber();
             }
-            
+
             if (isPhonenUmber) {
-                
+
                 System.out.println("isPhonenUmber :::::::: " + "     ");
-                
+
                 getReceiver = regWalletInfoRepository.findByPhoneNumberData(rq.getReceiver());
-                
+
                 if (getReceiver.size() <= 0) {
-                    
+
                     LocalTransFailedTransInfo procFailedTrans = new LocalTransFailedTransInfo(
                             "Wallet-Wallet-Transfer", "Wallet to Wallet transfer, Receiver does not exists!",
                             String.valueOf(GlobalMethods.generateTransactionId()), "", channel,
                             "Local-Transfer-Service"
                     );
-                    
+
                     responseModel.setDescription("Wallet to Wallet transfer, Receiver does not exists!");
                     responseModel.setStatusCode(statusCode);
-                    
+
                     localTransFailedTransInfoRepo.save(procFailedTrans);
                     return responseModel;
-                    
+
                 }
-                
+
                 receiverPhoneNumber = getReceiver.get(0).getPhoneNumber();
-                
+
             }
-            
+
             if (GlobalMethods.isTenDigits(rq.getSender().trim()) == false) {
                 isWalletIdSender = false;
                 isPhonenUmberSender = true;
-                
+
             }
-            
+
             System.out.println("iisWalletIdSenderBool :::::::: " + "     " + isWalletIdSender);
-            
+
             System.out.println("isPhonenUmberSenderBool :::::::: " + "     " + isPhonenUmberSender);
-            
+
             if (isWalletIdSender == false && isPhonenUmberSender == false) {
-                
+
                 LocalTransFailedTransInfo procFailedTrans = new LocalTransFailedTransInfo(
                         "Wallet-Wallet-Transfer", "Wallet to Wallet transfer, invalid Sender!",
                         String.valueOf(GlobalMethods.generateTransactionId()), "", channel,
                         "Local-Transfer-Service"
                 );
-                
+
                 responseModel.setDescription("Wallet to Wallet transfer, invalid Sender");
                 responseModel.setStatusCode(statusCode);
-                
+
                 localTransFailedTransInfoRepo.save(procFailedTrans);
                 return responseModel;
-                
+
             }
             if (isWalletIdSender) {
-                
+
                 System.out.println("isWalletIdSender :::::::: " + "     ");
-                
+
                 getSender = regWalletInfoRepository.findByWalletIdList(rq.getSender());
-                
+
                 if (getSender.size() <= 0) {
-                    
+
                     LocalTransFailedTransInfo procFailedTrans = new LocalTransFailedTransInfo(
                             "Wallet-Wallet-Transfer", "Wallet to Wallet transfer, Sender does not exists!",
                             String.valueOf(GlobalMethods.generateTransactionId()), "", channel,
                             "Local-Transfer-Service"
                     );
-                    
+
                     responseModel.setDescription("Wallet to Wallet transfer, Sender does not exists!");
                     responseModel.setStatusCode(statusCode);
-                    
+
                     localTransFailedTransInfoRepo.save(procFailedTrans);
                     return responseModel;
-                    
+
                 }
                 senderPhoneNumber = getSender.get(0).getPhoneNumber();
             }
-            
+
             if (isPhonenUmberSender) {
-                
+
                 System.out.println("isPhonenUmberSender :::::::: " + "     ");
-                
+
                 getSender = regWalletInfoRepository.findByPhoneNumberData(rq.getSender());
-                
+
                 if (getSender.size() <= 0) {
-                    
+
                     LocalTransFailedTransInfo procFailedTrans = new LocalTransFailedTransInfo(
                             "Wallet-Wallet-Transfer", "Wallet to Wallet transfer, Sender does not exists!",
                             String.valueOf(GlobalMethods.generateTransactionId()), "", channel,
                             "Local-Transfer-Service"
                     );
-                    
+
                     responseModel.setDescription("Wallet to Wallet transfer, Sender does not exists!");
                     responseModel.setStatusCode(statusCode);
-                    
+
                     localTransFailedTransInfoRepo.save(procFailedTrans);
                     return responseModel;
-                    
+
                 }
-                
+
                 senderPhoneNumber = getSender.get(0).getPhoneNumber();
-                
+
             }
-            
+
             rq.setSender(senderPhoneNumber);
-            
+
             String str1 = rq.getAmount().replaceAll(",", "");
             System.out.println("remove comma fro amount " + "  ::::::::::::::::::::: " + str1);
-            
+
             rq.setAmount(str1);
-            
+
             List<RegWalletCheckLog> getNameLookUpDe = regWalletCheckLogRepo.findByProcessIdList(rq.getProcessId());
-            
+
             if (!getNameLookUpDe.get(0).getLTransSessSenderWalletNo().equals(getDecoded.phoneNumber)) {
-                
+
                 LocalTransFailedTransInfo procFailedTrans = new LocalTransFailedTransInfo(
                         "Wallet-Wallet-Transfer", "Wallet to Wallet transfer, Transaction is invalid!",
                         String.valueOf(GlobalMethods.generateTransactionId()), "", channel,
                         "Local-Transfer-Service"
                 );
-                
+
                 responseModel.setDescription("Wallet to Wallet transfer, Transaction is invalid!");
                 responseModel.setStatusCode(statusCode);
-                
+
                 localTransFailedTransInfoRepo.save(procFailedTrans);
                 return responseModel;
-                
+
             }
 
             // System.out.println("getNameLookUpDe.get(0).getLTransServiceType() " + "  ::::::::::::::::::::: " + getNameLookUpDe.get(0).getLTransServiceType());
@@ -1603,43 +1603,43 @@ public class LocalTransferService {
                         String.valueOf(GlobalMethods.generateTransactionId()), "", channel,
                         "Local-Transfer-Service"
                 );
-                
+
                 responseModel.setDescription("Wallet to Wallet transfer, " + flagMinAmt);
                 responseModel.setStatusCode(statusCode);
-                
+
                 localTransFailedTransInfoRepo.save(procFailedTrans);
                 return responseModel;
             }
 
             //check if sender is the same
             if (!getNameLookUpDe.get(0).getLTransSessSenderWalletNo().equals(rq.getSender())) {
-                
+
                 LocalTransFailedTransInfo procFailedTrans = new LocalTransFailedTransInfo(
                         "Wallet-Wallet-Transfer", "Wallet to Wallet transfer, invalid transaction, sender!",
                         String.valueOf(GlobalMethods.generateTransactionId()), "", channel,
                         "Local-Transfer-Service"
                 );
-                
+
                 responseModel.setDescription("Wallet to Wallet transfer, invalid transaction, sender!");
                 responseModel.setStatusCode(statusCode);
-                
+
                 localTransFailedTransInfoRepo.save(procFailedTrans);
                 return responseModel;
             }
-            
+
             rq.setReceiver(receiverPhoneNumber);
             //check if receiver is the same
             if (!getNameLookUpDe.get(0).getLTransSessReceiverWalletNo().equals(rq.getReceiver())) {
-                
+
                 LocalTransFailedTransInfo procFailedTrans = new LocalTransFailedTransInfo(
                         "Wallet-Wallet-Transfer", "Wallet to Wallet transfer, invalid transaction, receiver!",
                         String.valueOf(GlobalMethods.generateTransactionId()), "", channel,
                         "Local-Transfer-Service"
                 );
-                
+
                 responseModel.setDescription("Wallet to Wallet transfer, invalid transaction, receiver!");
                 responseModel.setStatusCode(statusCode);
-                
+
                 localTransFailedTransInfoRepo.save(procFailedTrans);
                 return responseModel;
             }
@@ -1655,17 +1655,17 @@ public class LocalTransferService {
             String sanitizedAmount = rq.getAmount() == null ? "0" : rq.getAmount().trim().replace(",", "");
             BigDecimal requestAmount = new BigDecimal(sanitizedAmount);
             BigDecimal expectedAmount = getNameLookUpDe.get(0).getLTransSessAmount();
-            
+
             if (expectedAmount.compareTo(requestAmount) != 0) {
                 LocalTransFailedTransInfo procFailedTrans = new LocalTransFailedTransInfo(
                         "Wallet-Wallet-Transfer", "Wallet to Wallet transfer, invalid transaction, amount!",
                         String.valueOf(GlobalMethods.generateTransactionId()), "", channel,
                         "Local-Transfer-Service"
                 );
-                
+
                 responseModel.setDescription("Wallet to Wallet transfer, invalid transaction, amount!");
                 responseModel.setStatusCode(statusCode);
-                
+
                 localTransFailedTransInfoRepo.save(procFailedTrans);
                 return responseModel;
             }
@@ -1673,65 +1673,65 @@ public class LocalTransferService {
             String sanitizedFees = rq.getFees() == null ? "0" : rq.getFees().trim().replace(",", "");
             BigDecimal requestFees = new BigDecimal(sanitizedFees);
             BigDecimal expectedFees = getNameLookUpDe.get(0).getLTransSessFees();
-            
+
             if (expectedFees.compareTo(requestFees) != 0) {
                 LocalTransFailedTransInfo procFailedTrans = new LocalTransFailedTransInfo(
                         "Wallet-Wallet-Transfer", "Wallet to Wallet transfer, invalid transaction, fees!",
                         String.valueOf(GlobalMethods.generateTransactionId()), "", channel,
                         "Local-Transfer-Service"
                 );
-                
+
                 responseModel.setDescription("Wallet to Wallet transfer, invalid transaction, fees!");
                 responseModel.setStatusCode(statusCode);
-                
+
                 localTransFailedTransInfoRepo.save(procFailedTrans);
                 return responseModel;
             }
             //check if receiver name is the same
             if (!getNameLookUpDe.get(0).getLTransSessReceiverName().equals(rq.getReceiverName())) {
-                
+
                 LocalTransFailedTransInfo procFailedTrans = new LocalTransFailedTransInfo(
                         "Wallet-Wallet-Transfer", "Wallet to Wallet transfer, invalid transaction, receiver name!",
                         String.valueOf(GlobalMethods.generateTransactionId()), "", channel,
                         "Local-Transfer-Service"
                 );
-                
+
                 responseModel.setDescription("Wallet to Wallet transfer, invalid transaction, receiver name!");
                 responseModel.setStatusCode(statusCode);
-                
+
                 localTransFailedTransInfoRepo.save(procFailedTrans);
                 return responseModel;
             }
-            
+
             if (!getNameLookUpDe.get(0).getLTransServiceType().equals(rq.getTransactionType())) {
-                
+
                 LocalTransFailedTransInfo procFailedTrans = new LocalTransFailedTransInfo(
                         "Wallet-Wallet-Transfer", "Wallet to Wallet transfer, invalid transaction, transaction type!",
                         String.valueOf(GlobalMethods.generateTransactionId()), "", channel,
                         "Local-Transfer-Service"
                 );
-                
+
                 responseModel.setDescription("Wallet to Wallet transfer, invalid transaction, transaction type!");
                 responseModel.setStatusCode(statusCode);
-                
+
                 localTransFailedTransInfoRepo.save(procFailedTrans);
                 return responseModel;
             }
-            
+
             if (utilMeth.getIfNO_PERMITTED_TRASANCTION(getDecoded.phoneNumber)) {
-                
+
                 LocalTransFailedTransInfo procFailedTrans = new LocalTransFailedTransInfo(
                         "Wallet-Wallet-Transfer", "Wallet to Wallet transfer, Transaction failed, please contact kuleanpaysupport@thefifthlab.com!",
                         String.valueOf(GlobalMethods.generateTransactionId()), "", channel,
                         "Local-Transfer-Service"
                 );
-                
+
                 responseModel.setDescription("Transaction failed, please contact kuleanpaysupport@thefifthlab.com");
                 responseModel.setStatusCode(statusCode);
-                
+
                 localTransFailedTransInfoRepo.save(procFailedTrans);
                 return responseModel;
-                
+
             }
 
             //check if processIdStatus is 2 -> if 2 transaction has completed
@@ -1753,24 +1753,24 @@ public class LocalTransferService {
             System.out.println("Current time nowMillis  ::::::::::::::::               ::::: %S  " + nowMillis);
             if (getNameLookUpDe.get(0).getProcessIdStatus().equals("2")) {
                 if (getNameLookUpDe.get(0).getLTransSessExpiry() < nowMillis) {
-                    
+
                     LocalTransFailedTransInfo procFailedTrans = new LocalTransFailedTransInfo(
                             "Wallet-Wallet-Transfer", "Wallet to Wallet transfer, duplicate transaction, please try again in " + utilMeth.ltExistingRunningWindow() + " minutes!",
                             String.valueOf(GlobalMethods.generateTransactionId()), "", channel,
                             "Local-Transfer-Service"
                     );
-                    
+
                     responseModel.setDescription("Wallet to Wallet transfer, duplicate transaction, please try again in " + utilMeth.ltExistingRunningWindow() + " minutes!");
                     responseModel.setStatusCode(statusCode);
-                    
+
                     localTransFailedTransInfoRepo.save(procFailedTrans);
                     return responseModel;
-                    
+
                 }
             }
-            
+
             kulFees = new BigDecimal(rq.getFees());
-            
+
             BigDecimal amountToCredit = new BigDecimal(rq.getAmount());
             BigDecimal amountToDebit = new BigDecimal(rq.getAmount()).add(kulFees);
             rq.setAmount(amountToDebit.toString());
@@ -1780,14 +1780,14 @@ public class LocalTransferService {
 
             //System.out.println("secondCheck " + "  ::::::::::::::::::::: " + secondCheck);
             if (secondCheck.getStatusCode() != 200) {
-                
+
                 responseModel.setDescription(secondCheck.getDescription());
                 responseModel.setStatusCode(secondCheck.getStatusCode());
                 return responseModel;
-                
+
             }
             rq.setAmount(amountToCredit.toString());
-            
+
             getSender = regWalletInfoRepository.findByPhoneNumberData(rq.getSender());
             //List<RegWalletInfo> getReceiver = regWalletInfoRepository.findByPhoneNumberData(rq.getReceiver());
 
@@ -1803,33 +1803,33 @@ public class LocalTransferService {
             //   System.out.println("senderName " + "  ::::::::::::::::::::: " + senderName);
 
             String getnarration;
-            
+
             if (getNameLookUpDe.get(0).getTheNarration() == null || getNameLookUpDe.get(0).getTheNarration().isEmpty()) {
                 getnarration = "Wallet to Wallet Transfer";
             } else {
-                
+
                 getnarration = getNameLookUpDe.get(0).getTheNarration();
-                
+
             }
-            
+
             String narration = "TRF/" + getnarration + "/FRM " + senderName + " TO "
                     + getNameLookUpDe.get(0).getLTransSessReceiverName();
 
             // System.out.println("narration " + "  ::::::::::::::::::::: " + narration);
             if (wToWaletTransferRepo.existsByTransactionId(rq.getProcessId())) {
-                
+
                 LocalTransFailedTransInfo procFailedTrans = new LocalTransFailedTransInfo(
                         "Wallet-Wallet-Transfer", "Wallet to Wallet transfer, transaction has already completed, please check the processId!",
                         String.valueOf(GlobalMethods.generateTransactionId()), "", channel,
                         "Local-Transfer-Service"
                 );
-                
+
                 responseModel.setDescription("Wallet to Wallet transfer, transaction has already completed!");
                 responseModel.setStatusCode(statusCode);
-                
+
                 localTransFailedTransInfoRepo.save(procFailedTrans);
                 return responseModel;
-                
+
             }
 
             //handle save and spend
@@ -1910,12 +1910,17 @@ public class LocalTransferService {
 
             BatchPostingRequest batchRq = new BatchPostingRequest();
             batchRq.setGroupRef(rq.getProcessId());
+            // productCode resolved from Smart-Core auth token in batchPost
             batchRq.getLegs().add(senderDebitLeg);
             batchRq.getLegs().add(cadGlDebitLeg);
             batchRq.getLegs().add(receiverCreditLeg);
             batchRq.getLegs().add(cadGlCreditLeg);
+            
+           // System.out.println("batchRq :::::::: " + " " + new Gson().toJson(batchRq));
 
             BaseResponse batchPostRes = utilMeth.batchPost(batchRq, auth);
+
+            System.out.println("batchPostRes :::::::: " + " " + new Gson().toJson(batchPostRes));
 
             if (batchPostRes.getStatusCode() == 200) {
                 FinWealthPaymentTransaction kTrans2b = new FinWealthPaymentTransaction();
@@ -2068,17 +2073,17 @@ public class LocalTransferService {
                 responseModel.setStatusCode(statusCode);
                 return responseModel;
             }
-            
+
         } catch (Exception ex) {
             responseModel.setDescription(statusMessage);
             responseModel.setStatusCode(statusCode);
-            
+
             ex.printStackTrace();
         }
-        
+
         return responseModel;
     }
-    
+
     public static String pushNotifyDebitWalletForWalletTransfer(BigDecimal amount, String recName, String senderName) {
         String sMSMessage = "Dear " + "Customer" + ", "
                 + " your Wallet has been credited with " + "N" + amount + " "
@@ -2086,7 +2091,7 @@ public class LocalTransferService {
                 + " Thanks for using Plural.";
         return sMSMessage;
     }
-    
+
     public static String pushNotifyDebitWalletForWalletTransferSender(BigDecimal amount, String recName, String senderName) {
         String sMSMessage = "Dear " + "Customer" + ", "
                 + " your Wallet has been debited with " + "N" + amount + " "
@@ -2094,22 +2099,22 @@ public class LocalTransferService {
                 + " Thanks for using Plural.";
         return sMSMessage;
     }
-    
+
     public String decryptData(String data) throws NoSuchAlgorithmException, NoSuchPaddingException, InvalidKeyException, IllegalBlockSizeException, BadPaddingException {
-        
+
         String decryptData = StrongAES.decrypt(data, encryptionKey);
 
         // log.info("decryptData ::::: {} ", decryptData);
         return decryptData;
-        
+
     }
-    
+
     public ApiResponseModel getUserTransactionsHistory(WalletNoReq rq, String channel, String auth) {
-        
+
         ApiResponseModel responseModel = new ApiResponseModel();
         int statusCode = 500;
         String statusMessage = "An error occured,please try again";
-        
+
         try {
             statusCode = 400;
             DecodedJWTToken getDecoded = DecodedJWTToken.getDecoded(auth); // keep if you need it
@@ -2118,7 +2123,7 @@ public class LocalTransferService {
             boolean isWalletId = true;
             boolean isPhonenUmber = true;
             String userPhoneNumber = null;
-            
+
             List<RegWalletInfo> getReceiver;
 
             // --- your existing validation logic ---
@@ -2126,82 +2131,82 @@ public class LocalTransferService {
                 isWalletId = false;
                 isPhonenUmber = true;
             }
-            
+
             System.out.println("isWalletIdBool :::::::: " + "     " + isWalletId);
             System.out.println("isPhonenUmberBool :::::::: " + "     " + isPhonenUmber);
-            
+
             if (isWalletId == false && isPhonenUmber == false) {
-                
+
                 LocalTransFailedTransInfo procFailedTrans = new LocalTransFailedTransInfo(
                         "Wallet-Wallet-Transfer", "Wallet to Wallet transfer, invalid Receiver!",
                         String.valueOf(GlobalMethods.generateTransactionId()), "", channel,
                         "Local-Transfer-Service"
                 );
-                
+
                 responseModel.setDescription("Wallet to Wallet transfer, invalid Receiver");
                 responseModel.setStatusCode(statusCode);
-                
+
                 localTransFailedTransInfoRepo.save(procFailedTrans);
                 return responseModel;
             }
-            
+
             if (isWalletId) {
                 System.out.println("isWalletId :::::::: " + "     ");
                 getReceiver = regWalletInfoRepository.findByWalletIdList(rq.getMemberId());
-                
+
                 if (getReceiver.size() <= 0) {
-                    
+
                     LocalTransFailedTransInfo procFailedTrans = new LocalTransFailedTransInfo(
                             "Wallet-Wallet-Transfer", "User does not exists!",
                             String.valueOf(GlobalMethods.generateTransactionId()), "", channel,
                             "Local-Transfer-Service"
                     );
-                    
+
                     responseModel.setDescription("User does not exists!");
                     responseModel.setStatusCode(statusCode);
-                    
+
                     localTransFailedTransInfoRepo.save(procFailedTrans);
                     return responseModel;
                 }
                 userPhoneNumber = getReceiver.get(0).getPhoneNumber();
             }
-            
+
             if (isPhonenUmber) {
                 System.out.println("isPhonenUmber :::::::: " + "     ");
                 getReceiver = regWalletInfoRepository.findByPhoneNumberData(rq.getMemberId());
-                
+
                 if (getReceiver.size() <= 0) {
-                    
+
                     LocalTransFailedTransInfo procFailedTrans = new LocalTransFailedTransInfo(
                             "Wallet-Wallet-Transfer", "User does not exists!",
                             String.valueOf(GlobalMethods.generateTransactionId()), "", channel,
                             "Local-Transfer-Service"
                     );
-                    
+
                     responseModel.setDescription("User does not exists!");
                     responseModel.setStatusCode(statusCode);
-                    
+
                     localTransFailedTransInfoRepo.save(procFailedTrans);
                     return responseModel;
                 }
-                
+
                 userPhoneNumber = getReceiver.get(0).getPhoneNumber();
             }
-            
+
             List<FinWealthPaymentTransaction> getKulTrans
                     = finWealthPaymentTransactionRepo.findByWalletNoList(userPhoneNumber);
-            
+
             if (getKulTrans.size() <= 0) {
-                
+
                 LocalTransFailedTransInfo procFailedTrans = new LocalTransFailedTransInfo(
                         "Wallet-Wallet-Transfer", "Wallet to Wallet transfer, Customer does not have existing transaction!",
                         String.valueOf(GlobalMethods.generateTransactionId()), "", channel,
                         "Local-Transfer-Service"
                 );
-                
+
                 responseModel.setDescription("Wallet to Wallet transfer, Customer does not have existing transaction!");
                 responseModel.setStatusCode(statusCode);
-                
+
                 localTransFailedTransInfoRepo.save(procFailedTrans);
                 return responseModel;
             }
@@ -2210,9 +2215,9 @@ public class LocalTransferService {
             // ✅ YOUR NEW PART: build DTOs, populate createdDate + status, sign receipt
             // --------------------------------------------------------------------
             List<Object> mapAll = new ArrayList<>();
-            
+
             for (FinWealthPaymentTransaction getKul : getKulTrans) {
-                
+
                 FinWalletPaymentTransModel getK = new FinWalletPaymentTransModel();
                 getK.setAmmount(getKul.getAmmount());
                 getK.setTransactionDate(formDate(getKul.getCreatedDate())); // display only
@@ -2241,41 +2246,41 @@ public class LocalTransferService {
                 // ✅ SIGN: calls utility-service /api/v1/crypto/receipt/sign
                 // attaches receiptKid + receiptSignature to this DTO
                 receiptSigningFacade.attachReceipt(getK);
-                
+
                 mapAll.add(getK);
             }
-            
+
             responseModel.setData(mapAll);
             responseModel.setDescription("Customer transactions pulled successfully.");
             responseModel.setStatusCode(200);
-            
+
         } catch (FeignException ex) {
-            
+
             log.error("fxpeer sign failed status={} body={}", ex.status(), ex.contentUTF8(), ex);
-            
+
             responseModel.setStatusCode(ex.status());
             responseModel.setDescription("FXPeer error: " + ex.contentUTF8());
-            
+
         } catch (Exception ex) {
-            
+
             log.error("Unexpected error", ex);
-            
+
             responseModel.setStatusCode(500);
             responseModel.setDescription("Internal error: " + ex.getMessage());
         }
-        
+
         return responseModel;
     }
-    
+
     private String resolveStatusFallback(FinWealthPaymentTransaction tx) {
         // Replace with your real mapping ASAP.
         // If you have a responseCode / reversal flag / actual status column, use that.
         return "SUCCESS";
     }
-    
+
     private String formDate(Instant datte) {
         LocalDateTime datetime = LocalDateTime.ofInstant(datte, ZoneOffset.UTC);
         return DateTimeFormatter.ofPattern("MMM dd, yyyy").format(datetime);
     }
-    
+
 }

@@ -1,5 +1,6 @@
 package com.finacial.wealth.backoffice.integrations.fxpeer;
 
+import com.finacial.wealth.backoffice.integrations.fxpeer.model.FeaturedServicesConfigRequest;
 import com.finacial.wealth.backoffice.integrations.fxpeer.model.InvestmentProductUpsertRequest;
 import com.finacial.wealth.backoffice.integrations.fxpeer.model.LiquidationApprovalRequest;
 import com.finacial.wealth.backoffice.model.BaseResponse;
@@ -20,6 +21,27 @@ public interface FxPeerExchangeClient {
 
     @GetMapping(value = "/investments/get-products", produces = MediaType.APPLICATION_JSON_VALUE)
     Map<String, Object> getInvestmentProducts(@RequestHeader("authorization") String auth);
+
+    @GetMapping(value = "/fxothers/services/featured", produces = MediaType.APPLICATION_JSON_VALUE)
+    Map<String, Object> getFeaturedServices(@RequestHeader("authorization") String auth);
+
+    @GetMapping(value = "/fxothers/admin/featured-services-config", produces = MediaType.APPLICATION_JSON_VALUE)
+    Map<String, Object> getFeaturedServicesConfig(@RequestHeader("authorization") String auth);
+
+    @PostMapping(value = "/fxothers/admin/featured-services-config", consumes = "application/json")
+    Map<String, Object> saveFeaturedServicesConfig(
+            @RequestHeader("authorization") String auth,
+            @RequestBody FeaturedServicesConfigRequest request
+    );
+
+    @GetMapping(value = "/fxothers/admin/airtime-reversals/summary", produces = MediaType.APPLICATION_JSON_VALUE)
+    Map<String, Object> getAirtimeReversalSummary(@RequestHeader("authorization") String auth);
+
+    @GetMapping(value = "/fxothers/admin/airtime-reversals", produces = MediaType.APPLICATION_JSON_VALUE)
+    Map<String, Object> getAirtimeReversalCases(
+            @RequestHeader("authorization") String auth,
+            @RequestParam(required = false) String status
+    );
 
     @PostMapping(value = "/investments/create-product", consumes = "application/json")
     Map<String, Object> createInvestmentProduct(@RequestBody InvestmentProductUpsertRequest request);

@@ -124,6 +124,7 @@ public class ProcSochitelServices {
     private final AddAccountDetailsRepo addAccountDetailsRepo;
     private final AppConfigRepo appConfigRepo;
     private final InternationalProductCatRepo internationalProductCatRepo;
+    private final AirtimeRollbackService airtimeRollbackService;
 
     public ProcSochitelServices(
             ProfilingProxies profilingProxies,
@@ -133,7 +134,8 @@ public class ProcSochitelServices {
             TransactionServiceProxies transactionServiceProxies,
             AddAccountDetailsRepo addAccountDetailsRepo,
             RegWalletInfoRepository regWalletInfoRepository,
-            AppConfigRepo appConfigRepo, InternationalProductCatRepo internationalProductCatRepo) {
+            AppConfigRepo appConfigRepo, InternationalProductCatRepo internationalProductCatRepo,
+            AirtimeRollbackService airtimeRollbackService) {
 
         this.profilingProxies = profilingProxies;
         this.resourceLoader = resourceLoader;
@@ -144,6 +146,7 @@ public class ProcSochitelServices {
         this.regWalletInfoRepository = regWalletInfoRepository;
         this.appConfigRepo = appConfigRepo;
         this.internationalProductCatRepo = internationalProductCatRepo;
+        this.airtimeRollbackService = airtimeRollbackService;
     }
 
     // ---------- Utility ----------
@@ -1119,7 +1122,7 @@ public class ProcSochitelServices {
                         log.error("getStatus.getStatusCode() ::::::::::::::::::: ", getStatus.getStatusCode());
 
                         if (getStatus.getStatusCode() != 200) {
-                            Map<String, Object> rb = rollbackPreDebitExact(pre, auth);
+                            Map<String, Object> rb = rollbackPreDebitExact(pre, rq, auth, body);
 
                             Map<String, Object> payload = new java.util.LinkedHashMap<>();
                             payload.put("rollback", rb);
@@ -1139,7 +1142,7 @@ public class ProcSochitelServices {
                     resp.setOther(body.length() > 500 ? body.substring(0, 500) + "…" : body);
                     try {
                         if (getStatus.getStatusCode() != 200) {
-                            Map<String, Object> rb = rollbackPreDebitExact(pre, auth);
+                            Map<String, Object> rb = rollbackPreDebitExact(pre, rq, auth, body);
 
                             Map<String, Object> payload = new java.util.LinkedHashMap<>();
                             payload.put("rollback", rb);
@@ -1198,7 +1201,7 @@ public class ProcSochitelServices {
                     resp.setOther(body);
                     try {
                         if (getStatus.getStatusCode() != 200) {
-                            Map<String, Object> rb = rollbackPreDebitExact(pre, auth);
+                            Map<String, Object> rb = rollbackPreDebitExact(pre, rq, auth, body);
 
                             Map<String, Object> payload = new java.util.LinkedHashMap<>();
                             payload.put("rollback", rb);
@@ -1390,6 +1393,7 @@ public class ProcSochitelServices {
 
             BatchPostingLegRequest debitBuyer = new BatchPostingLegRequest();
             debitBuyer.setDirection("DEBIT");
+            debitBuyer.setRequestRef(processId + "-" + rq.getCurrencyCode() + "-BUYER_DR");
             debitBuyer.setUserType("CUSTOMER");
             debitBuyer.setAuth("Airtime_Buyer");
             debitBuyer.setFees(feesStr);
@@ -1397,7 +1401,7 @@ public class ProcSochitelServices {
             debitBuyer.setNarration(rq.getCurrencyCode() + "_Withdrawal");
             debitBuyer.setPhoneNumber(accountNumber);
             debitBuyer.setTransAmount(finCharges.toString());
-            debitBuyer.setTransactionId(processId + "-" + rq.getCurrencyCode());
+            debitBuyer.setTransactionId(processId + "-" + rq.getCurrencyCode() + "-BUYER_DR");
 
             // GL + Seller
             List<AppConfig> confs = appConfigRepo.findByConfigName(rq.getCurrencyCode());
@@ -1419,6 +1423,7 @@ public class ProcSochitelServices {
             // Debit GL (buyer leg)
             BatchPostingLegRequest debGLCredit = new BatchPostingLegRequest();
             debGLCredit.setDirection("DEBIT");
+            debGLCredit.setRequestRef(processId + "-" + rq.getCurrencyCode() + "-BUYER_GL_DR");
             debGLCredit.setUserType(rq.getCurrencyCode());
             debGLCredit.setAuth(rq.getCurrencyCode());
             debGLCredit.setFees("0.00");
@@ -1426,11 +1431,12 @@ public class ProcSochitelServices {
             debGLCredit.setNarration(debitBuyer.getNarration());
             debGLCredit.setPhoneNumber(decryptedGL);
             debGLCredit.setTransAmount(receiveAmount.toString());
-            debGLCredit.setTransactionId(processId);
+            debGLCredit.setTransactionId(processId + "-" + rq.getCurrencyCode() + "-BUYER_GL_DR");
 
             // Credit Seller
             BatchPostingLegRequest creditSeller = new BatchPostingLegRequest();
             creditSeller.setDirection("CREDIT");
+            creditSeller.setRequestRef(processId + "-" + rq.getCurrencyCode() + "-SELLER_CR");
             creditSeller.setUserType("CUSTOMER");
             creditSeller.setAuth("Bills_Account");
             creditSeller.setFees("00");
@@ -1438,11 +1444,12 @@ public class ProcSochitelServices {
             creditSeller.setNarration(rq.getCurrencyCode() + "_Deposit");
             creditSeller.setPhoneNumber(sellerAcctNumber);
             creditSeller.setTransAmount(receiveAmount.toString());
-            creditSeller.setTransactionId(processId + "-" + rq.getCurrencyCode());
+            creditSeller.setTransactionId(processId + "-" + rq.getCurrencyCode() + "-SELLER_CR");
 
             // Credit GL (seller leg)
             BatchPostingLegRequest glCredit = new BatchPostingLegRequest();
             glCredit.setDirection("CREDIT");
+            glCredit.setRequestRef(processId + "-" + rq.getCurrencyCode() + "-SELLER_GL_CR");
             glCredit.setUserType(GGL_CODE + "_GL");
             glCredit.setAuth(rq.getCurrencyCode());
             glCredit.setFees("0.00");
@@ -1450,7 +1457,7 @@ public class ProcSochitelServices {
             glCredit.setNarration(rq.getCurrencyCode() + "_Deposit");
             glCredit.setPhoneNumber(decryptedGL);
             glCredit.setTransAmount(receiveAmount.toString());
-            glCredit.setTransactionId(creditSeller.getTransactionId() + "-" + "DEPOSIT");
+            glCredit.setTransactionId(processId + "-" + rq.getCurrencyCode() + "-SELLER_GL_CR");
 
             batchRq.setLegs(List.of(debitBuyer, debGLCredit, creditSeller, glCredit));
             BaseResponse batchRes = transactionServiceProxies.batchPostWithType(batchRq, auth);
@@ -1484,84 +1491,8 @@ public class ProcSochitelServices {
         }
     }
 
-    private Map<String, Object> rollbackPreDebitExact(PreDebitResult pre, String auth) {
-        Map<String, Object> rep = new HashMap<>();
-        rep.put("rollbackStarted", true);
-
-        // 1) If GL credited (seller leg) → DEBIT GL
-        if (pre.isLegGLCredited()) {
-            try {
-                DebitWalletCaller r = new DebitWalletCaller();
-                r.setAuth(pre.getGglCode());
-                r.setFees("0.00");
-                r.setFinalCHarges(pre.getReceiveAmount().toString());
-                r.setNarration(pre.getGglCode() + "_Deposit_RB");
-                r.setPhoneNumber(pre.getGlAccountDecrypted());
-                r.setTransAmount(pre.getReceiveAmount().toString());
-                r.setTransactionId(pre.getProcessId() + "-RB-GLCREDIT");
-                BaseResponse res = transactionServiceProxies.debitCustomerWithType(r, pre.getGglCode() + "_GL", auth);
-                rep.put("reverseGLCredit", res.getStatusCode());
-            } catch (Exception e) {
-                rep.put("reverseGLCredit_error", e.getClass().getSimpleName());
-            }
-        }
-
-        // 2) If seller credited → DEBIT seller
-        if (pre.isLegSellerCredited()) {
-            try {
-                DebitWalletCaller r = new DebitWalletCaller();
-                r.setAuth("Seller");
-                r.setFees("0.00");
-                r.setFinalCHarges(pre.getReceiveAmount().toString());
-                r.setNarration("Seller_Deposit_RB");
-                r.setPhoneNumber(pre.getSellerAccountNumber());
-                r.setTransAmount(pre.getReceiveAmount().toString());
-                r.setTransactionId(pre.getProcessId() + "-RB-SELLERCREDIT");
-                BaseResponse res = transactionServiceProxies.debitCustomerWithType(r, "CUSTOMER", auth);
-                rep.put("reverseSellerCredit", res.getStatusCode());
-            } catch (Exception e) {
-                rep.put("reverseSellerCredit_error", e.getClass().getSimpleName());
-            }
-        }
-
-        // 3) If GL debited (buyer leg) → CREDIT GL
-        if (pre.isLegGLDebited()) {
-            try {
-                CreditWalletCaller r = new CreditWalletCaller();
-                r.setAuth(pre.getGglCode());
-                r.setFees("0.00");
-                r.setFinalCHarges(pre.getReceiveAmount().toString());
-                r.setNarration(pre.getGglCode() + "_Debit_RB");
-                r.setPhoneNumber(pre.getGlAccountDecrypted());
-                r.setTransAmount(pre.getReceiveAmount().toString());
-                r.setTransactionId(pre.getProcessId() + "-RB-GLDEBIT");
-                BaseResponse res = transactionServiceProxies.creditCustomerWithType(r, pre.getGglCode(), auth);
-                rep.put("reverseGLDebit", res.getStatusCode());
-            } catch (Exception e) {
-                rep.put("reverseGLDebit_error", e.getClass().getSimpleName());
-            }
-        }
-
-        // 4) If buyer debited → CREDIT buyer
-        if (pre.isLegBuyerDebited()) {
-            try {
-                CreditWalletCaller r = new CreditWalletCaller();
-                r.setAuth("Airtime_Buyer");
-                r.setFees("0.00");
-                r.setFinalCHarges(pre.getFinCharges().toString());
-                r.setNarration("Buyer_Withdrawal_RB");
-                r.setPhoneNumber(pre.getBuyerAccountNumber());
-                r.setTransAmount(pre.getFinCharges().toString());
-                r.setTransactionId(pre.getProcessId() + "-RB-BUYERDEBIT");
-                BaseResponse res = transactionServiceProxies.creditCustomerWithType(r, "CUSTOMER", auth);
-                rep.put("reverseBuyerDebit", res.getStatusCode());
-            } catch (Exception e) {
-                rep.put("reverseBuyerDebit_error", e.getClass().getSimpleName());
-            }
-        }
-
-        rep.put("rollbackCompleted", true);
-        return rep;
+    private Map<String, Object> rollbackPreDebitExact(PreDebitResult pre, ProcessTrnsactionReq rq, String auth, String providerError) {
+        return airtimeRollbackService.executeRollback(pre, rq, auth, providerError);
     }
 
     public ApiResponseModel getTransactionStatus(String refType, String refId) {

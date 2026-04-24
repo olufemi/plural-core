@@ -55,6 +55,11 @@ public class SuccessDebitLog implements Serializable {
     private int retryCount;
     private int markForRollBack = 0;
     private boolean resolved;
+    private String reversalStatus = "NONE";
+    private Instant reversalRequestedAt;
+    private Instant reversalCompletedAt;
+    @Column(length = 1000)
+    private String reversalLastError;
     @CreatedDate
     @Column(name = "CREATED_DATE", nullable = false, updatable = false, columnDefinition = "TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
     @JsonIgnore

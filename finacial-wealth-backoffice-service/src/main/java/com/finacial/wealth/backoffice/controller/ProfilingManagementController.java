@@ -55,41 +55,44 @@ public class ProfilingManagementController {
         return backofficeCustomerService.getAllCustomers(page, size, sort);
     }
 
-    @GetMapping("/{customerId}")
+    @GetMapping("/{id}")
     @PreAuthorize("hasAnyRole('SUPER_ADMIN','ADMIN','OPERATIONS','FINANCE')")
     @Operation(
             summary = "Get customer profile",
-            description = "Returns the customer profile used to anchor backoffice customer support screens.",
+            description = "Returns the customer profile used to anchor backoffice customer support screens. Use the profiling record `id` returned by the customer list endpoint.",
             security = @SecurityRequirement(name = "bearerAuth")
     )
     public ApiResponse<RegWalletInfoBackofficeResponse> getCustomerById(
-            @PathVariable("customerId") String customerId
+            @Parameter(description = "Profiling record id returned by the list customers endpoint")
+            @PathVariable("id") Long id
     ) {
-        return backofficeCustomerService.getCustomerById(customerId);
+        return backofficeCustomerService.getCustomerById(id);
     }
 
-    @GetMapping("/{customerId}/investment-summary")
+    @GetMapping("/{id}/investment-summary")
     @PreAuthorize("hasAnyRole('SUPER_ADMIN','ADMIN','OPERATIONS','FINANCE')")
     @Operation(
             summary = "Get customer investment summary",
-            description = "Aggregates customer profile, orders, liquidations, and positions into a frontend-friendly summary response.",
+            description = "Aggregates customer profile, orders, liquidations, and positions into a frontend-friendly summary response. Use the profiling record `id` returned by the customer list endpoint.",
             security = @SecurityRequirement(name = "bearerAuth")
     )
     public Map<String, Object> getCustomerInvestmentSummary(
-            @PathVariable("customerId") String customerId
+            @Parameter(description = "Profiling record id returned by the list customers endpoint")
+            @PathVariable("id") Long id
     ) {
-        return backofficeCustomerService.getCustomerInvestmentSummary(customerId);
+        return backofficeCustomerService.getCustomerInvestmentSummary(id);
     }
 
-    @GetMapping("/{customerId}/orders")
+    @GetMapping("/{id}/orders")
     @PreAuthorize("hasAnyRole('SUPER_ADMIN','ADMIN','OPERATIONS','FINANCE')")
     @Operation(
             summary = "List customer investment and topup requests",
-            description = "Returns customer-level order history with status and type filtering for customer detail screens.",
+            description = "Returns customer-level order history with status and type filtering for customer detail screens. Use the profiling record `id` returned by the customer list endpoint.",
             security = @SecurityRequirement(name = "bearerAuth")
     )
     public Map<String, Object> getCustomerInvestmentOrders(
-            @PathVariable("customerId") String customerId,
+            @Parameter(description = "Profiling record id returned by the list customers endpoint")
+            @PathVariable("id") Long id,
             @Parameter(description = "Optional order type such as SUBSCRIPTION or TOPUP")
             @RequestParam(required = false) String type,
             @Parameter(description = "Optional comma-separated order status filter")
@@ -99,18 +102,19 @@ public class ProfilingManagementController {
             @Parameter(description = "Page size")
             @RequestParam(defaultValue = "20") Integer size
     ) {
-        return backofficeCustomerService.getCustomerInvestmentOrders(customerId, type, status, page, size);
+        return backofficeCustomerService.getCustomerInvestmentOrders(id, type, status, page, size);
     }
 
-    @GetMapping("/{customerId}/liquidations")
+    @GetMapping("/{id}/liquidations")
     @PreAuthorize("hasAnyRole('SUPER_ADMIN','ADMIN','OPERATIONS','FINANCE')")
     @Operation(
             summary = "List customer liquidation requests",
-            description = "Returns customer liquidation requests and their current statuses for the customer module.",
+            description = "Returns customer liquidation requests and their current statuses for the customer module. Use the profiling record `id` returned by the customer list endpoint.",
             security = @SecurityRequirement(name = "bearerAuth")
     )
     public Map<String, Object> getCustomerLiquidations(
-            @PathVariable("customerId") String customerId,
+            @Parameter(description = "Profiling record id returned by the list customers endpoint")
+            @PathVariable("id") Long id,
             @Parameter(description = "Optional comma-separated liquidation status filter")
             @RequestParam(required = false) String status,
             @Parameter(description = "Zero-based page number")
@@ -118,24 +122,25 @@ public class ProfilingManagementController {
             @Parameter(description = "Page size")
             @RequestParam(defaultValue = "20") Integer size
     ) {
-        return backofficeCustomerService.getCustomerLiquidations(customerId, status, page, size);
+        return backofficeCustomerService.getCustomerLiquidations(id, status, page, size);
     }
 
-    @GetMapping("/{customerId}/positions")
+    @GetMapping("/{id}/positions")
     @PreAuthorize("hasAnyRole('SUPER_ADMIN','ADMIN','OPERATIONS','FINANCE')")
     @Operation(
             summary = "List customer investment positions",
-            description = "Returns customer positions across investment products for customer detail and portfolio support screens.",
+            description = "Returns customer positions across investment products for customer detail and portfolio support screens. Use the profiling record `id` returned by the customer list endpoint.",
             security = @SecurityRequirement(name = "bearerAuth")
     )
     public Map<String, Object> getCustomerInvestmentPositions(
-            @PathVariable("customerId") String customerId,
+            @Parameter(description = "Profiling record id returned by the list customers endpoint")
+            @PathVariable("id") Long id,
             @Parameter(description = "Zero-based page number")
             @RequestParam(defaultValue = "0") Integer page,
             @Parameter(description = "Page size")
             @RequestParam(defaultValue = "20") Integer size
     ) {
-        return backofficeCustomerService.getCustomerInvestmentPositions(customerId, page, size);
+        return backofficeCustomerService.getCustomerInvestmentPositions(id, page, size);
     }
 
     @PatchMapping("/{id}/block")

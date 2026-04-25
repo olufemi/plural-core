@@ -378,6 +378,154 @@ Frontend note:
 
 - Use `cutoffBucket` to separate same-day eligible orders from next-business-day queue items.
 
+### 3b. Performance Dashboard
+
+#### Performance dashboard
+
+`GET /bo/backoffice/investments/performance`
+
+Query params:
+
+- `productCode`
+- `fromDate` in `YYYY-MM-DD`
+- `toDate` in `YYYY-MM-DD`
+
+Response shape:
+
+```json
+{
+  "statusCode": 200,
+  "description": "Performance dashboard fetched successfully.",
+  "data": {
+    "filters": {
+      "productCode": "MMF003",
+      "fromDate": "2026-02-01",
+      "toDate": "2026-04-25"
+    },
+    "summary": {
+      "aum": 21000000,
+      "startAum": 18000000,
+      "netChange": 3000000,
+      "netChangePct": 16.67
+    },
+    "aumTrend": [
+      { "date": "2026-02-01", "aum": 18000000 }
+    ],
+    "productSnapshots": [
+      {
+        "productCode": "MMF003",
+        "productName": "Prime Money Market Fund",
+        "startAum": 18000000,
+        "aum": 21000000,
+        "netChange": 3000000,
+        "netChangePct": 16.67,
+        "yieldPa": 10.0,
+        "yieldYtd": 3.2
+      }
+    ],
+    "recentActivity": [
+      {
+        "activityType": "INVESTMENT_TOPUP",
+        "productCode": "MMF003",
+        "productName": "Prime Money Market Fund",
+        "orderRef": "TOPUP-123",
+        "amount": 50000,
+        "description": "Investment topup successful for product: TOPUP-123",
+        "createdAt": "2026-04-20T10:30:00"
+      }
+    ],
+    "products": [
+      {
+        "productCode": "MMF003",
+        "productName": "Prime Money Market Fund",
+        "currency": "NGN",
+        "yieldPa": 10.0,
+        "yieldYtd": 3.2
+      }
+    ]
+  }
+}
+```
+
+Frontend notes:
+
+- Leave `productCode` empty to show all products.
+- Leave dates empty to default to the latest three-month window.
+- Use the `products` array to populate the product filter dropdown.
+- Use `aumTrend` for the line chart and `recentActivity` for the activity card/list.
+
+### 3c. Oversight Dashboard
+
+#### Oversight dashboard
+
+`GET /bo/backoffice/investments/oversight`
+
+Query params:
+
+- `productCode`
+- `fromDate` in `YYYY-MM-DD`
+- `toDate` in `YYYY-MM-DD`
+- `actionType` one of `ALLOCATION`, `TOPUP`, `LIQUIDATION`
+- `status` one of `EXECUTED`, `PENDING`, `FAILED`, `CANCELLED`
+- `size` max number of rows, default `20`, max `200`
+
+Response shape:
+
+```json
+{
+  "statusCode": 200,
+  "description": "Investment oversight dashboard fetched successfully.",
+  "data": {
+    "filters": {
+      "productCode": "MMF003",
+      "fromDate": "2026-04-01",
+      "toDate": "2026-04-25",
+      "actionType": null,
+      "status": "EXECUTED",
+      "size": 20
+    },
+    "summary": {
+      "fundsUnderInvestment": 125000000.00,
+      "interestAccrued": 6750000.00,
+      "activePositions": 14,
+      "actionCount": 20
+    },
+    "actions": [
+      {
+        "reference": "OV-1001",
+        "productCode": "MMF003",
+        "productName": "Prime Money Market Fund",
+        "type": "ALLOCATION",
+        "rawType": "SUBSCRIPTION",
+        "amount": 10000000.00,
+        "returns": 350000.00,
+        "date": "2026-04-25T10:15:00Z",
+        "status": "EXECUTED",
+        "rawStatus": "SETTLED",
+        "walletId": "1590746834",
+        "customerEmail": "customer@example.com"
+      }
+    ],
+    "products": [
+      {
+        "productCode": "MMF003",
+        "name": "Prime Money Market Fund",
+        "currency": "NGN"
+      }
+    ],
+    "actionTypes": ["ALL", "ALLOCATION", "TOPUP", "LIQUIDATION"],
+    "statuses": ["ALL", "EXECUTED", "PENDING", "FAILED", "CANCELLED"]
+  }
+}
+```
+
+Frontend notes:
+
+- Use `summary.fundsUnderInvestment` for the first headline card.
+- Use `summary.interestAccrued` for the second headline card.
+- Use `actions` directly for the investment actions table.
+- Use `products`, `actionTypes`, and `statuses` to populate dropdowns without hardcoding values.
+
 ### 4. Customer Module
 
 #### List customers
@@ -412,11 +560,16 @@ Customer object includes fields such as:
 
 #### Customer profile
 
-`GET /bo/backoffice/profiling/{customerId}`
+`GET /bo/backoffice/profiling/{id}`
+
+Path note:
+
+- Use the `id` returned by the list customers endpoint.
+- Do not use `customerId`, `uuid`, or `walletId` for this route.
 
 #### Customer investment summary
 
-`GET /bo/backoffice/profiling/{customerId}/investment-summary`
+`GET /bo/backoffice/profiling/{id}/investment-summary`
 
 Response shape:
 
@@ -433,7 +586,7 @@ This is the best endpoint for the main customer detail landing page.
 
 #### Customer orders
 
-`GET /bo/backoffice/profiling/{customerId}/orders`
+`GET /bo/backoffice/profiling/{id}/orders`
 
 Query params:
 
@@ -444,7 +597,7 @@ Query params:
 
 #### Customer liquidations
 
-`GET /bo/backoffice/profiling/{customerId}/liquidations`
+`GET /bo/backoffice/profiling/{id}/liquidations`
 
 Query params:
 
@@ -454,7 +607,7 @@ Query params:
 
 #### Customer positions
 
-`GET /bo/backoffice/profiling/{customerId}/positions`
+`GET /bo/backoffice/profiling/{id}/positions`
 
 Query params:
 
@@ -694,6 +847,7 @@ Request body:
 
 #### List and view admin users
 
+- No `boAdminUserId` query param is required. The backend derives the acting admin from the bearer token.
 - `GET /bo/admin-users/admins?page=0&size=20&q=checker`
 - `GET /bo/admin-users/admins/{adminId}`
 
@@ -719,9 +873,168 @@ Request body:
 
 - table: `GET /bo/backoffice/investments/orders`
 
+### Performance Screen
+
+- dashboard load: `GET /bo/backoffice/investments/performance`
+- product filter: pass `productCode`
+- date filter: pass `fromDate` and `toDate`
+
+### Oversight Screen
+
+### Group Savings Contribution & Payout Monitoring
+
+`GET /bo/backoffice/group-savings/contribution-payout-monitoring`
+
+Optional query params:
+- `period`: `DAILY`, `WEEKLY`, or `MONTHLY`
+- `fromDate`: `YYYY-MM-DD`
+- `toDate`: `YYYY-MM-DD`
+- `groupId`: numeric group savings id
+
+Purpose:
+- powers the Group Savings `Contribution & Payout Monitoring` screen
+- returns contribution totals, payout totals, chart series, alerts, and group filter options
+
+Example:
+```http
+GET /bo/backoffice/group-savings/contribution-payout-monitoring?period=DAILY
+Authorization: Bearer <token>
+```
+
+Response shape:
+```json
+{
+  "statusCode": 200,
+  "description": "Contribution and payout monitoring fetched successfully.",
+  "data": {
+    "filters": {
+      "period": "DAILY",
+      "fromDate": "2026-04-19",
+      "toDate": "2026-04-25",
+      "groupId": null
+    },
+    "summary": {
+      "totalContributions": 5242651,
+      "totalPayouts": 3301763,
+      "netFlow": 1940888,
+      "activeGroups": 8,
+      "lastUpdatedAt": "2026-04-25T17:45:29Z"
+    },
+    "trend": [
+      {
+        "key": "2026-04-19",
+        "label": "Sat",
+        "periodStart": "2026-04-19",
+        "periodEnd": "2026-04-19",
+        "contributionAmount": 510000,
+        "payoutAmount": 320000,
+        "contributionCount": 4,
+        "payoutCount": 2
+      }
+    ],
+    "alerts": [
+      {
+        "level": "HIGH",
+        "category": "PAYOUT",
+        "status": "FAILED",
+        "reference": "TX-9003",
+        "message": "Payout TX-9003 failed - retrigger required.",
+        "eventAt": "2026-04-25T08:55:00Z",
+        "groupId": 412,
+        "groupName": "Friday Savers"
+      }
+    ],
+    "groupOptions": [],
+    "periodOptions": ["DAILY", "WEEKLY", "MONTHLY"]
+  }
+}
+```
+
+### Group Savings Slot Assignment & Tracking
+
+`GET /bo/backoffice/group-savings/slot-assignment-tracking`
+
+Optional query params:
+- `groupId`: numeric group savings id
+- `status`: `UPCOMING`, `IN_PROGRESS`, `MISSED`, or `COMPLETED`
+
+Purpose:
+- powers the Group Savings `Slot Assignment & Tracking` screen
+- returns slot schedule rows, payout history, alerts, and group filter options
+
+Example:
+```http
+GET /bo/backoffice/group-savings/slot-assignment-tracking?status=UPCOMING
+Authorization: Bearer <token>
+```
+
+Response shape:
+```json
+{
+  "statusCode": 200,
+  "description": "Slot assignment and tracking fetched successfully.",
+  "data": {
+    "filters": {
+      "groupId": null,
+      "status": "UPCOMING"
+    },
+    "slotSchedule": [
+      {
+        "groupId": 412,
+        "groupName": "Friday Savers",
+        "slotNumber": 1,
+        "memberName": "Ada Lovelace",
+        "memberWalletId": "1590746834",
+        "payoutDate": "2026-04-28",
+        "status": "UPCOMING",
+        "cycleStatus": "PENDING",
+        "reference": "GS-412-SLOT-1"
+      }
+    ],
+    "payoutHistory": [
+      {
+        "groupId": 412,
+        "groupName": "Friday Savers",
+        "memberName": "Ada Lovelace",
+        "slotNumber": 1,
+        "amount": 250000,
+        "date": "2026-04-10T09:15:00Z",
+        "status": "PAID",
+        "reference": "412:1:payout"
+      }
+    ],
+    "alerts": [
+      {
+        "level": "HIGH",
+        "category": "SLOT",
+        "status": "MISSED",
+        "reference": "GS-412-SLOT-4",
+        "message": "Slot 4 missed contribution. Notify member and reschedule.",
+        "eventAt": "2026-04-21T00:00:00Z",
+        "groupId": 412,
+        "groupName": "Friday Savers",
+        "memberName": "Mary Jackson"
+      }
+    ],
+    "groupOptions": [],
+    "statusOptions": ["UPCOMING", "IN_PROGRESS", "MISSED", "COMPLETED"]
+  }
+}
+```
+
+### Group Savings Screens
+
+- `Contribution & Payout Monitoring` consumes `GET /bo/backoffice/group-savings/contribution-payout-monitoring`
+- `Slot Assignment & Tracking` consumes `GET /bo/backoffice/group-savings/slot-assignment-tracking`
+
+- dashboard load: `GET /bo/backoffice/investments/oversight`
+- filters: pass `productCode`, `fromDate`, `toDate`, `actionType`, `status`
+- table rows: `data.actions`
+- headline cards: `data.summary`
+
 ### Customer Detail Screen
 
-- shell load: `GET /bo/backoffice/profiling/{customerId}/investment-summary`
+- shell load: `GET /bo/backoffice/profiling/{id}/investment-summary`
 - optional tab-specific pagination:
   - `/orders`
   - `/liquidations`

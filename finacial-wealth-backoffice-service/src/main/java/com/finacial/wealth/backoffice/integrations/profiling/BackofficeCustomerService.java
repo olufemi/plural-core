@@ -34,8 +34,8 @@ public class BackofficeCustomerService {
         return profilingClient.getAllCustomers(page, size, sort);
     }
 
-    public ApiResponse<RegWalletInfoBackofficeResponse> getCustomerById(String id) {
-        return profilingClient.getByCustomerId(id);
+    public ApiResponse<RegWalletInfoBackofficeResponse> getCustomerById(Long id) {
+        return profilingClient.getById(id);
     }
 
     public ApiResponse<RegWalletInfoBackofficeResponse> blockCustomer(
@@ -52,8 +52,8 @@ public class BackofficeCustomerService {
         return profilingClient.unblockUser(id, request);
     }
 
-    public Map<String, Object> getCustomerInvestmentSummary(String customerId) {
-        RegWalletInfoBackofficeResponse customer = resolveCustomer(customerId);
+    public Map<String, Object> getCustomerInvestmentSummary(Long id) {
+        RegWalletInfoBackofficeResponse customer = resolveCustomer(id);
 
         Map<String, Object> summary = new LinkedHashMap<>();
         summary.put("customer", customer);
@@ -64,44 +64,45 @@ public class BackofficeCustomerService {
     }
 
     public Map<String, Object> getCustomerInvestmentOrders(
-            String customerId,
+            Long id,
             String type,
             String status,
             Integer page,
             Integer size
     ) {
-        RegWalletInfoBackofficeResponse customer = resolveCustomer(customerId);
+        RegWalletInfoBackofficeResponse customer = resolveCustomer(id);
         return fxPeerExchangeClient.getCustomerOrders(customer.getEmail(), type, status, safePage(page), safeSize(size));
     }
 
     public Map<String, Object> getCustomerLiquidations(
-            String customerId,
+            Long id,
             String status,
             Integer page,
             Integer size
     ) {
-        RegWalletInfoBackofficeResponse customer = resolveCustomer(customerId);
+        RegWalletInfoBackofficeResponse customer = resolveCustomer(id);
         return fxPeerExchangeClient.getCustomerLiquidations(customer.getEmail(), status, safePage(page), safeSize(size));
     }
 
     public Map<String, Object> getCustomerInvestmentPositions(
-            String customerId,
+            Long id,
             Integer page,
             Integer size
     ) {
-        RegWalletInfoBackofficeResponse customer = resolveCustomer(customerId);
+        RegWalletInfoBackofficeResponse customer = resolveCustomer(id);
         return fxPeerExchangeClient.getCustomerPositions(customer.getEmail(), safePage(page), safeSize(size));
     }
 
-    private RegWalletInfoBackofficeResponse resolveCustomer(String customerId) {
-        ApiResponse<RegWalletInfoBackofficeResponse> response = profilingClient.getByCustomerId(customerId);
+    private RegWalletInfoBackofficeResponse resolveCustomer(Long id) {
+        ApiResponse<RegWalletInfoBackofficeResponse> response = profilingClient.getById(id);
         if (response == null || response.getData() == null) {
-            throw new IllegalArgumentException("Customer not found for customerId: " + customerId);
+            throw new IllegalArgumentException("Customer not found for id: " + id);
         }
-        if (response.getData().getEmail() == null || response.getData().getEmail().isBlank()) {
+        RegWalletInfoBackofficeResponse customer = response.getData();
+        if (customer.getEmail() == null || customer.getEmail().isBlank()) {
             throw new IllegalArgumentException("Customer profile does not have an email address.");
         }
-        return response.getData();
+        return customer;
     }
 
     private int safePage(Integer page) {

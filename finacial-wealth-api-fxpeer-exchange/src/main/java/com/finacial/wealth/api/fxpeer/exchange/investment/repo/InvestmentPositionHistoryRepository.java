@@ -54,4 +54,19 @@ public interface InvestmentPositionHistoryRepository
             @Param("statuses") List<InvestmentPositionStatus> statuses, Pageable pageable
     );
 
+    @Query("""
+           select h
+           from InvestmentPositionHistory h
+           join fetch h.position p
+           join fetch p.product product
+           where h.valuationDate between :start and :end
+             and (:productCode is null or product.productCode = :productCode)
+           order by h.valuationDate asc, h.id asc
+           """)
+    List<InvestmentPositionHistory> findDashboardHistory(
+            @Param("productCode") String productCode,
+            @Param("start") LocalDate start,
+            @Param("end") LocalDate end
+    );
+
 }

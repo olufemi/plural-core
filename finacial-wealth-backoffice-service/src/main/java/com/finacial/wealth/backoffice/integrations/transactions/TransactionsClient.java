@@ -19,4 +19,18 @@ public interface TransactionsClient {
 
   @GetMapping("/api/transactions/admin/reversals")
   Map<String, Object> getReversalCases(@RequestParam(required = false) String status);
+
+  @GetMapping("/api/transactions/admin/group-savings/contribution-payout-monitoring")
+  Map<String, Object> getContributionPayoutMonitoring(
+      @RequestParam(required = false) String period,
+      @RequestParam(required = false) String fromDate,
+      @RequestParam(required = false) String toDate,
+      @RequestParam(required = false) Long groupId
+  );
+
+  @GetMapping("/api/transactions/admin/group-savings/slot-assignment-tracking")
+  Map<String, Object> getSlotAssignmentTracking(
+      @RequestParam(required = false) Long groupId,
+      @RequestParam(required = false) String status
+  );
 }

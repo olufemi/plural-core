@@ -250,4 +250,19 @@ public interface InvestmentOrderRepository extends JpaRepository<InvestmentOrder
             @Param("types") List<InvestmentOrderType> types,
             @Param("statuses") List<InvestmentOrderStatus> statuses
     );
+
+    @Query("""
+       select o
+       from InvestmentOrder o
+       join fetch o.product p
+       left join fetch o.position pos
+       where o.createdAt between :start and :end
+         and (:productCode is null or p.productCode = :productCode)
+       order by o.createdAt desc
+       """)
+    List<InvestmentOrder> findDashboardOrders(
+            @Param("productCode") String productCode,
+            @Param("start") Instant start,
+            @Param("end") Instant end
+    );
 }

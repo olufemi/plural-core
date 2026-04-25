@@ -195,6 +195,49 @@ public class BoInvestmentController {
         return fxPeerClient.getAdminOrders(type, status, productCode, cutoffBucket, fromDate, toDate, page, size);
     }
 
+    @GetMapping("/performance")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','ADMIN','OPERATIONS','FINANCE')")
+    @Operation(
+            summary = "Get investment performance dashboard",
+            description = "Returns the investment performance dashboard payload with product filter options, date-range filtered AUM trend, product snapshots, and recent activity.",
+            security = @SecurityRequirement(name = "bearerAuth")
+    )
+    public Map<String, Object> getPerformanceDashboard(
+            @Parameter(description = "Optional investment product code filter such as MMF003")
+            @RequestParam(required = false) String productCode,
+            @Parameter(description = "Inclusive lower valuation date in YYYY-MM-DD")
+            @RequestParam(required = false) LocalDate fromDate,
+            @Parameter(description = "Inclusive upper valuation date in YYYY-MM-DD")
+            @RequestParam(required = false) LocalDate toDate
+    ) {
+        return fxPeerClient.getAdminPerformance(productCode, fromDate, toDate);
+    }
+
+
+    @GetMapping("/oversight")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','ADMIN','OPERATIONS','FINANCE')")
+    @Operation(
+            summary = "Get investment oversight dashboard",
+            description = "Returns the oversight summary cards and normalized investment action feed for the backoffice oversight screen.",
+            security = @SecurityRequirement(name = "bearerAuth")
+    )
+    public Map<String, Object> getOversightDashboard(
+            @Parameter(description = "Optional product code filter.")
+            @RequestParam(value = "productCode", required = false) String productCode,
+            @Parameter(description = "Optional start date in ISO format, for example 2026-04-01.")
+            @RequestParam(value = "fromDate", required = false) LocalDate fromDate,
+            @Parameter(description = "Optional end date in ISO format, for example 2026-04-25.")
+            @RequestParam(value = "toDate", required = false) LocalDate toDate,
+            @Parameter(description = "Optional action type filter. Supported values: ALLOCATION, TOPUP, LIQUIDATION.")
+            @RequestParam(value = "actionType", required = false) String actionType,
+            @Parameter(description = "Optional normalized status filter. Supported values: EXECUTED, PENDING, FAILED, CANCELLED.")
+            @RequestParam(value = "status", required = false) String status,
+            @Parameter(description = "Optional maximum number of action rows to return. Defaults to 20 and caps at 200.")
+            @RequestParam(value = "size", required = false) Integer size
+    ) {
+        return fxPeerClient.getAdminOversight(productCode, fromDate, toDate, actionType, status, size);
+    }
+
     @PostMapping("/deny-customer-liquidation-request")
     @PreAuthorize("hasAnyRole('SUPER_ADMIN','ADMIN','OPERATIONS','FINANCE')")
     @Operation(

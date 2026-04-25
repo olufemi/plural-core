@@ -100,13 +100,13 @@ public ResponseEntity<AdminUserResponse> activate(
 
     @GetMapping("/admins/{adminId}")
     public AdminUserResponse getAdmin(@PathVariable Long adminId,
-            @RequestHeader("boAdminUserId") Long actorAdminId,
+            @RequestAttribute("boAdminUserId") Long actorAdminId,
             HttpServletRequest request) {
         return adminUserService.getAdmin(actorAdminId, adminId, request.getRemoteAddr(), request.getHeader("User-Agent"));
     }
 
     @GetMapping("/admins")
-    public Page<AdminUserResponse> getAdmins(@RequestHeader("boAdminUserId") Long actorAdminId,
+    public Page<AdminUserResponse> getAdmins(@RequestAttribute("boAdminUserId") Long actorAdminId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
             @RequestParam(required = false) String q,

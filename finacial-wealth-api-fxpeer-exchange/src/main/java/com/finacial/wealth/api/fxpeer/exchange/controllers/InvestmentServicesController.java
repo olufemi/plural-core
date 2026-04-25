@@ -16,6 +16,8 @@ import com.finacial.wealth.api.fxpeer.exchange.investment.record.LiquidationAppr
 import com.finacial.wealth.api.fxpeer.exchange.investment.record.RedemptionInvestmentRequest;
 import com.finacial.wealth.api.fxpeer.exchange.investment.service.InvestmentOrderQueryService;
 import com.finacial.wealth.api.fxpeer.exchange.investment.service.InvestmentOrderService;
+import com.finacial.wealth.api.fxpeer.exchange.investment.service.InvestmentOversightService;
+import com.finacial.wealth.api.fxpeer.exchange.investment.service.InvestmentPerformanceService;
 import com.finacial.wealth.api.fxpeer.exchange.investment.service.InvestmentProductService;
 import com.finacial.wealth.api.fxpeer.exchange.investment.service.InvestmentValuationScheduler;
 import com.finacial.wealth.api.fxpeer.exchange.investment.service.LiquidationActionService;
@@ -69,11 +71,15 @@ public class InvestmentServicesController {
     private final InvestmentTopupPayloadHasher investmentTopupPayloadHasher;
 
     private final InvestmentOrderQueryService queryService;
+    private final InvestmentPerformanceService performanceService;
+    private final InvestmentOversightService oversightService;
     private final DefaultRawConsentPayloadHasher defaultRawConsentPayloadHasher;
 
     public InvestmentServicesController(InvestmentOrderService investmentOrderService,
             InvestmentValuationScheduler investmentValuationScheduler,
             InvestmentOrderQueryService queryService,
+            InvestmentPerformanceService performanceService,
+            InvestmentOversightService oversightService,
             LiquidationActionService liquidationActionService,
             InvestmentProductService productService,
             UttilityMethods uttilityMethods,
@@ -85,6 +91,8 @@ public class InvestmentServicesController {
         this.investmentOrderService = investmentOrderService;
         this.investmentValuationScheduler = investmentValuationScheduler;
         this.queryService = queryService;
+        this.performanceService = performanceService;
+        this.oversightService = oversightService;
         this.liquidationActionService = liquidationActionService;
         this.productService = productService;
         this.uttilityMethods = uttilityMethods;
@@ -174,6 +182,28 @@ public class InvestmentServicesController {
             @RequestParam(defaultValue = "20") Integer size
     ) {
         return queryService.getAdminOrders(type, status, productCode, cutoffBucket, fromDate, toDate, page, size);
+    }
+
+    @GetMapping("/admin/performance")
+    public ResponseEntity<ApiResponseModel> getAdminPerformance(
+            @RequestParam(required = false) String productCode,
+            @RequestParam(required = false) LocalDate fromDate,
+            @RequestParam(required = false) LocalDate toDate
+    ) {
+        return performanceService.getDashboard(productCode, fromDate, toDate);
+    }
+
+
+    @GetMapping("/admin/oversight")
+    public ResponseEntity<ApiResponseModel> getAdminOversight(
+            @RequestParam(required = false) String productCode,
+            @RequestParam(required = false) LocalDate fromDate,
+            @RequestParam(required = false) LocalDate toDate,
+            @RequestParam(required = false) String actionType,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) Integer size
+    ) {
+        return oversightService.getDashboard(productCode, fromDate, toDate, actionType, status, size);
     }
 
     @GetMapping("/admin/customers/orders")

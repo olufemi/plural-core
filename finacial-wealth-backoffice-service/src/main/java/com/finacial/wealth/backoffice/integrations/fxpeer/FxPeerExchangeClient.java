@@ -90,6 +90,24 @@ public interface FxPeerExchangeClient {
             @RequestParam(defaultValue = "20") Integer size
     );
 
+    @GetMapping("/investments/admin/performance")
+    Map<String, Object> getAdminPerformance(
+            @RequestParam(required = false) String productCode,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fromDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate toDate
+    );
+
+
+    @GetMapping("/investments/admin/oversight")
+    Map<String, Object> getAdminOversight(
+            @RequestParam(required = false) String productCode,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fromDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate toDate,
+            @RequestParam(required = false) String actionType,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) Integer size
+    );
+
     @GetMapping("/investments/admin/customers/orders")
     Map<String, Object> getCustomerOrders(
             @RequestParam String email,

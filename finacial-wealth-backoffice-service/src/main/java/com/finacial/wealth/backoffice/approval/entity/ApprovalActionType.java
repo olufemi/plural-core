@@ -1,5 +1,6 @@
 package com.finacial.wealth.backoffice.approval.entity;
 
 public enum ApprovalActionType {
-    APPROVE
+    APPROVE,
+    MANUAL_REVERSAL
 }

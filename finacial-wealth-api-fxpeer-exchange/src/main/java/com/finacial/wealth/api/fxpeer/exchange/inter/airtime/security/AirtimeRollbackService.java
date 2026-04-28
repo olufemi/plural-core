@@ -121,6 +121,29 @@ public class AirtimeRollbackService {
         return response;
     }
 
+    public ApiResponseModel retryCase(String processId, String auth) {
+        List<AirtimeRollbackLog> logs = rollbackLogRepository.findByProcessIdOrderByIdAsc(processId);
+        if (logs.isEmpty()) {
+            throw new IllegalArgumentException("Retryable airtime reversal case not found");
+        }
+
+        for (AirtimeRollbackLog logItem : logs) {
+            if (!RETRYABLE_STATUSES.contains(logItem.getStatus())) {
+                continue;
+            }
+            executeRollbackLeg(logItem, auth == null ? "" : auth);
+        }
+
+        List<AirtimeRollbackLog> refreshed = rollbackLogRepository.findByProcessIdOrderByIdAsc(processId);
+        Map<String, Object> payload = toCaseRecord(processId, deriveOverallStatus(refreshed), refreshed);
+
+        ApiResponseModel response = new ApiResponseModel();
+        response.setStatusCode(200);
+        response.setDescription("Airtime reversal retry processed successfully");
+        response.setData(payload);
+        return response;
+    }
+
     private List<Map<String, Object>> buildGroupedCases(String statusFilter) {
         Collection<String> statusesToLoad = ACTIVE_STATUSES;
         if (statusFilter != null && !statusFilter.isBlank()) {

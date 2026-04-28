@@ -17,10 +17,12 @@ import com.finacial.wealth.backoffice.approval.repo.BoApprovalRequestRepository;
 import com.finacial.wealth.backoffice.auth.service.AdminAuditService;
 import com.finacial.wealth.backoffice.integrations.fxpeer.FxPeerExchangeClient;
 import com.finacial.wealth.backoffice.integrations.fxpeer.model.LiquidationApprovalRequest;
+import com.finacial.wealth.backoffice.integrations.transactions.TransactionsClient;
 import jakarta.servlet.http.HttpServletRequest;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -43,6 +45,7 @@ public class ApprovalService {
     private final BoApprovalRequestRepository approvalRequestRepository;
     private final BoApprovalEventRepository approvalEventRepository;
     private final FxPeerExchangeClient fxPeerExchangeClient;
+    private final TransactionsClient transactionsClient;
     private final ObjectMapper objectMapper;
     private final AdminAuditService adminAuditService;
 
@@ -51,19 +54,20 @@ public class ApprovalService {
         syncPendingLiquidations();
 
         List<ApprovalStatus> statuses = resolveStatuses(status);
-        Page<BoApprovalRequest> result = approvalRequestRepository.findByModuleAndSubModuleAndStatusIn(
-                ApprovalModule.INVESTMENT,
-                ApprovalSubModule.LIQUIDATION,
-                statuses,
-                PageRequest.of(safePage(page), safeSize(size), Sort.by(Sort.Direction.DESC, "createdAt"))
-        );
+        List<BoApprovalRequest> approvals = new ArrayList<>(approvalRequestRepository.findByStatusIn(statuses));
+        approvals.sort(Comparator.comparing(BoApprovalRequest::getCreatedAt, Comparator.nullsLast(Comparator.reverseOrder())));
+
+        int safePage = safePage(page);
+        int safeSize = safeSize(size);
+        int from = Math.min(safePage * safeSize, approvals.size());
+        int to = Math.min(from + safeSize, approvals.size());
 
         Map<String, Object> data = new LinkedHashMap<>();
-        data.put("content", result.getContent().stream().map(this::toApprovalRow).toList());
-        data.put("page", result.getNumber());
-        data.put("size", result.getSize());
-        data.put("totalElements", result.getTotalElements());
-        data.put("totalPages", result.getTotalPages());
+        data.put("content", approvals.subList(from, to).stream().map(this::toApprovalRow).toList());
+        data.put("page", safePage);
+        data.put("size", safeSize);
+        data.put("totalElements", approvals.size());
+        data.put("totalPages", approvals.isEmpty() ? 0 : (int) Math.ceil((double) approvals.size() / safeSize));
         return data;
     }
 
@@ -84,17 +88,22 @@ public class ApprovalService {
     public Map<String, Object> approve(Long approvalId, Long actorAdminId, HttpServletRequest request) {
         BoApprovalRequest approval = getApprovalForDecision(approvalId, actorAdminId);
 
-        LiquidationApprovalRequest liquidationApprovalRequest = new LiquidationApprovalRequest();
-        liquidationApprovalRequest.setOrderRef(approval.getEntityRef());
-        fxPeerExchangeClient.approveLiquidation(liquidationApprovalRequest);
+        Map<String, Object> executionResponse = switch (approval.getEntityType()) {
+            case FXPEER_LIQUIDATION -> approveLiquidation(approval);
+            case FXPEER_AIRTIME_REVERSAL -> approveFxpeerAirtimeReversal(approval, request.getHeader("Authorization"));
+            case TRANSACTIONS_REVERSAL -> approveTransactionsReversal(approval);
+        };
 
         approval.setStatus(ApprovalStatus.APPROVED);
         approval.setCheckerAdminId(actorAdminId);
         approval.setApprovedAt(Instant.now());
         approvalRequestRepository.save(approval);
 
-        createEvent(approval, ApprovalEventType.APPROVED, actorAdminId, "Approval completed", Map.of());
-        audit(request, actorAdminId, approval.getId(), "APPROVAL_APPROVE", Map.of("entityRef", approval.getEntityRef()));
+        createEvent(approval, ApprovalEventType.APPROVED, actorAdminId, "Approval completed", executionResponse);
+        audit(request, actorAdminId, approval.getId(), "APPROVAL_APPROVE", Map.of(
+                "entityRef", approval.getEntityRef(),
+                "entityType", approval.getEntityType().name()
+        ));
         return toApprovalRow(approval);
     }
 
@@ -111,6 +120,7 @@ public class ApprovalService {
         createEvent(approval, ApprovalEventType.REJECTED, actorAdminId, trimToNull(decision.reason()), Map.of());
         audit(request, actorAdminId, approval.getId(), "APPROVAL_REJECT", Map.of(
                 "entityRef", approval.getEntityRef(),
+                "entityType", approval.getEntityType() == null ? null : approval.getEntityType().name(),
                 "reason", trimToNull(decision.reason())
         ));
         return toApprovalRow(approval);
@@ -139,9 +149,39 @@ public class ApprovalService {
         createEvent(approval, ApprovalEventType.RESUBMITTED, actorAdminId, trimToNull(request.notes()), Map.of());
         audit(httpRequest, actorAdminId, approval.getId(), "APPROVAL_RESUBMIT", Map.of(
                 "entityRef", approval.getEntityRef(),
+                "entityType", approval.getEntityType() == null ? null : approval.getEntityType().name(),
                 "notes", trimToNull(request.notes())
         ));
         return toApprovalRow(approval);
+    }
+
+    private Map<String, Object> approveLiquidation(BoApprovalRequest approval) {
+        LiquidationApprovalRequest liquidationApprovalRequest = new LiquidationApprovalRequest();
+        liquidationApprovalRequest.setOrderRef(approval.getEntityRef());
+        return fxPeerExchangeClient.approveLiquidation(liquidationApprovalRequest);
+    }
+
+    private Map<String, Object> approveFxpeerAirtimeReversal(BoApprovalRequest approval, String auth) {
+        String caseRef = extractCaseRef(approval);
+        return fxPeerExchangeClient.retryAirtimeReversal(auth, caseRef);
+    }
+
+    private Map<String, Object> approveTransactionsReversal(BoApprovalRequest approval) {
+        String caseRef = extractCaseRef(approval);
+        return transactionsClient.retryReversal(caseRef);
+    }
+
+    private String extractCaseRef(BoApprovalRequest approval) {
+        Map<String, Object> payload = readJsonMap(approval.getPayloadJson());
+        String caseRef = stringValue(payload.get("caseRef"));
+        if (caseRef != null) {
+            return caseRef;
+        }
+        String entityRef = stringValue(approval.getEntityRef());
+        if (entityRef != null && entityRef.contains("::")) {
+            return entityRef.substring(0, entityRef.indexOf("::"));
+        }
+        return entityRef;
     }
 
     private void syncPendingLiquidations() {

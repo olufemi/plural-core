@@ -13,12 +13,16 @@ import com.finacial.wealth.api.fxpeer.exchange.investment.record.TransactionHist
 import static jakarta.persistence.GenerationType.UUID;
 import java.math.BigInteger;
 import java.security.SecureRandom;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.amqp.rabbit.connection.CorrelationData;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.stereotype.Service;
 
 @Service
 public class TransactionHistoryClientLocalT {
+
+    private static final Logger log = LoggerFactory.getLogger(TransactionHistoryClientLocalT.class);
 
     private static final String EXCHANGE = "finwealth.exchange";
     private static final String ROUTING_KEY = "finwealth.txn.history";
@@ -79,16 +83,16 @@ public class TransactionHistoryClientLocalT {
             e.setEventTime(java.time.Instant.now());
 
             publish(e);
-
-            System.out.println("HISTORY PUBLISH OK txId=" + txId);
+            log.info("HISTORY PUBLISH OK txId={} walletNo={} paymentType={}", txId, walletNo, req.getPaymentType());
 
          
 
         } catch (Exception ex) {
-            System.err.println("HISTORY PUBLISH FAILED txId="
-                    + (req != null ? req.getTransactionId() : null)
-                    + " walletNo=" + (req != null ? req.getWalletNo() : null));
-            ex.printStackTrace();
+            log.error("HISTORY PUBLISH FAILED txId={} walletNo={} paymentType={}",
+                    req != null ? req.getTransactionId() : null,
+                    req != null ? req.getWalletNo() : null,
+                    req != null ? req.getPaymentType() : null,
+                    ex);
 
         }
         return e;
@@ -113,10 +117,9 @@ public class TransactionHistoryClientLocalT {
                         return msg;
                     }
             );
-
-            System.out.println("Publish done txId=" + event.getTransactionId());
+            log.info("Rabbit publish done txId={} exchange={} routingKey={}", event.getTransactionId(), EXCHANGE, ROUTING_KEY);
         } catch (Exception ex) {
-            ex.printStackTrace();
+            log.error("Rabbit publish failed txId={} exchange={} routingKey={}", event != null ? event.getTransactionId() : null, EXCHANGE, ROUTING_KEY, ex);
         }
     }
 

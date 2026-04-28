@@ -1,16 +1,20 @@
 package com.finacial.wealth.backoffice.auth.service;
 
+import com.finacial.wealth.backoffice.PasswordPolicy;
+import com.finacial.wealth.backoffice.auth.dto.PasswordRecoveryCompleteRequest;
+import com.finacial.wealth.backoffice.auth.dto.PasswordRecoveryStartResponse;
 import com.finacial.wealth.backoffice.auth.entity.BoAdminUser;
 import com.finacial.wealth.backoffice.auth.entity.BoMfaChallenge;
 import com.finacial.wealth.backoffice.auth.entity.BoRefreshToken;
 import com.finacial.wealth.backoffice.auth.repo.BoAdminUserRepository;
 import com.finacial.wealth.backoffice.auth.repo.BoMfaChallengeRepository;
 import com.finacial.wealth.backoffice.auth.repo.BoRefreshTokenRepository;
+import com.finacial.wealth.backoffice.model.BaseResponse;
 import com.finacial.wealth.backoffice.util.CryptoBox;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.nio.charset.StandardCharsets;
@@ -18,6 +22,8 @@ import java.security.MessageDigest;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.Base64;
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -26,8 +32,12 @@ public class BackofficeAuthService {
 
     private final BoAdminUserRepository userRepo;
     private final BoRefreshTokenRepository refreshRepo;
-
-    private final BCryptPasswordEncoder encoder = new BCryptPasswordEncoder();
+    private final PasswordEncoder passwordEncoder;
+    private final PasswordPolicy passwordPolicy;
+    private final TotpService totpService;
+    private final CryptoBox cryptoBox;
+    private final BoMfaChallengeRepository mfaChallengeRepo;
+    private final AdminAuditService auditService;
 
     @Value("${bo.security.max-failed-attempts}")
     private int maxFailed;
@@ -37,12 +47,6 @@ public class BackofficeAuthService {
 
     @Value("${bo.jwt.refresh-ttl-days}")
     private int refreshTtlDays;
-
-    private final TotpService totpService;
-
-    private final CryptoBox cryptoBox;
-
-    private final BoMfaChallengeRepository mfaChallengeRepo;
 
     public BoAdminUser validatePasswordOrThrow(String email, String rawPassword) {
         BoAdminUser user = userRepo.findByEmailIgnoreCase(email)
@@ -56,7 +60,7 @@ public class BackofficeAuthService {
             throw new IllegalStateException("Account locked. Try later.");
         }
 
-        if (!encoder.matches(rawPassword, user.getPasswordHash())) {
+        if (!passwordEncoder.matches(rawPassword, user.getPasswordHash())) {
             int next = user.getFailedAttempts() + 1;
             user.setFailedAttempts(next);
 
@@ -72,6 +76,102 @@ public class BackofficeAuthService {
         user.setLastLoginAt(LocalDateTime.now());
         userRepo.save(user);
         return user;
+    }
+
+    @Transactional
+    public void changePassword(Long adminUserId, String currentPassword, String newPassword, String confirmPassword, String ip, String ua) {
+        BoAdminUser user = userRepo.findById(adminUserId)
+                .orElseThrow(() -> new IllegalArgumentException("User not found"));
+
+        if (!passwordEncoder.matches(currentPassword, user.getPasswordHash())) {
+            throw new IllegalArgumentException("Current password is incorrect");
+        }
+
+        validateNewPassword(newPassword, confirmPassword);
+
+        if (passwordEncoder.matches(newPassword, user.getPasswordHash())) {
+            throw new IllegalArgumentException("New password must be different from current password");
+        }
+
+        applyNewPassword(user, newPassword);
+        auditService.audit("PASSWORD_CHANGE", adminUserId, user.getId(), ip, ua, Map.of("email", user.getEmail()));
+    }
+
+    @Transactional
+    public PasswordRecoveryStartResponse startPasswordRecovery(String email, String ip, String ua) {
+        if (email == null || email.trim().isEmpty()) {
+            throw new IllegalArgumentException("email is required");
+        }
+
+        String normalizedEmail = email.trim().toLowerCase();
+        BoAdminUser user = userRepo.findByEmailIgnoreCase(normalizedEmail).orElse(null);
+
+        if (user == null || user.getStatus() != BoAdminUser.Status.ACTIVE) {
+            auditService.audit("PASSWORD_RECOVERY_REQUEST", null, null, ip, ua, Map.of(
+                    "email", normalizedEmail,
+                    "outcome", "CONTACT_SUPER_ADMIN"
+            ));
+            return new PasswordRecoveryStartResponse(
+                    "CONTACT_SUPER_ADMIN",
+                    null,
+                    maskEmail(normalizedEmail),
+                    "Password recovery requires an active account with MFA enabled. Contact a super admin if you cannot continue."
+            );
+        }
+
+        boolean mfaReady = user.isMfaEnabled()
+                && user.getTotpSecretEnc() != null
+                && user.getTotpSecretIv() != null;
+
+        if (!mfaReady) {
+            auditService.audit("PASSWORD_RECOVERY_REQUEST", null, user.getId(), ip, ua, Map.of(
+                    "email", user.getEmail(),
+                    "outcome", "CONTACT_SUPER_ADMIN"
+            ));
+            return new PasswordRecoveryStartResponse(
+                    "CONTACT_SUPER_ADMIN",
+                    null,
+                    maskEmail(user.getEmail()),
+                    "MFA recovery is not available for this account yet. Contact a super admin for a manual reset."
+            );
+        }
+
+        String challengeId = createMfaChallenge(user.getId());
+        auditService.audit("PASSWORD_RECOVERY_REQUEST", null, user.getId(), ip, ua, Map.of(
+                "email", user.getEmail(),
+                "outcome", "MFA_REQUIRED"
+        ));
+
+        return new PasswordRecoveryStartResponse(
+                "MFA_REQUIRED",
+                challengeId,
+                maskEmail(user.getEmail()),
+                "Enter the 6-digit code from your authenticator app to complete password recovery."
+        );
+    }
+
+    @Transactional
+    public void resetPasswordByAdmin(BoAdminUser user, String rawPassword) {
+        validateNewPassword(rawPassword, rawPassword);
+        applyNewPassword(user, rawPassword);
+    }
+
+    @Transactional
+    public void completePasswordRecovery(PasswordRecoveryCompleteRequest request, String ip, String ua) {
+        if (request == null) {
+            throw new IllegalArgumentException("request is required");
+        }
+
+        validateNewPassword(request.newPassword(), request.confirmPassword());
+
+        BoAdminUser user = verifyMfaOrThrow(request.challengeId(), request.code());
+
+        if (passwordEncoder.matches(request.newPassword(), user.getPasswordHash())) {
+            throw new IllegalArgumentException("New password must be different from current password");
+        }
+
+        applyNewPassword(user, request.newPassword());
+        auditService.audit("PASSWORD_RECOVERY_COMPLETE", null, user.getId(), ip, ua, Map.of("email", user.getEmail()));
     }
 
     public String issueRefreshToken(BoAdminUser user) {
@@ -110,7 +210,7 @@ public class BackofficeAuthService {
     }
 
     public String hashPassword(String raw) {
-        return encoder.encode(raw);
+        return passwordEncoder.encode(raw);
     }
 
     private static String sha256Base64(String s) {
@@ -124,7 +224,6 @@ public class BackofficeAuthService {
     }
 
     private String generateChallengeId() {
-        // 32 bytes => 64 hex chars
         byte[] b = new byte[32];
         new java.security.SecureRandom().nextBytes(b);
         StringBuilder sb = new StringBuilder(b.length * 2);
@@ -135,14 +234,11 @@ public class BackofficeAuthService {
     }
 
     public String createMfaChallenge(Long userId) {
-        // invalidate old ones for same user (optional but helps prevent clutter/replay)
-        // simplest: leave them; stronger: mark them used via query if you add one.
-
         BoMfaChallenge c = new BoMfaChallenge();
         c.setId(generateChallengeId());
         c.setUserId(userId);
         c.setCreatedAt(Instant.now());
-        c.setExpiresAt(Instant.now().plusSeconds(300)); // 5 mins
+        c.setExpiresAt(Instant.now().plusSeconds(300));
         c.setUsed(false);
         c.setAttempts(0);
         c.setMaxAttempts(5);
@@ -151,25 +247,6 @@ public class BackofficeAuthService {
         return c.getId();
     }
 
-    /*
-    Rules:
-
-challenge must exist
-
-not expired
-
-not used
-
-attempts < maxAttempts
-
-user must have MFA enabled + secret present
-
-verify TOTP
-
-if success: mark used=true (one-time)
-
-if failure: attempts++ and throw 401; if exceeded, mark used=true or lock
-     */
     @Transactional
     public BoAdminUser verifyMfaOrThrow(String challengeId, String code) {
 
@@ -185,6 +262,11 @@ if failure: attempts++ and throw 401; if exceeded, mark used=true or lock
 
         String secret = cryptoBox.decrypt(user.getTotpSecretEnc(), user.getTotpSecretIv());
         if (!totpService.verifyCode(secret, code)) {
+            ch.setAttempts(ch.getAttempts() + 1);
+            if (ch.getAttempts() >= ch.getMaxAttempts()) {
+                ch.setUsed(true);
+            }
+            mfaChallengeRepo.save(ch);
             throw new IllegalArgumentException("Invalid TOTP");
         }
 
@@ -237,10 +319,54 @@ if failure: attempts++ and throw 401; if exceeded, mark used=true or lock
             throw new RuntimeException("Invalid MFA code");
         }
 
-        // success: one-time use
         c.setUsed(true);
         mfaChallengeRepo.save(c);
 
         return user;
+    }
+
+    private void validateNewPassword(String newPassword, String confirmPassword) {
+        if (newPassword == null || newPassword.isBlank()) {
+            throw new IllegalArgumentException("newPassword is required");
+        }
+        if (confirmPassword == null || confirmPassword.isBlank()) {
+            throw new IllegalArgumentException("confirmPassword is required");
+        }
+        if (!newPassword.equals(confirmPassword)) {
+            throw new IllegalArgumentException("Confirm password not same as password!");
+        }
+
+        BaseResponse policy = passwordPolicy.validate(newPassword);
+        if (policy.getStatusCode() != 200) {
+            throw new IllegalArgumentException(policy.getDescription());
+        }
+    }
+
+    private void applyNewPassword(BoAdminUser user, String rawPassword) {
+        user.setPasswordHash(passwordEncoder.encode(rawPassword));
+        user.setFailedAttempts(0);
+        user.setLockedUntil(null);
+        userRepo.save(user);
+        revokeAllRefreshTokens(user.getId());
+    }
+
+    private void revokeAllRefreshTokens(Long adminUserId) {
+        List<BoRefreshToken> tokens = refreshRepo.findAllByAdminUserIdAndRevokedFalse(adminUserId);
+        if (tokens.isEmpty()) {
+            return;
+        }
+        tokens.forEach(token -> token.setRevoked(true));
+        refreshRepo.saveAll(tokens);
+    }
+
+    private String maskEmail(String email) {
+        if (email == null || email.isBlank()) {
+            return null;
+        }
+        int at = email.indexOf('@');
+        if (at <= 1) {
+            return email;
+        }
+        return email.charAt(0) + "***" + email.substring(at - 1);
     }
 }

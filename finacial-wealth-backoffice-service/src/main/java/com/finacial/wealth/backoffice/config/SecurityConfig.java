@@ -1,13 +1,11 @@
 package com.finacial.wealth.backoffice.config;
 
 import jakarta.servlet.http.HttpServletResponse;
-import java.util.Arrays;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpMethod;
-
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -16,10 +14,6 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
-import org.springframework.context.annotation.Bean;
-import org.springframework.web.cors.CorsConfiguration;
-import org.springframework.web.cors.CorsConfigurationSource;
-import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 @Configuration
 @EnableMethodSecurity
@@ -37,19 +31,18 @@ public class SecurityConfig {
                 .cors(Customizer.withDefaults())
                 .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                // public
                 .requestMatchers(HttpMethod.POST,
                         "/auth/login", "/auth/mfa/verify", "/auth/refresh", "/auth/logout",
-                        "/bo/auth/login", "/bo/auth/mfa/verify", "/bo/auth/refresh", "/bo/auth/logout"
+                        "/auth/password/recovery/start", "/auth/password/recovery/complete",
+                        "/bo/auth/login", "/bo/auth/mfa/verify", "/bo/auth/refresh", "/bo/auth/logout",
+                        "/bo/auth/password/recovery/start", "/bo/auth/password/recovery/complete"
                 ).permitAll()
-                // protected
                 .requestMatchers(HttpMethod.POST,
-                        "/auth/mfa/setup", "/auth/mfa/confirm",
-                        "/bo/auth/mfa/setup", "/bo/auth/mfa/confirm"
+                        "/auth/mfa/setup", "/auth/mfa/confirm", "/auth/password/change",
+                        "/bo/auth/mfa/setup", "/bo/auth/mfa/confirm", "/bo/auth/password/change"
                 ).authenticated()
                 .anyRequest().authenticated()
                 )
-                // ✅ IMPORTANT: JWT filter must be here too
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
                 .build();
     }
@@ -76,7 +69,6 @@ public class SecurityConfig {
                 })
                 )
                 .authorizeHttpRequests(auth -> auth
-                // Swagger/OpenAPI public
                 .requestMatchers(
                         "/v3/api-docs/**",
                         "/v3/api-docs.yaml",
@@ -89,7 +81,6 @@ public class SecurityConfig {
                 ).permitAll()
                 .anyRequest().authenticated()
                 )
-                // JWT filter only for protected endpoints
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
                 .build();
     }
@@ -98,6 +89,4 @@ public class SecurityConfig {
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
     }
-
-    
 }

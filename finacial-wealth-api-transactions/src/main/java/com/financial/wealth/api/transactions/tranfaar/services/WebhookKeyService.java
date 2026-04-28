@@ -244,15 +244,6 @@ public class WebhookKeyService {
 
             }
 
-            //update success
-            CreateQuoteResLog getDeeUp = createQuoteResLogRepo.findByQuoteIdUpdate(rqq.getQuoteId());
-            getDeeUp.setIsDebited("1");
-            getDeeUp.setIsDebitedDescription("PROCESSED");
-            getDeeUp.setStatus("SENT");
-            getDeeUp.setLastModifiedDate(new Timestamp(System.currentTimeMillis()));
-
-            createQuoteResLogRepo.save(getDeeUp);
-
             // TODO: validate amounts, ids, etc., then persist or enqueue
             // 6) Build response
             List<RegWalletInfo> regWalletInfo = regWalletInfoRepository.findByWalletIdList(getDee.get(0).getWalletNumber());
@@ -281,8 +272,8 @@ public class WebhookKeyService {
             customerLeg.setTransAmount(rqq.getAmount());
             customerLeg.setTransactionId(rqq.getQuoteId() + "-CUSTOMER_DR");
             BatchPostingLegRequest cadGlLeg = new BatchPostingLegRequest();
-            cadGlLeg.setDirection("DEBIT");
-            cadGlLeg.setRequestRef(rqq.getQuoteId() + "-CAD_GL_DR");
+            cadGlLeg.setDirection("CREDIT");
+            cadGlLeg.setRequestRef(rqq.getQuoteId() + "-CAD_GL_CR");
             cadGlLeg.setUserType("CAD_GL");
             cadGlLeg.setAuth("Receiver");
             cadGlLeg.setFees("0.00");
@@ -290,15 +281,31 @@ public class WebhookKeyService {
             cadGlLeg.setNarration("CAD_Withdrawal");
             cadGlLeg.setPhoneNumber(decryptData(utilMeth.getSETTING_KEY_WALLET_SYSTEM_SYSTEM_GG_CAD()));
             cadGlLeg.setTransAmount(rqq.getAmount());
-            cadGlLeg.setTransactionId(rqq.getQuoteId()+"-CAD_GL_DR");
+            cadGlLeg.setTransactionId(rqq.getQuoteId()+"-CAD_GL_CR");
             batchRq.setLegs(Arrays.asList(customerLeg, cadGlLeg));
 
             BaseResponse debitAcct = utilMeth.batchPost(batchRq, null);
 
             System.out.println("Debit Response from core debitAcct ::::::::::::::::  %S  " + new Gson().toJson(debitAcct));
 
-            //BaseResponse creditAcct = genLedgerProxy.creditOneTime(rqq);
-            if (debitAcct.getStatusCode() == 200) {
+            if (debitAcct.getStatusCode() != 200) {
+                String failureDescription = debitAcct.getDescription() == null || debitAcct.getDescription().trim().isEmpty()
+                        ? "Transaction processing failed"
+                        : debitAcct.getDescription();
+                SettlementFailureLog conWall = new SettlementFailureLog("", "", failureDescription);
+                settlementFailureLogRepo.save(conWall);
+                responseModel.setDescription("Transaction processing failed");
+                responseModel.setStatusCode(debitAcct.getStatusCode());
+                return responseModel;
+            }
+
+            CreateQuoteResLog getDeeUp = createQuoteResLogRepo.findByQuoteIdUpdate(rqq.getQuoteId());
+            getDeeUp.setIsDebited("1");
+            getDeeUp.setIsDebitedDescription("PROCESSED");
+            getDeeUp.setStatus("SENT");
+            getDeeUp.setLastModifiedDate(new Timestamp(System.currentTimeMillis()));
+            createQuoteResLogRepo.save(getDeeUp);
+
 
                 FinWealthPaymentTransaction kTrans2b = new FinWealthPaymentTransaction();
                 kTrans2b.setAmmount(new BigDecimal(rqq.getAmount()));
@@ -355,7 +362,6 @@ public class WebhookKeyService {
                     }
                 }
 
-            }
             responseModel.setDescription("Successful");
             responseModel.setStatusCode(200);
             return responseModel;
@@ -494,25 +500,6 @@ public class WebhookKeyService {
                 return ResponseEntity.ok(resp);
             }
 
-            PaymentNotificationResponse resp = PaymentNotificationResponse.builder()
-                    .quoteId(quoteId)
-                    .paymentType(paymentType)
-                    .currency(currency)
-                    .email(email)
-                    // .status(status != null ? status : "RECEIVED")
-                    .status("RECEIVED")
-                    .description("Transaction was successful")
-                    .success(true)
-                    .build();
-
-            //update success
-            CreateQuoteResLog getDeeUp = createQuoteResLogRepo.findByQuoteIdUpdate(quoteId);
-            getDeeUp.setStatus("RECEIVED");
-            getDeeUp.setCreateQuoteResponse("PROCESSED");
-            getDeeUp.setLastModifiedDate(new Timestamp(System.currentTimeMillis()));
-            getDeeUp.setWebHookSuccResponse(rawBody);
-            createQuoteResLogRepo.save(getDeeUp);
-
             // TODO: validate amounts, ids, etc., then persist or enqueue
             // 6) Build response
             List<RegWalletInfo> regWalletInfo = regWalletInfoRepository.findByWalletIdList(getDee.get(0).getWalletNumber());
@@ -541,8 +528,8 @@ public class WebhookKeyService {
             customerLeg.setTransAmount(amount);
             customerLeg.setTransactionId(quoteId + "-CUSTOMER_CR");
             BatchPostingLegRequest cadGlLeg = new BatchPostingLegRequest();
-            cadGlLeg.setDirection("CREDIT");
-            cadGlLeg.setRequestRef(quoteId + "-CAD_GL_CR");
+            cadGlLeg.setDirection("DEBIT");
+            cadGlLeg.setRequestRef(quoteId + "-CAD_GL_DR");
             cadGlLeg.setUserType("CAD_GL");
             cadGlLeg.setAuth("Receiver");
             cadGlLeg.setFees("0.00");
@@ -550,71 +537,110 @@ public class WebhookKeyService {
             cadGlLeg.setNarration("CAD_Deposit");
             cadGlLeg.setPhoneNumber(decryptData(utilMeth.getSETTING_KEY_WALLET_SYSTEM_SYSTEM_GG_CAD()));
             cadGlLeg.setTransAmount(amount);
-            cadGlLeg.setTransactionId(quoteId+"-CAD_GL_CR");
+            cadGlLeg.setTransactionId(quoteId + "-CAD_GL_DR");
             batchRq.setLegs(Arrays.asList(customerLeg, cadGlLeg));
 
             BaseResponse creditAcct = utilMeth.batchPost(batchRq, null);
 
             System.out.println("Credit Response from core creditAcct ::::::::::::::::  %S  " + new Gson().toJson(creditAcct));
 
-            //BaseResponse creditAcct = genLedgerProxy.creditOneTime(rqq);
-            if (creditAcct.getStatusCode() == 200) {
+            if (creditAcct.getStatusCode() != 200) {
+                String failureDescription = creditAcct.getDescription() == null || creditAcct.getDescription().trim().isEmpty()
+                        ? "Transaction processing failed"
+                        : creditAcct.getDescription();
 
-                FinWealthPaymentTransaction kTrans2b = new FinWealthPaymentTransaction();
-                kTrans2b.setAmmount(new BigDecimal(amount));
-                kTrans2b.setCreatedDate(Instant.now().plusSeconds(1));
-                kTrans2b.setFees(new BigDecimal(rqC.getFees()));
-                kTrans2b.setPaymentType("Deposit to Account");
-                kTrans2b.setReceiver(rqC.getPhoneNumber());
-                kTrans2b.setSender(rqC.getPhoneNumber());
-                kTrans2b.setTransactionId(quoteId + "-CUSTOMER_CR");
-                kTrans2b.setSenderTransactionType("");
-                kTrans2b.setReceiverTransactionType("Deposit");
+                SettlementFailureLog conWall = new SettlementFailureLog("", "", failureDescription);
+                settlementFailureLogRepo.save(conWall);
 
-                List<RegWalletInfo> getReceiverName = regWalletInfoRepository.findByPhoneNumberData(rqC.getPhoneNumber());
+                CreateQuoteResLog pendingQuote = createQuoteResLogRepo.findByQuoteIdUpdate(quoteId);
+                pendingQuote.setLastModifiedDate(new Timestamp(System.currentTimeMillis()));
+                pendingQuote.setWebHookSuccResponse(rawBody);
+                createQuoteResLogRepo.save(pendingQuote);
 
-                kTrans2b.setWalletNo(rqC.getPhoneNumber());
-                kTrans2b.setReceiverName(getReceiverName.get(0).getFullName());
-                kTrans2b.setSenderName(getReceiverName.get(0).getFullName());
-                kTrans2b.setSentAmount(amount);
-                kTrans2b.setTheNarration("Deposit to CAD account");
+                PaymentNotificationResponse resp = PaymentNotificationResponse.builder()
+                        .quoteId(quoteId)
+                        .paymentType(paymentType)
+                        .currency(currency)
+                        .email(email)
+                        .status("PENDING")
+                        .description("Transaction processing failed")
+                        .success(false)
+                        .build();
 
-               // finWealthPaymentTransactionRepo.save(kTrans2b);
-                
-                transactionHistoryClientLocalT.publishFromTxn(kTrans2b);
-
-                PushNotificationFireBase puFireSender = new PushNotificationFireBase();
-                puFireSender.setBody(pushNotifyCreditWalletForWalletTransferDollar(new BigDecimal(amount),
-                        "", "" + " " + ""
-                ));
-                List<DeviceDetails> getDepuFireSender = deviceDetailsRepo.findAllByWalletId(regWalletInfo.get(0).getWalletId());
-
-                puFireSender.setTitle("Deposit-To-wallet");
-                if (getDepuFireSender.size() > 0) {
-                    String getToken = getDepuFireSender.get(0).getToken() == null ? "" : getDepuFireSender.get(0).getToken();
-
-                    if (getToken != "") {
-                        puFireSender.setDeviceToken(getDepuFireSender.get(0).getToken());
-                        Map<String, String> data = new HashMap<String, String>();
-                        data.put("type", "ALERT");            // sample custom data
-                        if (puFireSender.getData() != null) {
-                            data.putAll(puFireSender.getData());
-                        }
-
-                        messageCenterService.createAndPushToUser(getReceiverName.get(0).getWalletId(), puFireSender.getTitle(),
-                                puFireSender.getBody(),
-                                data, null, "");
-
-                        /* fcmService.sendToToken(
-                                puFireSender.getDeviceToken(),
-                                puFireSender.getTitle(),
-                                puFireSender.getBody(),
-                                data
-                        );*/
-                    }
-                }
-
+                return ResponseEntity.ok(resp);
             }
+
+            // update success only after the balanced batch posts successfully
+            CreateQuoteResLog getDeeUp = createQuoteResLogRepo.findByQuoteIdUpdate(quoteId);
+            getDeeUp.setStatus("RECEIVED");
+            getDeeUp.setCreateQuoteResponse("PROCESSED");
+            getDeeUp.setLastModifiedDate(new Timestamp(System.currentTimeMillis()));
+            getDeeUp.setWebHookSuccResponse(rawBody);
+            createQuoteResLogRepo.save(getDeeUp);
+
+            FinWealthPaymentTransaction kTrans2b = new FinWealthPaymentTransaction();
+            kTrans2b.setAmmount(new BigDecimal(amount));
+            kTrans2b.setCreatedDate(Instant.now().plusSeconds(1));
+            kTrans2b.setFees(new BigDecimal(rqC.getFees()));
+            kTrans2b.setPaymentType("Deposit to Account");
+            kTrans2b.setReceiver(rqC.getPhoneNumber());
+            kTrans2b.setSender(rqC.getPhoneNumber());
+            kTrans2b.setTransactionId(quoteId + "-CUSTOMER_CR");
+            kTrans2b.setSenderTransactionType("");
+            kTrans2b.setReceiverTransactionType("Deposit");
+
+            List<RegWalletInfo> getReceiverName = regWalletInfoRepository.findByPhoneNumberData(rqC.getPhoneNumber());
+
+            kTrans2b.setWalletNo(rqC.getPhoneNumber());
+            kTrans2b.setReceiverName(getReceiverName.get(0).getFullName());
+            kTrans2b.setSenderName(getReceiverName.get(0).getFullName());
+            kTrans2b.setSentAmount(amount);
+            kTrans2b.setTheNarration("Deposit to CAD account");
+
+           // finWealthPaymentTransactionRepo.save(kTrans2b);
+            
+            transactionHistoryClientLocalT.publishFromTxn(kTrans2b);
+
+            PushNotificationFireBase puFireSender = new PushNotificationFireBase();
+            puFireSender.setBody(pushNotifyCreditWalletForWalletTransferDollar(new BigDecimal(amount),
+                    "", "" + " " + ""
+            ));
+            List<DeviceDetails> getDepuFireSender = deviceDetailsRepo.findAllByWalletId(regWalletInfo.get(0).getWalletId());
+
+            puFireSender.setTitle("Deposit-To-wallet");
+            if (getDepuFireSender.size() > 0) {
+                String getToken = getDepuFireSender.get(0).getToken() == null ? "" : getDepuFireSender.get(0).getToken();
+
+                if (getToken != "") {
+                    puFireSender.setDeviceToken(getDepuFireSender.get(0).getToken());
+                    Map<String, String> data = new HashMap<String, String>();
+                    data.put("type", "ALERT");
+                    if (puFireSender.getData() != null) {
+                        data.putAll(puFireSender.getData());
+                    }
+
+                    messageCenterService.createAndPushToUser(getReceiverName.get(0).getWalletId(), puFireSender.getTitle(),
+                            puFireSender.getBody(),
+                            data, null, "");
+
+                    /* fcmService.sendToToken(
+                            puFireSender.getDeviceToken(),
+                            puFireSender.getTitle(),
+                            puFireSender.getBody(),
+                            data
+                    );*/
+                }
+            }
+
+            PaymentNotificationResponse resp = PaymentNotificationResponse.builder()
+                    .quoteId(quoteId)
+                    .paymentType(paymentType)
+                    .currency(currency)
+                    .email(email)
+                    .status("RECEIVED")
+                    .description("Transaction was successful")
+                    .success(true)
+                    .build();
 
             // Credit GLOBAL GL
             /*CreditWalletCaller globalGLCredit = new CreditWalletCaller();

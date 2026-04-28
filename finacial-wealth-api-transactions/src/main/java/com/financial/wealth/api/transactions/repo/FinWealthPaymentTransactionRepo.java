@@ -25,7 +25,7 @@ import org.springframework.stereotype.Repository;
 public interface FinWealthPaymentTransactionRepo
         extends JpaRepository<FinWealthPaymentTransaction, String> {
 
-    @Query("SELECT o FROM FinWealthPaymentTransaction o WHERE o.sender = :walletNo OR o.receiver = :walletNo")
+    @Query("SELECT o FROM FinWealthPaymentTransaction o WHERE o.sender = :walletNo OR o.receiver = :walletNo OR o.walletNo = :walletNo")
     List<FinWealthPaymentTransaction> findByWalletNoList(@Param("walletNo") String walletNo);
 
     @Query("SELECT bs FROM FinWealthPaymentTransaction bs WHERE bs.walletNo = :walletNo")

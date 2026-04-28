@@ -156,7 +156,7 @@ public class GroupSavingsAdminService {
             GroupSavingsData group = groupMap.get(cycle.getGroupId());
             AddMembersModels member = resolveMemberForSlot(memberMap.getOrDefault(cycle.getGroupId(), java.util.Collections.<AddMembersModels>emptyList()), cycle.getCycleNumber());
             String normalizedStatus = normalizeSlotStatus(cycle, today);
-            if (status != null && !status.isBlank() && !normalizedStatus.equalsIgnoreCase(status)) {
+            if (status != null && !status.trim().isEmpty() && !normalizedStatus.equalsIgnoreCase(status)) {
                 continue;
             }
             Map<String, Object> row = new LinkedHashMap<>();
@@ -441,7 +441,7 @@ public class GroupSavingsAdminService {
 
     private List<AddMembersModels> readMembers(GroupSavingsData group) {
         try {
-            if (group == null || group.getAddedMembersModels() == null || group.getAddedMembersModels().isBlank()) {
+            if (group == null || group.getAddedMembersModels() == null || group.getAddedMembersModels().trim().isEmpty()) {
                 return java.util.Collections.emptyList();
             }
             return objectMapper.readValue(group.getAddedMembersModels(), MEMBER_LIST_TYPE);
@@ -521,7 +521,7 @@ public class GroupSavingsAdminService {
         MONTHLY;
 
         static PeriodBucket from(String value) {
-            if (value == null || value.isBlank()) {
+            if (value == null || value.trim().isEmpty()) {
                 return DAILY;
             }
             try {

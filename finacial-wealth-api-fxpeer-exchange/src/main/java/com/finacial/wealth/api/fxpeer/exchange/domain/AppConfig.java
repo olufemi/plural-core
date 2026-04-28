@@ -5,10 +5,12 @@
  */
 package com.finacial.wealth.api.fxpeer.exchange.domain;
 
+import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Lob;
 import jakarta.persistence.Table;
 import java.io.Serializable;
 
@@ -30,6 +32,8 @@ public class AppConfig implements Serializable {
     private Long id;
     private String configName;
     private String configDescription;
+    @Lob
+    @Column(name = "config_value", columnDefinition = "LONGTEXT")
     private String configValue;
     private String productValue;
 
@@ -99,6 +103,5 @@ public class AppConfig implements Serializable {
     public void setConfigValue(String configValue) {
         this.configValue = configValue;
     }
-    
-    
+
 }

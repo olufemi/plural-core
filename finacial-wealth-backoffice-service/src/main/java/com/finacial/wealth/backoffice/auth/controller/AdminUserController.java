@@ -1,18 +1,14 @@
-/*
- * Click nbfs://nbhost/SystemFileSystem/Templates/Licenses/license-default.txt to change this license
- * Click nbfs://nbhost/SystemFileSystem/Templates/Classes/Class.java to edit this template
- */
 package com.finacial.wealth.backoffice.auth.controller;
 
-/**
- *
- * @author olufemioshin
- */
-import com.finacial.wealth.backoffice.admin.dto.*;
-import com.finacial.wealth.backoffice.auth.dto.AdminRoleDto;
+import com.finacial.wealth.backoffice.admin.dto.AdminUserResponse;
+import com.finacial.wealth.backoffice.admin.dto.CreateAdminUserRequest;
+import com.finacial.wealth.backoffice.admin.dto.UpdateAdminUserRequest;
+import com.finacial.wealth.backoffice.auth.dto.AdminPasswordResetResponse;
 import com.finacial.wealth.backoffice.auth.service.AdminUserService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
-import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.http.ResponseEntity;
@@ -22,11 +18,11 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping({"/backoffice/admin-users", "/bo/admin-users", "/admin-users"})
 @RequiredArgsConstructor
+@Tag(name = "Admin Users", description = "Backoffice admin user management endpoints.")
 public class AdminUserController {
 
     private final AdminUserService adminUserService;
 
-    // You already use @RequestAttribute("boAdminUserId") in MFA confirm; reuse that pattern
     @PreAuthorize("hasAuthority('ROLE_SUPER_ADMIN')")
     @PostMapping
     public ResponseEntity<AdminUserResponse> create(
@@ -58,24 +54,19 @@ public class AdminUserController {
         return ResponseEntity.ok(adminUserService.setStatus(actorAdminId, adminId, true, ip(http), ua(http)));
     }
 
-    /*@PostMapping("/{adminId}/activate")
-@PreAuthorize("hasAuthority('ROLE_SUPER_ADMIN')")
-public ResponseEntity<AdminUserResponse> activate(
-        @RequestAttribute("boAdminUserId") Long actorAdminId,
-        @PathVariable Long adminId,
-        HttpServletRequest http
-) {
-    return ResponseEntity.ok(service.setStatus(actorAdminId, adminId, true, ip(http), ua(http)));
-}*/
     @PreAuthorize("hasAuthority('ROLE_SUPER_ADMIN')")
+    @Operation(
+            summary = "Reset admin password",
+            description = "Generates a new temporary password for an admin user, unlocks the account, and revokes existing refresh tokens.",
+            security = @SecurityRequirement(name = "bearerAuth")
+    )
     @PostMapping("/{adminId}/password-reset")
-    public ResponseEntity<Void> resetPassword(
+    public ResponseEntity<AdminPasswordResetResponse> resetPassword(
             @RequestAttribute("boAdminUserId") Long actorAdminId,
             @PathVariable Long adminId,
             HttpServletRequest http
     ) {
-        adminUserService.triggerPasswordReset(actorAdminId, adminId, ip(http), ua(http));
-        return ResponseEntity.ok().build();
+        return ResponseEntity.ok(adminUserService.triggerPasswordReset(actorAdminId, adminId, ip(http), ua(http)));
     }
 
     @PostMapping("/{adminId}/suspend")

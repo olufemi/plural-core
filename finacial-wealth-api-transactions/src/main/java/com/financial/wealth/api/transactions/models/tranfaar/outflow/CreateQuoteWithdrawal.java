@@ -4,7 +4,6 @@
  */
 package com.financial.wealth.api.transactions.models.tranfaar.outflow;
 
-import com.financial.wealth.api.transactions.models.tranfaar.inflow.*;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Data;
 
@@ -39,85 +38,24 @@ public class CreateQuoteWithdrawal {
 
     @JsonProperty("quote_type")
     private String quoteType;
+
     @JsonProperty("origin_reference")
     private String originReference;
 
     @JsonProperty("on_behalf_of")
     private String onBehalfOf;
 
-    public CreateQuoteWithdrawal() {
-    }
+    @JsonProperty("beneficiary_id")
+    private String beneficiaryId;
 
-    // getters & setters
-    public String getSourceCurrency() {
-        return sourceCurrency;
-    }
+    @JsonProperty("user_tag")
+    private String userTag;
 
-    public void setSourceCurrency(String sourceCurrency) {
-        this.sourceCurrency = sourceCurrency;
-    }
+    @JsonProperty("payment_network")
+    private String paymentNetwork;
 
-    public String getTargetCurrency() {
-        return targetCurrency;
-    }
+    @JsonProperty("payment_address")
+    private String paymentAddress;
 
-    public void setTargetCurrency(String targetCurrency) {
-        this.targetCurrency = targetCurrency;
-    }
-
-    public String getSourceAmount() {
-        return sourceAmount;
-    }
-
-    public void setSourceAmount(String sourceAmount) {
-        this.sourceAmount = sourceAmount;
-    }
-
-    public String getDestinationAmount() {
-        return destinationAmount;
-    }
-
-    public void setDestinationAmount(String destinationAmount) {
-        this.destinationAmount = destinationAmount;
-    }
-
-    public String getFeeConfigId() {
-        return feeConfigId;
-    }
-
-    public void setFeeConfigId(String feeConfigId) {
-        this.feeConfigId = feeConfigId;
-    }
-
-    public String getNarration() {
-        return narration;
-    }
-
-    public void setNarration(String narration) {
-        this.narration = narration;
-    }
-
-    public String getExpectedSourceInteracEmail() {
-        return expectedSourceInteracEmail;
-    }
-
-    public void setExpectedSourceInteracEmail(String expectedSourceInteracEmail) {
-        this.expectedSourceInteracEmail = expectedSourceInteracEmail;
-    }
-
-    public String getTz() {
-        return tz;
-    }
-
-    public void setTz(String tz) {
-        this.tz = tz;
-    }
-
-    public String getQuoteType() {
-        return quoteType;
-    }
-
-    public void setQuoteType(String quoteType) {
-        this.quoteType = quoteType;
-    }
+    private String rail;
 }

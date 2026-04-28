@@ -16,10 +16,10 @@ import com.finacial.wealth.api.fxpeer.exchange.domain.AppConfigRepo;
 import com.finacial.wealth.api.fxpeer.exchange.domain.FinWealthPaymentTransaction;
 import com.finacial.wealth.api.fxpeer.exchange.feign.ProfilingProxies;
 import com.finacial.wealth.api.fxpeer.exchange.feign.TransactionServiceProxies;
+import com.finacial.wealth.api.fxpeer.exchange.investment.service.TransactionHistoryClientLocalT;
 import com.finacial.wealth.api.fxpeer.exchange.fx.p.p.wallet.FinWealthPaymentTransactionRepo;
 import com.finacial.wealth.api.fxpeer.exchange.fx.p.p.wallet.WalletTransactionsDetails;
 import com.finacial.wealth.api.fxpeer.exchange.fx.p.p.wallet.WalletTransactionsDetailsRepo;
-import com.finacial.wealth.api.fxpeer.exchange.investment.service.TransactionHistoryClientLocalT;
 import com.finacial.wealth.api.fxpeer.exchange.ledger.LedgerClient;
 
 import com.finacial.wealth.api.fxpeer.exchange.model.AddAccountObj;
@@ -85,8 +85,8 @@ public class OfferService {
     private String fxEnableRunFxTradeEpiredListingsCron;
     @Value("${fx.trade.expired.listings.cron}")
     private String fxTradeExpiredListingsCron;
-    private final TransactionHistoryClientLocalT transactionHistoryClientLocalT;
     private final FinWealthPaymentTransactionRepo finWealthPaymentTransactionRepo;
+    private final TransactionHistoryClientLocalT transactionHistoryClientLocalT;
 
     private static final ZoneId LAGOS = ZoneId.of("Africa/Lagos");
     private static final DateTimeFormatter EXPIRY_DMY
@@ -100,8 +100,8 @@ public class OfferService {
             ProfilingProxies profilingProxies,
             TransactionServiceProxies transactionServiceProxies,
             AppConfigRepo appConfigRepo, WalletTransactionsDetailsRepo walletTransactionsDetailsRepo,
-            TransactionHistoryClientLocalT transactionHistoryClientLocalT,
-            FinWealthPaymentTransactionRepo finWealthPaymentTransactionRepo) {
+            FinWealthPaymentTransactionRepo finWealthPaymentTransactionRepo,
+            TransactionHistoryClientLocalT transactionHistoryClientLocalT) {
         this.finWealthPaymentTransactionRepo = finWealthPaymentTransactionRepo;
         this.repo = repo;
         this.ledger = ledger;
@@ -114,6 +114,28 @@ public class OfferService {
         this.walletTransactionsDetailsRepo = walletTransactionsDetailsRepo;
         this.transactionHistoryClientLocalT = transactionHistoryClientLocalT;
 
+    }
+
+    private void publishCanonicalHistory(FinWealthPaymentTransaction source,
+            String sender, String receiver, String walletNo, String senderName, String receiverName) {
+        FinWealthPaymentTransaction history = new FinWealthPaymentTransaction();
+        history.setAmmount(source.getAmmount());
+        history.setCreatedDate(source.getCreatedDate() != null ? source.getCreatedDate() : Instant.now());
+        history.setFees(source.getFees());
+        history.setPaymentType(source.getPaymentType());
+        history.setReceiver(receiver);
+        history.setSender(sender);
+        history.setTransactionId(source.getTransactionId());
+        history.setSenderTransactionType(source.getSenderTransactionType());
+        history.setReceiverTransactionType(source.getReceiverTransactionType());
+        history.setReceiverBankName(source.getReceiverBankName());
+        history.setWalletNo(walletNo);
+        history.setReceiverName(receiverName);
+        history.setSenderName(senderName);
+        history.setSentAmount(source.getSentAmount());
+        history.setTheNarration(source.getTheNarration());
+        history.setCurrencyCode(source.getCurrencyCode());
+        transactionHistoryClientLocalT.publishFromTxn(history);
     }
 
     @Transactional(readOnly = true)
@@ -800,6 +822,10 @@ public class OfferService {
             kTrans2b.setTheNarration("Fx Peer-Peer listing.");
             kTrans2b.setCurrencyCode(rq.getCurrencySell().toString());
             finWealthPaymentTransactionRepo.save(kTrans2b);
+            // String sellerPhoneForHistory = regWalletInfoRepository.findByWalletIdOptional(String.valueOf(sellerId))
+            //         .map(RegWalletInfo::getPhoneNumber)
+            //         .orElse(accountToDebit);
+            // publishCanonicalHistory(kTrans2b, sellerPhoneForHistory, "FxPeer", sellerPhoneForHistory, senderName, "FxPeer");
 
             System.out.println("sellerId" + "  ::::::::::::::::::::: >>>>>>>>>>>>>>>>>>  " + sellerId);
 
@@ -1149,9 +1175,9 @@ public class OfferService {
             kTrans2b.setSentAmount(rqC.getFinalCHarges());
             kTrans2b.setTheNarration("Fx Peer-Peer listing.");
             kTrans2b.setCurrencyCode(getWalDeupdate.getCurrencyToSell());
-
             finWealthPaymentTransactionRepo.save(kTrans2b);
-            // transactionHistoryClientLocalT.publishFromTxn(kTrans2b);
+            // String sellerPhoneForHistory = getRec.get().getPhoneNumber();
+            // publishCanonicalHistory(kTrans2b, "FxPeer", sellerPhoneForHistory, sellerPhoneForHistory, "FxPeer", getWalDeupdate.getSellerName());
 
             getWalDeupdate.setLastModifiedDate(Instant.now());
             getWalDeupdate.setBuyerName(getRec.get().getFullName());

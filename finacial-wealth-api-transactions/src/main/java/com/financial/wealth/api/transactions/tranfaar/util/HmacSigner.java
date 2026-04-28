@@ -18,6 +18,7 @@ import java.util.Arrays;
 import java.util.Base64;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 public final class HmacSigner {
@@ -102,6 +103,28 @@ public final class HmacSigner {
 
     public static Map<String, String> makeSignature(String secretKey, String bodyOrNull) {
         String timestamp = DateTimeFormatter.ISO_INSTANT.format(Instant.now());
+        return makeSignature(secretKey, bodyOrNull, timestamp);
+    }
+
+    public static Map<String, String> makeSignatureForStrategy(String secretKey, String bodyOrNull, String strategy) {
+        String timestamp = DateTimeFormatter.ISO_INSTANT.format(Instant.now());
+        return makeSignatureForStrategy(secretKey, bodyOrNull, timestamp, strategy);
+    }
+
+    public static Map<String, String> makeSignatureForStrategy(String secretKey, String bodyOrNull, String timestamp, String strategy) {
+        String resolved = strategy == null ? "BODY_PIPE_TIMESTAMP_HEX" : strategy.trim().toUpperCase(Locale.ROOT);
+        if (resolved.isEmpty()) {
+            resolved = "BODY_PIPE_TIMESTAMP_HEX";
+        }
+
+        Map<String, String> out = new HashMap<>();
+        out.put("timestamp", timestamp);
+
+        if ("TIMESTAMP_DOT_BODY_BASE64".equals(resolved)) {
+            out.put("signature", computeSignature(secretKey, timestamp, bodyOrNull == null ? "" : bodyOrNull));
+            return out;
+        }
+
         return makeSignature(secretKey, bodyOrNull, timestamp);
     }
 

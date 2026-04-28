@@ -66,6 +66,8 @@ Possible response B: MFA required
 }
 ```
 
+Use the returned `mfaToken` value as the `challengeId` field in the next `POST /bo/auth/mfa/verify` request.
+
 Possible response C: MFA setup required
 
 ```json
@@ -101,13 +103,94 @@ Response:
 }
 ```
 
-### 3. Refresh Token
+### 3. Change Password
+
+`POST /bo/auth/password/change`
+
+Headers:
+
+```text
+Authorization: Bearer <accessToken>
+```
+
+Request body:
+
+```json
+{
+  "currentPassword": "Password123!",
+  "newPassword": "Password@1234",
+  "confirmPassword": "Password@1234"
+}
+```
+
+Response: `200 OK` with empty body.
+
+Password rules for `newPassword`:
+- minimum 12 characters
+- at least 1 uppercase letter
+- at least 1 lowercase letter
+- at least 1 number
+- at least 1 special character
+- no spaces
+
+### 4. Start Password Recovery
+
+`POST /bo/auth/password/recovery/start`
+
+Request body:
+
+```json
+{
+  "email": "superadmin@finacialwealth.com"
+}
+```
+
+Possible response A: MFA-based recovery can proceed
+
+```json
+{
+  "status": "MFA_REQUIRED",
+  "challengeId": "4d20f5d8f24b6c0f3f4d8f7a7f2a1e0d...",
+  "emailAddress": "s***n@finacialwealth.com",
+  "message": "Enter the 6-digit code from your authenticator app to complete password recovery."
+}
+```
+
+Possible response B: account needs super-admin help
+
+```json
+{
+  "status": "CONTACT_SUPER_ADMIN",
+  "challengeId": null,
+  "emailAddress": "s***n@finacialwealth.com",
+  "message": "MFA recovery is not available for this account yet. Contact a super admin for a manual reset."
+}
+```
+
+### 5. Complete Password Recovery
+
+`POST /bo/auth/password/recovery/complete`
+
+Request body:
+
+```json
+{
+  "challengeId": "4d20f5d8f24b6c0f3f4d8f7a7f2a1e0d...",
+  "code": "123456",
+  "newPassword": "Password@1234",
+  "confirmPassword": "Password@1234"
+}
+```
+
+Response: `200 OK` with empty body. On success the account is unlocked and existing refresh tokens are revoked. The same password rules listed above for change-password also apply here.
+
+### 6. Refresh Token
 
 `POST /bo/auth/refresh?refreshToken=<token>`
 
 Response shape is the same as login success.
 
-### 4. Logout
+### 7. Logout
 
 `POST /bo/auth/logout?refreshToken=<token>`
 
@@ -646,7 +729,7 @@ Use the same request body already used by profiling block/unblock screens.
 
 ### 5. Approval Module
 
-These are the new maker-checker endpoints.
+These are the maker-checker endpoints used for liquidation approvals and manual reversal approvals.
 
 #### List approval inbox
 
@@ -720,11 +803,77 @@ Notes for frontend behavior:
 You may see the following event types in the detail response:
 
 - `SYNCED`
+- `REQUESTED`
 - `REJECTED`
 - `RESUBMITTED`
 - `APPROVED`
 
-### 6. Role and Permission Management
+### 6. Reversal Exception Module
+
+Backoffice now exposes a unified reversal exception queue across `fxpeer` airtime reversals and `transactions` debit-reversal cases. Manual remediation is approval-gated and should only be used for cases already in `FAILED` or `PENDING`.
+
+#### Reversal summary
+
+`GET /bo/backoffice/reversals/summary`
+
+This returns combined totals plus per-source totals for:
+
+- `FXPEER_AIRTIME`
+- `TRANSACTIONS`
+
+#### Reversal cases
+
+`GET /bo/backoffice/reversals/cases`
+
+Query params:
+
+- `source` optional: `FXPEER_AIRTIME` or `TRANSACTIONS`
+- `status` optional: `PENDING`, `FAILED`, `SUCCESS`
+- `page`
+- `size`
+
+Normalized response fields per row:
+
+- `source`
+- `caseRef`
+- `status`
+- `requestedAt`
+- `completedAt`
+- `retryCount`
+- `lastError`
+- `serviceType`
+- `operator`
+- `product`
+- `providerError`
+- `legs`
+
+#### Submit manual reversal request
+
+`POST /bo/backoffice/reversals/cases/{source}/{caseRef}/manual-request`
+
+Request body:
+
+```json
+{
+  "notes": "Auto-reversal failed twice after debit success and fulfilment failure. Requesting checker approval for manual retry."
+}
+```
+
+Workflow notes:
+
+- maker creates the request through `/backoffice/reversals/.../manual-request`
+- checker reviews and approves through the normal `/backoffice/approvals/{approvalId}/approve` endpoint
+- rejection sends the item into remediation, and the maker can resubmit through `/backoffice/approvals/{approvalId}/resubmit`
+- approval triggers the owning source service retry endpoint; backoffice does not move money directly
+
+Permissions involved:
+
+- `reversal.exception.view`
+- `reversal.manual.request`
+- `reversal.manual.approve`
+- `reversal.manual.remediate`
+
+### 7. Role and Permission Management
 
 #### List permission catalog
 
@@ -845,6 +994,24 @@ Request body:
 - `POST /bo/admin-users/{adminId}/suspend`
 - `POST /bo/admin-users/{adminId}/password-reset`
 
+Password reset response:
+
+Notes:
+- this endpoint is for `SUPER_ADMIN` only
+- it unlocks the target account and clears failed-attempt lock state
+- it revokes existing refresh tokens for that admin user
+- FE should display the returned temporary password once and instruct ops to share it over a secure channel
+
+
+```json
+{
+  "adminId": 7,
+  "email": "checker@example.com",
+  "temporaryPassword": "T3mp!Passw0rd#",
+  "message": "Temporary password generated successfully. Share it with the admin user over a secure channel and require them to change it immediately after login."
+}
+```
+
 #### List and view admin users
 
 - No `boAdminUserId` query param is required. The backend derives the acting admin from the bearer token.
@@ -857,6 +1024,9 @@ Request body:
 
 - `POST /bo/auth/login`
 - if response status is `MFA_REQUIRED`, show MFA step and call `POST /bo/auth/mfa/verify`
+- signed-in password change: `POST /bo/auth/password/change`
+- forgot-password start: `POST /bo/auth/password/recovery/start`
+- forgot-password complete: `POST /bo/auth/password/recovery/complete`
 
 ### Dashboard Counters
 
@@ -1047,6 +1217,14 @@ Response shape:
 - approve: `POST /bo/backoffice/approvals/{approvalId}/approve`
 - reject: `POST /bo/backoffice/approvals/{approvalId}/reject`
 - resubmit: `POST /bo/backoffice/approvals/{approvalId}/resubmit`
+
+### Reversal Exceptions Screen
+
+- summary cards: `GET /bo/backoffice/reversals/summary`
+- queue table: `GET /bo/backoffice/reversals/cases`
+- source/status filters: pass `source`, `status`, `page`, `size`
+- maker action: `POST /bo/backoffice/reversals/cases/{source}/{caseRef}/manual-request`
+- checker decisioning still happens in the shared approval inbox
 
 ### Role Management Screen
 

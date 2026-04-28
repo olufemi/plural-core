@@ -20,6 +20,9 @@ public interface TransactionsClient {
   @GetMapping("/api/transactions/admin/reversals")
   Map<String, Object> getReversalCases(@RequestParam(required = false) String status);
 
+  @PostMapping("/api/transactions/admin/reversals/{transactionId}/retry")
+  Map<String, Object> retryReversal(@PathVariable("transactionId") String transactionId);
+
   @GetMapping("/api/transactions/admin/group-savings/contribution-payout-monitoring")
   Map<String, Object> getContributionPayoutMonitoring(
       @RequestParam(required = false) String period,

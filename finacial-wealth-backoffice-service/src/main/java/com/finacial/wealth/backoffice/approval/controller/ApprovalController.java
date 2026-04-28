@@ -36,7 +36,7 @@ public class ApprovalController {
     @PreAuthorize("hasAnyAuthority('approval.inbox.view','ROLE_SUPER_ADMIN')")
     @Operation(
             summary = "List approval requests",
-            description = "Returns the backoffice approval inbox. Requires `approval.inbox.view` or `ROLE_SUPER_ADMIN`.",
+            description = "Returns the backoffice approval inbox for liquidation and reversal workflows. Requires `approval.inbox.view` or `ROLE_SUPER_ADMIN`.",
             security = @SecurityRequirement(name = "bearerAuth")
     )
     public Map<String, Object> list(
@@ -62,11 +62,11 @@ public class ApprovalController {
     }
 
     @PostMapping("/{approvalId}/approve")
-    @PreAuthorize("hasAnyAuthority('investment.liquidation.approve','ROLE_SUPER_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('investment.liquidation.approve','reversal.manual.approve','ROLE_SUPER_ADMIN')")
     @Operation(
             summary = "Approve an approval request",
-            description = "Approves a liquidation approval item and forwards the approval to the exchange service. "
-                    + "Requires `investment.liquidation.approve` or `ROLE_SUPER_ADMIN`.",
+            description = "Approves a liquidation or manual reversal approval item and forwards execution to the owning service. "
+                    + "Requires `investment.liquidation.approve`, `reversal.manual.approve`, or `ROLE_SUPER_ADMIN`.",
             security = @SecurityRequirement(name = "bearerAuth")
     )
     @ApiResponses({
@@ -83,11 +83,11 @@ public class ApprovalController {
     }
 
     @PostMapping("/{approvalId}/reject")
-    @PreAuthorize("hasAnyAuthority('investment.liquidation.approve','ROLE_SUPER_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('investment.liquidation.approve','reversal.manual.approve','ROLE_SUPER_ADMIN')")
     @Operation(
             summary = "Reject an approval request",
             description = "Moves an approval item into remediation with an optional rejection reason. "
-                    + "Requires `investment.liquidation.approve` or `ROLE_SUPER_ADMIN`.",
+                    + "Requires `investment.liquidation.approve`, `reversal.manual.approve`, or `ROLE_SUPER_ADMIN`.",
             security = @SecurityRequirement(name = "bearerAuth")
     )
     @ApiResponses(@ApiResponse(
@@ -95,7 +95,7 @@ public class ApprovalController {
             description = "Request moved to remediation",
             content = @Content(examples = @ExampleObject(
                     name = "reject-body",
-                    value = "{\"comment\":\"Amount exceeds approved threshold for same-day processing\"}"
+                    value = "{\"reason\":\"Duplicate reversal risk identified during checker review\"}"
             ))
     ))
     public Map<String, Object> reject(
@@ -109,11 +109,11 @@ public class ApprovalController {
     }
 
     @PostMapping("/{approvalId}/resubmit")
-    @PreAuthorize("hasAnyAuthority('investment.liquidation.remediate','ROLE_SUPER_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('investment.liquidation.remediate','reversal.manual.remediate','ROLE_SUPER_ADMIN')")
     @Operation(
             summary = "Resubmit an approval request",
             description = "Resubmits a remediated item back into the approval queue. "
-                    + "Requires `investment.liquidation.remediate` or `ROLE_SUPER_ADMIN`.",
+                    + "Requires `investment.liquidation.remediate`, `reversal.manual.remediate`, or `ROLE_SUPER_ADMIN`.",
             security = @SecurityRequirement(name = "bearerAuth")
     )
     @ApiResponses(@ApiResponse(
@@ -121,7 +121,7 @@ public class ApprovalController {
             description = "Request resubmitted",
             content = @Content(examples = @ExampleObject(
                     name = "resubmit-body",
-                    value = "{\"comment\":\"Customer details validated and fee discrepancy resolved\"}"
+                    value = "{\"notes\":\"Duplicate check cleared and original auto-reversal failure confirmed\"}"
             ))
     ))
     public Map<String, Object> resubmit(

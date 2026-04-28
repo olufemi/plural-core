@@ -1,8 +1,13 @@
 package com.financial.wealth.api.transactions.services;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.financial.wealth.api.transactions.domain.SuccessDebitLog;
 import com.financial.wealth.api.transactions.models.ApiResponseModel;
+import com.financial.wealth.api.transactions.models.BaseResponse;
+import com.financial.wealth.api.transactions.models.CreditWalletCaller;
+import com.financial.wealth.api.transactions.models.DebitWalletCaller;
 import com.financial.wealth.api.transactions.repo.SuccessDebitLogRepo;
+import com.financial.wealth.api.transactions.utils.UttilityMethods;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -22,9 +27,12 @@ public class ReversalAdminService {
     private static final List<String> REVERSAL_STATUSES = Arrays.asList("PENDING", "FAILED", "SUCCESS");
 
     private final SuccessDebitLogRepo successDebitLogRepo;
+    private final UttilityMethods utilMeth;
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
-    public ReversalAdminService(SuccessDebitLogRepo successDebitLogRepo) {
+    public ReversalAdminService(SuccessDebitLogRepo successDebitLogRepo, UttilityMethods utilMeth) {
         this.successDebitLogRepo = successDebitLogRepo;
+        this.utilMeth = utilMeth;
     }
 
     public ApiResponseModel getSummary() {
@@ -57,6 +65,77 @@ public class ReversalAdminService {
         payload.put("items", grouped);
         response.setData(payload);
         return response;
+    }
+
+    public ApiResponseModel retryCase(String transactionId) {
+        String rootTransactionId = rootTransactionId(transactionId);
+        List<SuccessDebitLog> logs = successDebitLogRepo.findByReversalStatusIn(Arrays.asList("PENDING", "FAILED"))
+                .stream()
+                .filter(log -> rootTransactionId.equals(rootTransactionId(log.getTransactionId())))
+                .collect(Collectors.toList());
+
+        if (logs.isEmpty()) {
+            throw new IllegalArgumentException("Retryable reversal case not found");
+        }
+
+        for (SuccessDebitLog log : logs) {
+            try {
+                DebitWalletCaller originalDebit = objectMapper.readValue(log.getRequestJson(), DebitWalletCaller.class);
+                CreditWalletCaller rollbackReq = buildCreditFromDebit(originalDebit, log);
+                BaseResponse res = utilMeth.creditCustomer(rollbackReq);
+                applyResult(log, res);
+            } catch (Exception ex) {
+                log.setRetryCount(log.getRetryCount() + 1);
+                log.setResolved(false);
+                log.setReversalStatus("FAILED");
+                log.setReversalRequestedAt(log.getReversalRequestedAt() == null ? Instant.now() : log.getReversalRequestedAt());
+                log.setReversalLastError(ex.getMessage());
+                log.setLastModifiedDate(Instant.now());
+                successDebitLogRepo.save(log);
+            }
+        }
+
+        List<SuccessDebitLog> refreshed = successDebitLogRepo.findByReversalStatusIn(REVERSAL_STATUSES)
+                .stream()
+                .filter(log -> rootTransactionId.equals(rootTransactionId(log.getTransactionId())))
+                .collect(Collectors.toList());
+        ApiResponseModel response = new ApiResponseModel();
+        response.setStatusCode(200);
+        response.setDescription("Reversal retry processed successfully");
+        response.setData(toCaseRecord(rootTransactionId, deriveOverallStatus(refreshed), refreshed));
+        return response;
+    }
+
+    private void applyResult(SuccessDebitLog log, BaseResponse res) {
+        log.setReversalRequestedAt(log.getReversalRequestedAt() == null ? Instant.now() : log.getReversalRequestedAt());
+        if (res != null && res.getStatusCode() == 200) {
+            log.setMarkForRollBack(0);
+            log.setResolved(true);
+            log.setReversalStatus("SUCCESS");
+            log.setReversalCompletedAt(Instant.now());
+            log.setReversalLastError(null);
+        } else {
+            log.setRetryCount(log.getRetryCount() + 1);
+            log.setResolved(false);
+            log.setReversalStatus("FAILED");
+            log.setReversalLastError(res == null ? "Rollback credit returned null response" : res.getDescription());
+        }
+        log.setLastModifiedDate(Instant.now());
+        successDebitLogRepo.save(log);
+    }
+
+    private CreditWalletCaller buildCreditFromDebit(DebitWalletCaller d, SuccessDebitLog log) {
+        CreditWalletCaller c = new CreditWalletCaller();
+        c.setAuth("Receiver");
+        c.setFees(nz(d.getFees()));
+        String finalCharges = nz(d.getFinalCHarges()).isEmpty() ? nz(d.getTransAmount()) : nz(d.getFinalCHarges());
+        c.setFinalCHarges(finalCharges);
+        c.setPhoneNumber(nz(d.getPhoneNumber()));
+        c.setTransAmount(nz(d.getTransAmount()));
+        c.setNarration(nz(d.getNarration()));
+        String baseId = log.getTransactionId() != null ? log.getTransactionId() : d.getTransactionId();
+        c.setTransactionId((baseId == null ? "" : baseId) + "-RB");
+        return c;
     }
 
     private List<Map<String, Object>> buildGroupedCases(String statusFilter) {
@@ -139,5 +218,9 @@ public class ReversalAdminService {
             return transactionId.substring(0, transactionId.length() - "-NGN_GL".length());
         }
         return transactionId;
+    }
+
+    private static String nz(String s) {
+        return s == null ? "" : s;
     }
 }

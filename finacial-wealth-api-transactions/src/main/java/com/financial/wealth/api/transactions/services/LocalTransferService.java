@@ -2195,6 +2195,7 @@ public class LocalTransferService {
 
             List<FinWealthPaymentTransaction> getKulTrans
                     = finWealthPaymentTransactionRepo.findByWalletNoList(userPhoneNumber);
+            getKulTrans = expandFxPeerCompanionTransactions(getKulTrans);
 
             if (getKulTrans.size() <= 0) {
 
@@ -2216,16 +2217,36 @@ public class LocalTransferService {
             // --------------------------------------------------------------------
             List<Object> mapAll = new ArrayList<>();
 
+            getKulTrans.sort((a, b) -> {
+                Instant ai = a.getCreatedDate();
+                Instant bi = b.getCreatedDate();
+                if (ai == null && bi == null) {
+                    return 0;
+                }
+                if (ai == null) {
+                    return 1;
+                }
+                if (bi == null) {
+                    return -1;
+                }
+                return bi.compareTo(ai);
+            });
+
             for (FinWealthPaymentTransaction getKul : getKulTrans) {
 
                 FinWalletPaymentTransModel getK = new FinWalletPaymentTransModel();
+                getK.setId(getKul.getId());
+                getK.setHistoryEntryId(getKul.getId() == null ? null : String.valueOf(getKul.getId()));
+                getK.setGroupReference(getKul.getTransactionId());
+                getK.setEntryDirection(resolveDirection(getKul, userPhoneNumber));
+                getK.setCounterparty(resolveCounterparty(getKul, userPhoneNumber));
                 getK.setAmmount(getKul.getAmmount());
-                getK.setTransactionDate(formDate(getKul.getCreatedDate())); // display only
-                getK.setCreatedDate(getKul.getCreatedDate());               // ✅ MUST be set (Instant)
+                getK.setTransactionDate(formDate(getKul.getCreatedDate()));
+                getK.setCreatedDate(getKul.getCreatedDate());
                 getK.setFees(getKul.getFees());
                 getK.setPaymentType(getKul.getPaymentType());
-                getK.setReceiver(getKul.getReceiver());                     // receiverId = receiver
-                getK.setSender(getKul.getSender());                         // senderId = sender
+                getK.setReceiver(getKul.getReceiver());
+                getK.setSender(getKul.getSender());
                 getK.setTransactionId(getKul.getTransactionId());
                 getK.setReceiverTransactionType(getKul.getReceiverTransactionType());
                 getK.setSenderTransactionType(getKul.getSenderTransactionType());
@@ -2236,15 +2257,8 @@ public class LocalTransferService {
                 getK.setTheNarration(getKul.getTheNarration());
                 getK.setTransactionType(getKul.getTransactionType());
                 getK.setCurrencyCode(getKul.getCurrencyCode() == null ? CCY : getKul.getCurrencyCode());
-
-                // ✅ MUST: status included in canonical string.
-                // BEST: If entity has status, use it:
-                // getK.setStatus(getKul.getStatus());
-                // If you don't have it yet, fallback (NOT ideal, replace asap):
                 getK.setStatus(resolveStatusFallback(getKul));
 
-                // ✅ SIGN: calls utility-service /api/v1/crypto/receipt/sign
-                // attaches receiptKid + receiptSignature to this DTO
                 receiptSigningFacade.attachReceipt(getK);
 
                 mapAll.add(getK);
@@ -2270,6 +2284,87 @@ public class LocalTransferService {
         }
 
         return responseModel;
+    }
+
+    private List<FinWealthPaymentTransaction> expandFxPeerCompanionTransactions(List<FinWealthPaymentTransaction> baseRows) {
+        java.util.LinkedHashMap<Long, FinWealthPaymentTransaction> deduped = new java.util.LinkedHashMap<>();
+        java.util.LinkedHashSet<String> loadedTransactionIds = new java.util.LinkedHashSet<>();
+
+        for (FinWealthPaymentTransaction row : baseRows) {
+            if (row.getId() != null) {
+                deduped.put(row.getId(), row);
+            }
+            String transactionId = row.getTransactionId();
+            if (transactionId == null || transactionId.trim().isEmpty() || !isFxPeerHistory(row)) {
+                continue;
+            }
+            if (!loadedTransactionIds.add(transactionId)) {
+                continue;
+            }
+            List<FinWealthPaymentTransaction> siblings = finWealthPaymentTransactionRepo.findByTransactionId(transactionId);
+            for (FinWealthPaymentTransaction sibling : siblings) {
+                if (sibling.getId() != null) {
+                    deduped.put(sibling.getId(), sibling);
+                }
+            }
+        }
+        return new ArrayList<>(deduped.values());
+    }
+
+    private boolean isFxPeerHistory(FinWealthPaymentTransaction tx) {
+        return tx != null
+                && "FxPeer Transfer".equalsIgnoreCase(safeString(tx.getPaymentType()))
+                && "Fx Peer-Peer Transfer".equalsIgnoreCase(safeString(tx.getTheNarration()));
+    }
+
+    private String resolveDirection(FinWealthPaymentTransaction tx, String userPhoneNumber) {
+        if (tx == null) {
+            return "UNKNOWN";
+        }
+        String sender = safeString(tx.getSender());
+        String receiver = safeString(tx.getReceiver());
+        String walletNo = safeString(tx.getWalletNo());
+        String user = safeString(userPhoneNumber);
+        if (!user.isEmpty()) {
+            if (user.equals(sender) || user.equals(walletNo)) {
+                return "DEBIT";
+            }
+            if (user.equals(receiver)) {
+                return "CREDIT";
+            }
+        }
+        if ("Withdrawal".equalsIgnoreCase(safeString(tx.getSenderTransactionType()))) {
+            return "DEBIT";
+        }
+        if ("Deposit".equalsIgnoreCase(safeString(tx.getReceiverTransactionType()))) {
+            return "CREDIT";
+        }
+        return "UNKNOWN";
+    }
+
+    private String resolveCounterparty(FinWealthPaymentTransaction tx, String userPhoneNumber) {
+        String direction = resolveDirection(tx, userPhoneNumber);
+        if ("DEBIT".equals(direction)) {
+            return firstNonBlank(tx.getReceiverName(), tx.getReceiver());
+        }
+        if ("CREDIT".equals(direction)) {
+            return firstNonBlank(tx.getSenderName(), tx.getSender());
+        }
+        return firstNonBlank(tx.getReceiverName(), tx.getReceiver(), tx.getSenderName(), tx.getSender());
+    }
+
+    private String firstNonBlank(String... values) {
+        for (String value : values) {
+            String safe = safeString(value);
+            if (!safe.isEmpty()) {
+                return safe;
+            }
+        }
+        return null;
+    }
+
+    private String safeString(String value) {
+        return value == null ? "" : value.trim();
     }
 
     private String resolveStatusFallback(FinWealthPaymentTransaction tx) {

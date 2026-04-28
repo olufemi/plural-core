@@ -173,6 +173,17 @@ public class FxOtherServicesController {
         return new ResponseEntity<>(airtimeRollbackService.getCases(status), HttpStatus.OK);
     }
 
+    @PostMapping(
+            path = "/admin/airtime-reversals/{processId}/retry",
+            produces = MediaType.APPLICATION_JSON_VALUE
+    )
+    public ResponseEntity<ApiResponseModel> retryAirtimeReversal(
+            @RequestHeader(name = "authorization", required = true) String auth,
+            @org.springframework.web.bind.annotation.PathVariable String processId
+    ) {
+        return new ResponseEntity<>(airtimeRollbackService.retryCase(processId, auth), HttpStatus.OK);
+    }
+
     @GetMapping(
             path = "/int-utilities-get-categories",
             consumes = MediaType.APPLICATION_JSON_VALUE,

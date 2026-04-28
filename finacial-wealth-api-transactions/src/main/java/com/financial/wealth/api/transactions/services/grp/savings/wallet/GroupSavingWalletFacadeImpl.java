@@ -165,8 +165,8 @@ public class GroupSavingWalletFacadeImpl implements WalletFacade {
         customerLeg.setTransAmount(amount.toString());
         customerLeg.setTransactionId(reff + "-CUSTOMER_DR");
         BatchPostingLegRequest cadGlLeg = new BatchPostingLegRequest();
-        cadGlLeg.setDirection("DEBIT");
-        cadGlLeg.setRequestRef(reff + "-CAD_GL_DR");
+        cadGlLeg.setDirection("CREDIT");
+        cadGlLeg.setRequestRef(reff + "-CAD_GL_CR");
         cadGlLeg.setUserType("CAD_GL");
         cadGlLeg.setAuth("Receiver");
         cadGlLeg.setFees("0.00");
@@ -181,8 +181,13 @@ public class GroupSavingWalletFacadeImpl implements WalletFacade {
 
         System.out.println("Debit Response from core debitAcct ::::::::::::::::  %S  " + new Gson().toJson(debitAcct));
 
-        //BaseResponse creditAcct = genLedgerProxy.creditOneTime(rqq);
-        if (debitAcct.getStatusCode() == 200) {
+        if (debitAcct.getStatusCode() != 200) {
+            txn.setStatus(GroupSavingWalletTxnStatus.FAILED);
+            txn.setErrorMessage(debitAcct.getDescription());
+            txnRepo.save(txn);
+            throw new IllegalStateException(debitAcct.getDescription() != null ? debitAcct.getDescription() : "Transaction processing failed");
+        }
+
 
             FinWealthPaymentTransaction kTrans2b = new FinWealthPaymentTransaction();
             kTrans2b.setAmmount(amount);
@@ -231,7 +236,6 @@ public class GroupSavingWalletFacadeImpl implements WalletFacade {
                 }
             }
 
-        }
         txn.setWalletPocRef(reff);
         txn.setStatus(GroupSavingWalletTxnStatus.SUCCESS);
         txnRepo.save(txn);
@@ -303,7 +307,8 @@ public class GroupSavingWalletFacadeImpl implements WalletFacade {
         customerLeg.setTransAmount(amount.toString());
         customerLeg.setTransactionId(reff + "-CUSTOMER_CR");
         BatchPostingLegRequest cadGlLeg = new BatchPostingLegRequest();
-        cadGlLeg.setDirection("CREDIT");
+        cadGlLeg.setDirection("DEBIT");
+        cadGlLeg.setRequestRef(reff + "-CAD_GL_DR");
         cadGlLeg.setUserType("CAD_GL");
         cadGlLeg.setAuth("Receiver");
         cadGlLeg.setFees("0.00");
@@ -311,15 +316,20 @@ public class GroupSavingWalletFacadeImpl implements WalletFacade {
         cadGlLeg.setNarration("CAD_Deposit");
         cadGlLeg.setPhoneNumber(decryptData(utilMeth.getSETTING_KEY_WALLET_SYSTEM_SYSTEM_GG_CAD()));
         cadGlLeg.setTransAmount(amount.toString());
-        cadGlLeg.setTransactionId(reff+"-CAD_GL_CR");
+        cadGlLeg.setTransactionId(reff+"-CAD_GL_DR");
         batchRq.setLegs(Arrays.asList(customerLeg, cadGlLeg));
 
         BaseResponse creditAcct = utilMeth.batchPost(batchRq, null);
 
         System.out.println("Credit Response from core creditAcct ::::::::::::::::  %S  " + new Gson().toJson(creditAcct));
 
-        //BaseResponse creditAcct = genLedgerProxy.creditOneTime(rqq);
-        if (creditAcct.getStatusCode() == 200) {
+        if (creditAcct.getStatusCode() != 200) {
+            txn.setStatus(GroupSavingWalletTxnStatus.FAILED);
+            txn.setErrorMessage(creditAcct.getDescription());
+            txnRepo.save(txn);
+            throw new IllegalStateException(creditAcct.getDescription() != null ? creditAcct.getDescription() : "Transaction processing failed");
+        }
+
 
             FinWealthPaymentTransaction kTrans2b = new FinWealthPaymentTransaction();
             kTrans2b.setAmmount(amount);
@@ -369,8 +379,6 @@ public class GroupSavingWalletFacadeImpl implements WalletFacade {
 
                 }
             }
-
-        }
 
         /*Wallet wallet = walletRepo.findByIdForUpdate(walletId)
                 .orElseThrow(() -> new IllegalArgumentException("Wallet not found: " + walletId));

@@ -1,5 +1,7 @@
 package com.finacial.wealth.backoffice.approval.entity;
 
 public enum ApprovalSubModule {
-    LIQUIDATION
+    LIQUIDATION,
+    AIRTIME_REVERSAL,
+    TRANSACTION_REVERSAL
 }

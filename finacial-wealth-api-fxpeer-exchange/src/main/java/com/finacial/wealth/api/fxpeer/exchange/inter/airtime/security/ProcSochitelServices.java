@@ -16,6 +16,7 @@ import com.finacial.wealth.api.fxpeer.exchange.domain.RegWalletInfoRepository;
 import com.finacial.wealth.api.fxpeer.exchange.feign.ProfilingProxies;
 import com.finacial.wealth.api.fxpeer.exchange.feign.TransactionServiceProxies;
 import com.finacial.wealth.api.fxpeer.exchange.fx.p.p.wallet.FinWealthPaymentTransactionRepo;
+import com.finacial.wealth.api.fxpeer.exchange.investment.service.TransactionHistoryClientLocalT;
 import com.finacial.wealth.api.fxpeer.exchange.inter.airtime.getpack.OperatorEntry;
 import com.finacial.wealth.api.fxpeer.exchange.inter.airtime.getpack.SochitelProductsResponse;
 import com.finacial.wealth.api.fxpeer.exchange.inter.airtime.transaction.TopupPurchaseResponse;
@@ -120,6 +121,7 @@ public class ProcSochitelServices {
     private final RegWalletInfoRepository regWalletInfoRepository;
     private final UttilityMethods utilService;
     private final FinWealthPaymentTransactionRepo finWealthPaymentTransactionRepo;
+    private final TransactionHistoryClientLocalT transactionHistoryClientLocalT;
     private final TransactionServiceProxies transactionServiceProxies;
     private final AddAccountDetailsRepo addAccountDetailsRepo;
     private final AppConfigRepo appConfigRepo;
@@ -135,7 +137,8 @@ public class ProcSochitelServices {
             AddAccountDetailsRepo addAccountDetailsRepo,
             RegWalletInfoRepository regWalletInfoRepository,
             AppConfigRepo appConfigRepo, InternationalProductCatRepo internationalProductCatRepo,
-            AirtimeRollbackService airtimeRollbackService) {
+            AirtimeRollbackService airtimeRollbackService,
+            TransactionHistoryClientLocalT transactionHistoryClientLocalT) {
 
         this.profilingProxies = profilingProxies;
         this.resourceLoader = resourceLoader;
@@ -147,6 +150,7 @@ public class ProcSochitelServices {
         this.appConfigRepo = appConfigRepo;
         this.internationalProductCatRepo = internationalProductCatRepo;
         this.airtimeRollbackService = airtimeRollbackService;
+        this.transactionHistoryClientLocalT = transactionHistoryClientLocalT;
     }
 
     // ---------- Utility ----------
@@ -1301,8 +1305,8 @@ public class ProcSochitelServices {
         tx.setSenderTransactionType("Withdrawal");
         tx.setReceiverTransactionType("Deposit");
         tx.setCreatedDate(Instant.now());
-
         finWealthPaymentTransactionRepo.save(tx);
+        // transactionHistoryClientLocalT.publishFromTxn(tx);
     }
 
     private PreDebitResult preDebitAndSettleAirtime(

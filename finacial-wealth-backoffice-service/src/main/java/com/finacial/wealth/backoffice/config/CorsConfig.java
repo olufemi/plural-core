@@ -15,8 +15,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.cors.CorsConfiguration;
-import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 @Configuration
 public class CorsConfig {
@@ -24,7 +24,7 @@ public class CorsConfig {
     @Value("${backoffice.cors.allowed-origins:*}")
     private String allowedOrigins;
 
-    @Value("${backoffice.cors.allowed-methods:GET,POST,PUT,DELETE,OPTIONS}")
+    @Value("${backoffice.cors.allowed-methods:GET,POST,PUT,PATCH,DELETE,OPTIONS}")
     private String allowedMethods;
 
     @Value("${backoffice.cors.allowed-headers:Authorization,Content-Type}")
@@ -40,9 +40,12 @@ public class CorsConfig {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration cfg = new CorsConfiguration();
 
-        // IMPORTANT: if allowCredentials=true, you must NOT use "*"
         List<String> origins = Arrays.asList(allowedOrigins.split("\\s*,\\s*"));
-        cfg.setAllowedOrigins(origins);
+        if (origins.contains("*")) {
+            cfg.setAllowedOriginPatterns(origins);
+        } else {
+            cfg.setAllowedOrigins(origins);
+        }
 
         cfg.setAllowedMethods(Arrays.asList(allowedMethods.split("\\s*,\\s*")));
         cfg.setAllowedHeaders(Arrays.asList(allowedHeaders.split("\\s*,\\s*")));

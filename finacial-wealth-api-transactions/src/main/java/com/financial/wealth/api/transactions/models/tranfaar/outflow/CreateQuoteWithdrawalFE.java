@@ -4,7 +4,6 @@
  */
 package com.financial.wealth.api.transactions.models.tranfaar.outflow;
 
-
 import lombok.Data;
 
 /**
@@ -16,9 +15,31 @@ public class CreateQuoteWithdrawalFE {
 
     private String sourceAmount;
 
+    private String destinationAmount;
+
+    private String sourceCurrency;
+
+    private String targetCurrency;
+
+    private String quoteType;
+
+    private String tz;
+
     private String narration;
 
     private String expectedSourceInteracEmail;
 
-   
+    private String originReference;
+
+    private String onBehalfOf;
+
+    private String beneficiaryId;
+
+    private String userTag;
+
+    private String paymentNetwork;
+
+    private String paymentAddress;
+
+    private String rail;
 }

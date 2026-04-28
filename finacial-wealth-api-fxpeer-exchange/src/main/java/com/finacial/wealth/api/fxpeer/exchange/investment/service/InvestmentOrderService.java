@@ -137,6 +137,7 @@ public class InvestmentOrderService {
     private final RegWalletInfoRepository regWalletInfoRepository;
 
     private final FinWealthPaymentTransactionRepo finWealthPaymentTransactionRepo;
+    private final TransactionHistoryClientLocalT transactionHistoryClientLocalT;
     private final TransactionServiceProxies transactionServiceProxies;
     private final AddAccountDetailsRepo addAccountDetailsRepo;
     private final AppConfigRepo appConfigRepo;
@@ -145,7 +146,6 @@ public class InvestmentOrderService {
     private final InvestmentPositionHistoryRepository historyRepo;
     private final InvestmentRequestGuardRepository guardRepo;
     private static final ZoneId ZONE = ZoneId.of("Africa/Lagos");
-    private final TransactionHistoryClientLocalT transactionHistoryClientLocalT;
 
     public InvestmentOrderService(AppConfigRepo appConfigRepo,
             AddAccountDetailsRepo addAccountDetailsRepo,
@@ -182,6 +182,28 @@ public class InvestmentOrderService {
         this.guardRepo = guardRepo;
         this.transactionHistoryClientLocalT = transactionHistoryClientLocalT;
 
+    }
+
+    private void publishCanonicalHistory(FinWealthPaymentTransaction source,
+            String sender, String receiver, String walletNo, String senderName, String receiverName) {
+        FinWealthPaymentTransaction history = new FinWealthPaymentTransaction();
+        history.setAmmount(source.getAmmount());
+        history.setCreatedDate(source.getCreatedDate() != null ? source.getCreatedDate() : Instant.now());
+        history.setFees(source.getFees());
+        history.setPaymentType(source.getPaymentType());
+        history.setReceiver(receiver);
+        history.setSender(sender);
+        history.setTransactionId(source.getTransactionId());
+        history.setSenderTransactionType(source.getSenderTransactionType());
+        history.setReceiverTransactionType(source.getReceiverTransactionType());
+        history.setReceiverBankName(source.getReceiverBankName());
+        history.setWalletNo(walletNo);
+        history.setReceiverName(receiverName);
+        history.setSenderName(senderName);
+        history.setSentAmount(source.getSentAmount());
+        history.setTheNarration(source.getTheNarration());
+        history.setCurrencyCode(source.getCurrencyCode());
+        transactionHistoryClientLocalT.publishFromTxn(history);
     }
 
     @PostConstruct
@@ -458,8 +480,7 @@ public class InvestmentOrderService {
             kTrans2b.setTheNarration("Investment purchase.");
             kTrans2b.setCurrencyCode(rq.getCurrencyCode());
             finWealthPaymentTransactionRepo.save(kTrans2b);
-
-            // transactionHistoryClientLocalT.publishFromTxn(kTrans2b);
+            // publishCanonicalHistory(kTrans2b, phoneNumber, "Investment", phoneNumber, regOpt.get().getFullName(), "Investment");
             return out;
 
         } catch (Exception e) {
@@ -1473,8 +1494,7 @@ public class InvestmentOrderService {
             kTrans2b.setTheNarration("Investment Liquidation.");
             kTrans2b.setCurrencyCode(order.getProduct().getCurrency());
             finWealthPaymentTransactionRepo.save(kTrans2b);
-
-            // transactionHistoryClientLocalT.publishFromTxn(kTrans2b);
+            // publishCanonicalHistory(kTrans2b, "Investment", rqC.getPhoneNumber(), rqC.getPhoneNumber(), "Investment", receiverName);
         } catch (Exception ex) {
             ex.printStackTrace();
             res.setStatusCode(statusCode);

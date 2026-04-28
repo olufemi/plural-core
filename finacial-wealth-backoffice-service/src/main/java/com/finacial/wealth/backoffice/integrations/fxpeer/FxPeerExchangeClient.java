@@ -3,7 +3,6 @@ package com.finacial.wealth.backoffice.integrations.fxpeer;
 import com.finacial.wealth.backoffice.integrations.fxpeer.model.FeaturedServicesConfigRequest;
 import com.finacial.wealth.backoffice.integrations.fxpeer.model.InvestmentProductUpsertRequest;
 import com.finacial.wealth.backoffice.integrations.fxpeer.model.LiquidationApprovalRequest;
-import com.finacial.wealth.backoffice.model.BaseResponse;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.*;
 
@@ -41,6 +40,12 @@ public interface FxPeerExchangeClient {
     Map<String, Object> getAirtimeReversalCases(
             @RequestHeader("authorization") String auth,
             @RequestParam(required = false) String status
+    );
+
+    @PostMapping(value = "/fxothers/admin/airtime-reversals/{processId}/retry", produces = MediaType.APPLICATION_JSON_VALUE)
+    Map<String, Object> retryAirtimeReversal(
+            @RequestHeader("authorization") String auth,
+            @PathVariable("processId") String processId
     );
 
     @PostMapping(value = "/investments/create-product", consumes = "application/json")

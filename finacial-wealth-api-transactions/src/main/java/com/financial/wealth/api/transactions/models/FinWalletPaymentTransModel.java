@@ -16,6 +16,11 @@ import lombok.Data;
 @Data
 public class FinWalletPaymentTransModel {
 
+    private Long id;
+    private String historyEntryId;
+    private String groupReference;
+    private String entryDirection;
+    private String counterparty;
     private String receiver;
     private String receiverName;
     private String sender;
@@ -35,9 +40,7 @@ public class FinWalletPaymentTransModel {
     private String senderTransactionType;
     private String receiverTransactionType;
     private String currencyCode;
-    private String status;           // add this (SUCCESS/FAILED/PENDING/REVERSED)
-    private String receiptKid;       // add this
-    private String receiptSignature; // add this
-  
-
+    private String status;
+    private String receiptKid;
+    private String receiptSignature;
 }

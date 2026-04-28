@@ -22,6 +22,7 @@ import com.finacial.wealth.api.fxpeer.exchange.domain.RegWalletInfo;
 import com.finacial.wealth.api.fxpeer.exchange.domain.RegWalletInfoRepository;
 import com.finacial.wealth.api.fxpeer.exchange.feign.ProfilingProxies;
 import com.finacial.wealth.api.fxpeer.exchange.feign.TransactionServiceProxies;
+import com.finacial.wealth.api.fxpeer.exchange.investment.service.TransactionHistoryClientLocalT;
 import com.finacial.wealth.api.fxpeer.exchange.fx.p.p.wallet.FinWealthPaymentTransactionRepo;
 import com.finacial.wealth.api.fxpeer.exchange.model.AddAccountObj;
 import com.finacial.wealth.api.fxpeer.exchange.model.ApiResponseModel;
@@ -41,7 +42,6 @@ import com.finacial.wealth.api.fxpeer.exchange.fx.p.p.wallet.WalletIndivTransact
 import com.finacial.wealth.api.fxpeer.exchange.fx.p.p.wallet.WalletIndivTransactionsDetailsRepo;
 import com.finacial.wealth.api.fxpeer.exchange.fx.p.p.wallet.WalletTransactionsDetails;
 import com.finacial.wealth.api.fxpeer.exchange.fx.p.p.wallet.WalletTransactionsDetailsRepo;
-import com.finacial.wealth.api.fxpeer.exchange.investment.service.TransactionHistoryClientLocalT;
 
 import com.google.gson.Gson;
 import jakarta.transaction.Transactional;
@@ -85,8 +85,8 @@ public class OrderService {
     private final AppConfigRepo appConfigRepo;
     private final PeerToPeerFxReferralRepo peerToPeerFxReferralRepo;
     private final ObjectMapper mapper;
-    private final TransactionHistoryClientLocalT transactionHistoryClientLocalT;
     private final FinWealthPaymentTransactionRepo finWealthPaymentTransactionRepo;
+    private final TransactionHistoryClientLocalT transactionHistoryClientLocalT;
 
     public OrderService(FinWealthPaymentTransactionRepo finWealthPaymentTransactionRepo, OrderRepository orders, OfferRepository offers,
             TransactionServiceProxies transactionServiceProxies,
@@ -119,6 +119,28 @@ public class OrderService {
         return new ResponseEntity<>(res, HttpStatus.OK);
 
         // return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(res);
+    }
+
+    private void publishCanonicalHistory(FinWealthPaymentTransaction source,
+            String sender, String receiver, String walletNo, String senderName, String receiverName) {
+        FinWealthPaymentTransaction history = new FinWealthPaymentTransaction();
+        history.setAmmount(source.getAmmount());
+        history.setCreatedDate(source.getCreatedDate() != null ? source.getCreatedDate() : Instant.now());
+        history.setFees(source.getFees());
+        history.setPaymentType(source.getPaymentType());
+        history.setReceiver(receiver);
+        history.setSender(sender);
+        history.setTransactionId(source.getTransactionId());
+        history.setSenderTransactionType(source.getSenderTransactionType());
+        history.setReceiverTransactionType(source.getReceiverTransactionType());
+        history.setReceiverBankName(source.getReceiverBankName());
+        history.setWalletNo(walletNo);
+        history.setReceiverName(receiverName);
+        history.setSenderName(senderName);
+        history.setSentAmount(source.getSentAmount());
+        history.setTheNarration(source.getTheNarration());
+        history.setCurrencyCode(source.getCurrencyCode());
+        transactionHistoryClientLocalT.publishFromTxn(history);
     }
 
     public BaseResponse validateAmountInRange(String amountStr,
@@ -681,32 +703,33 @@ public class OrderService {
                 return bad(res, "Seller credit failed and compensation was incomplete. Manual intervention required.", 500);
             }
 
+                String sellerPhoneForHistory = getRecCheSeller.get().getPhoneNumber();
+                String buyerPhoneForHistory = phoneNumber;
+
                 FinWealthPaymentTransaction kTrans2b = new FinWealthPaymentTransaction();
                 kTrans2b.setAmmount(new BigDecimal(rqC.getFinalCHarges()));
                 kTrans2b.setCreatedDate(Instant.now().plusSeconds(1));
                 kTrans2b.setFees(new BigDecimal(rqC.getFees()));
                 kTrans2b.setPaymentType("FxPeer Transfer");
-                kTrans2b.setReceiver(sellerAcctNumber);
-                kTrans2b.setSender(accountNumber);
+                kTrans2b.setReceiver(sellerPhoneForHistory != null && !sellerPhoneForHistory.trim().isEmpty() ? sellerPhoneForHistory : sellerAcctNumber);
+                kTrans2b.setSender(buyerPhoneForHistory != null && !buyerPhoneForHistory.trim().isEmpty() ? buyerPhoneForHistory : accountNumber);
                 kTrans2b.setTransactionId(transactionId);
                 kTrans2b.setSenderTransactionType("Withdrawal");
                 kTrans2b.setReceiverTransactionType("Deposit");
                 kTrans2b.setReceiverBankName(sellerAcctNumberName);
-                kTrans2b.setWalletNo(accountNumber);
+                kTrans2b.setWalletNo(buyerPhoneForHistory != null && !buyerPhoneForHistory.trim().isEmpty() ? buyerPhoneForHistory : accountNumber);
                 kTrans2b.setReceiverName(sellerAcctNumberName);
                 kTrans2b.setSenderName(getRec.get().getFullName());
                 kTrans2b.setSentAmount(rqC.getFinalCHarges());
                 kTrans2b.setTheNarration("Fx Peer-Peer Transfer");
                 kTrans2b.setCurrencyCode(off.get(0).getCurrencyReceive().toString());
-
                 finWealthPaymentTransactionRepo.save(kTrans2b);
+                // publishCanonicalHistory(kTrans2b, phoneNumber, getRecCheSeller.get().getPhoneNumber(), phoneNumber, getRec.get().getFullName(), sellerAcctNumberName);
 
                 System.out.println("ABOUT TO PUBLISH TXN HISTORY txId=" + kTrans2b.getTransactionId()
                         + " walletNo=" + kTrans2b.getWalletNo()
                         + " paymentType=" + kTrans2b.getPaymentType()
                         + " amount=" + kTrans2b.getAmmount());
-
-                // transactionHistoryClientLocalT.publishFromTxn(kTrans2b);
                 //augument WalletTransactionsDetails
                 WalletTransactionsDetails getWalDeupdate = walletTransactionsDetailsRepo.findByCorrelationIdUpdated(rq.getOfferCorrelationId());
                 BigDecimal availableQuantity = getWalDeupdate.getAvailableQuantity();
@@ -836,7 +859,11 @@ public class OrderService {
             be.printStackTrace();
             return bad(res, be.getMessage(), 500);
         } */ catch (Exception ex) {
-            ex.printStackTrace();
+            logger.error("createOrderCaller failed offerCorrelationId={} amount={} authPresent={}",
+                    rq != null ? rq.getOfferCorrelationId() : null,
+                    rq != null ? rq.getAmount() : null,
+                    auth != null,
+                    ex);
             return bad(res, "An error occurred, please try again.", 500);
         }
     }
@@ -1017,26 +1044,31 @@ public class OrderService {
             throw new BusinessException("Buyer wallet credit failed");
         }
 
+        List<RegWalletInfo> sellerHistoryRecords = regWalletInfoRepository.findByWalletIdList(String.valueOf(sellerId));
+        String sellerPhoneForHistory = sellerHistoryRecords != null && !sellerHistoryRecords.isEmpty()
+                ? sellerHistoryRecords.get(0).getPhoneNumber() : null;
+        String buyerPhoneForHistory = getRecord != null && !getRecord.isEmpty()
+                ? getRecord.get(0).getPhoneNumber() : null;
+
         FinWealthPaymentTransaction kTrans2b = new FinWealthPaymentTransaction();
         kTrans2b.setAmmount(new BigDecimal(rqC.getFinalCHarges()));
         kTrans2b.setCreatedDate(Instant.now().plusSeconds(1));
         kTrans2b.setFees(new BigDecimal(rqC.getFees()));
         kTrans2b.setPaymentType("FxPeer Transfer");
-        kTrans2b.setReceiver(getBuyyAcctAcct);
-        kTrans2b.setSender(getSellerAccttAcct);
+        kTrans2b.setReceiver(buyerPhoneForHistory != null && !buyerPhoneForHistory.trim().isEmpty() ? buyerPhoneForHistory : getBuyyAcctAcct);
+        kTrans2b.setSender(sellerPhoneForHistory != null && !sellerPhoneForHistory.trim().isEmpty() ? sellerPhoneForHistory : getSellerAccttAcct);
         kTrans2b.setTransactionId(transactionId);
         kTrans2b.setSenderTransactionType("Withdrawal");
         kTrans2b.setReceiverTransactionType("Deposit");
         kTrans2b.setReceiverBankName(receiverAcctName);
-        kTrans2b.setWalletNo(getSellerAccttAcct);
+        kTrans2b.setWalletNo(sellerPhoneForHistory != null && !sellerPhoneForHistory.trim().isEmpty() ? sellerPhoneForHistory : getSellerAccttAcct);
         kTrans2b.setReceiverName(receiverAcctName);
         kTrans2b.setSenderName(senderName);
         kTrans2b.setSentAmount(rqC.getFinalCHarges());
         kTrans2b.setTheNarration("Fx Peer-Peer Transfer");
         kTrans2b.setCurrencyCode(off.get(0).getCurrencySell().toString());
         finWealthPaymentTransactionRepo.save(kTrans2b);
-
-        //  transactionHistoryClientLocalT.publishFromTxn(kTrans2b);
+        // publishCanonicalHistory(kTrans2b, sellerPhoneForHistory, buyerPhoneForHistory, sellerPhoneForHistory, senderName, receiverAcctName);
         Order ord = new Order();
         ord.setOfferId(off.get(0).getId());
         ord.setSellerUserId(off.get(0).getSellerUserId());

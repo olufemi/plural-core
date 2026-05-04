@@ -65,6 +65,7 @@ import com.finacial.wealth.api.fxpeer.exchange.model.BaseResponse;
 import com.finacial.wealth.api.fxpeer.exchange.model.CreditWalletCaller;
 import com.finacial.wealth.api.fxpeer.exchange.model.DebitWalletCaller;
 import com.finacial.wealth.api.fxpeer.exchange.model.ManageFeesConfigReq;
+import com.finacial.wealth.api.fxpeer.exchange.model.MarketReadinessRequest;
 import com.finacial.wealth.api.fxpeer.exchange.model.ValidateCountryCode;
 import com.finacial.wealth.api.fxpeer.exchange.model.WalletNo;
 import com.finacial.wealth.api.fxpeer.exchange.order.WalletInfoValiAcctBal;
@@ -91,6 +92,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -182,6 +184,57 @@ public class InvestmentOrderService {
         this.guardRepo = guardRepo;
         this.transactionHistoryClientLocalT = transactionHistoryClientLocalT;
 
+    }
+
+    private BaseResponse tryEnsureInvestmentMarketReady(String auth, RegWalletInfo walletInfo,
+            String phoneNumber, String currencyCode, String countryCode, String processId, String productReference) {
+        String marketCode = resolveMarketCode(countryCode, currencyCode);
+        if ((marketCode == null || marketCode.trim().isEmpty())
+                && (countryCode == null || countryCode.trim().isEmpty())) {
+            return null;
+        }
+        MarketReadinessRequest request = new MarketReadinessRequest();
+        request.setCustomerId(walletInfo.getCustomerId() != null && !walletInfo.getCustomerId().trim().isEmpty()
+                ? walletInfo.getCustomerId() : walletInfo.getWalletId());
+        request.setEmailAddress(walletInfo.getEmail());
+        request.setPhoneNumber(phoneNumber != null ? phoneNumber : walletInfo.getPhoneNumber());
+        request.setMarketCode(marketCode);
+        request.setCountryCode(countryCode);
+        request.setCurrencyCode(currencyCode);
+        request.setTriggerSource("FXPEER");
+        request.setProductType("INVESTMENT");
+        request.setProductReference(productReference);
+        request.setInitiatingService("fxpeer");
+        request.setCorrelationId(processId);
+        try {
+            return profilingProxies.ensureMarketReady(request);
+        } catch (Exception ex) {
+            log.warn("ensureMarketReady fallback triggered for investment processId={} marketCode={} currencyCode={} countryCode={} productReference={}",
+                    processId, marketCode, currencyCode, countryCode, productReference, ex);
+            return null;
+        }
+    }
+
+    private String resolveMarketCode(String countryCode, String currencyCode) {
+        if (countryCode == null || currencyCode == null) {
+            return null;
+        }
+        String normalizedCountry = countryCode.trim().toUpperCase(Locale.ROOT);
+        String normalizedCurrency = currencyCode.trim().toUpperCase(Locale.ROOT);
+        if ("NG".equals(normalizedCountry) && "NGN".equals(normalizedCurrency)) {
+            return "NG_RETAIL";
+        }
+        if ("CA".equals(normalizedCountry) && "CAD".equals(normalizedCurrency)) {
+            return "CA_RETAIL";
+        }
+        return null;
+    }
+
+    private boolean isTruthy(Object value) {
+        if (value instanceof Boolean) {
+            return (Boolean) value;
+        }
+        return value != null && "true".equalsIgnoreCase(String.valueOf(value));
     }
 
     private void publishCanonicalHistory(FinWealthPaymentTransaction source,
@@ -315,7 +368,8 @@ public class InvestmentOrderService {
             String email,
             String phoneNumber,
             BaseResponse feeConfig,
-            String processId
+            String processId,
+            String marketCountryCode
     ) {
         PreDebitInvestmentResult out = new PreDebitInvestmentResult();
         out.setSuccess(false);
@@ -350,21 +404,38 @@ public class InvestmentOrderService {
             BigDecimal finCharges = receiveAmount;
             String accountNumber = null;
             String walletId = null;
+            BaseResponse readinessResponse = null;
 
             if ("CAD".equalsIgnoreCase(rq.getCurrencyCode())) {
                 accountNumber = phoneNumber;
                 walletId = regOpt.get().getWalletId();
 
             } else {
-
-                // Resolve debit account (preserve override to phoneNumber)
-                List<AddAccountDetails> acctList = addAccountDetailsRepo.findByEmailAddressrData(email);
-                if (acctList == null || acctList.isEmpty()) {
-                    out.setError(new BaseResponse(404, "No linked accounts for user"));
-                    return out;
+                readinessResponse = tryEnsureInvestmentMarketReady(auth, reg, phoneNumber, rq.getCurrencyCode(),
+                        marketCountryCode, processId, rq.getIdempotencyKey());
+                if (readinessResponse != null && readinessResponse.getStatusCode() == 200) {
+                    Object active = readinessResponse.getData().get("active");
+                    Object readyAccountNumber = readinessResponse.getData().get("accountNumber");
+                    if (isTruthy(active) && readyAccountNumber != null) {
+                        accountNumber = String.valueOf(readyAccountNumber);
+                    }
                 }
-                accountNumber = acctList.get(0).getAccountNumber();
-                walletId = acctList.get(0).getWalletId();
+
+                if (accountNumber == null || accountNumber.isBlank()) {
+                    List<AddAccountDetails> acctList = addAccountDetailsRepo.findByEmailAddressrData(email);
+                    if (acctList == null || acctList.isEmpty()) {
+                        String message = readinessResponse != null && readinessResponse.getDescription() != null
+                                ? readinessResponse.getDescription() : "No linked accounts for user";
+                        int status = readinessResponse != null && readinessResponse.getStatusCode() != 0
+                                ? readinessResponse.getStatusCode() : 404;
+                        out.setError(new BaseResponse(status, message));
+                        return out;
+                    }
+                    accountNumber = acctList.get(0).getAccountNumber();
+                    walletId = acctList.get(0).getWalletId();
+                } else {
+                    walletId = regOpt.get().getWalletId();
+                }
             }
 
             if (accountNumber == null || accountNumber.isBlank()) {
@@ -600,7 +671,8 @@ public class InvestmentOrderService {
             pRe.setGrossDebitAmount(grossDebit);
             pRe.setIdempotencyKey(processId);
             pRe.setPhoneNumber(phoneNumber);
-            PreDebitInvestmentResult pre = debitAndAddToInvestmentWallet(pRe, auth, email, phoneNumber, mConfig, processId);
+            String marketCountryCode = valCode.getData() == null ? null : (String) valCode.getData().get("countryCode");
+            PreDebitInvestmentResult pre = debitAndAddToInvestmentWallet(pRe, auth, email, phoneNumber, mConfig, processId, marketCountryCode);
             System.out.println("[debitAndAddToInvestmentWallet response ::::::::::::::: " + pre);
 
             if (!pre.isSuccess()) {
@@ -746,6 +818,7 @@ public class InvestmentOrderService {
      */
     @Transactional
     @Scheduled(cron = "${fx.investment.run.approve.subscription.cron}", zone = "Africa/Lagos")
+    @SchedulerLock(name = "InvestmentOrderService.approvePendingSubscriptions", lockAtMostFor = "30m", lockAtLeastFor = "30s")
     public void approvePendingSubscriptions() {
 
         System.out.println("****** Investment Subscription Approval Job ******");
@@ -1614,7 +1687,8 @@ public class InvestmentOrderService {
             pRe.setGrossDebitAmount(grossDebit);
             pRe.setIdempotencyKey(processId);
             pRe.setPhoneNumber(phoneNumber);
-            PreDebitInvestmentResult pre = debitAndAddToInvestmentWallet(pRe, auth, email, phoneNumber, mConfig, processId);
+            String marketCountryCode = valCode.getData() == null ? null : (String) valCode.getData().get("countryCode");
+            PreDebitInvestmentResult pre = debitAndAddToInvestmentWallet(pRe, auth, email, phoneNumber, mConfig, processId, marketCountryCode);
             System.out.println("[debitAndAddToInvestmentWallet response ::::::::::::::: " + pre);
 
             if (!pre.isSuccess()) {

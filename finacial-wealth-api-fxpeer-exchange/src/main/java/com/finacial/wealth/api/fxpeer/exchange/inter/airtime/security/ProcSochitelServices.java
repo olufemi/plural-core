@@ -33,6 +33,7 @@ import com.finacial.wealth.api.fxpeer.exchange.model.GetProductsByCatId;
 import com.finacial.wealth.api.fxpeer.exchange.model.GetProductsByCountry;
 import com.finacial.wealth.api.fxpeer.exchange.model.InternationalProductCatMod;
 import com.finacial.wealth.api.fxpeer.exchange.model.ManageFeesConfigReq;
+import com.finacial.wealth.api.fxpeer.exchange.model.MarketReadinessRequest;
 import com.finacial.wealth.api.fxpeer.exchange.model.SochitelAccountLookupResponse;
 import com.finacial.wealth.api.fxpeer.exchange.model.ValidateAccount;
 
@@ -55,6 +56,7 @@ import java.security.MessageDigest;
 import java.security.PrivateKey;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -69,6 +71,8 @@ import org.springframework.core.io.Resource;
 import org.springframework.core.io.ResourceLoader;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StreamUtils;
 import org.springframework.web.util.UriUtils;
@@ -127,6 +131,7 @@ public class ProcSochitelServices {
     private final AppConfigRepo appConfigRepo;
     private final InternationalProductCatRepo internationalProductCatRepo;
     private final AirtimeRollbackService airtimeRollbackService;
+    private final AirtimeRollbackLogRepository airtimeRollbackLogRepository;
 
     public ProcSochitelServices(
             ProfilingProxies profilingProxies,
@@ -138,6 +143,7 @@ public class ProcSochitelServices {
             RegWalletInfoRepository regWalletInfoRepository,
             AppConfigRepo appConfigRepo, InternationalProductCatRepo internationalProductCatRepo,
             AirtimeRollbackService airtimeRollbackService,
+            AirtimeRollbackLogRepository airtimeRollbackLogRepository,
             TransactionHistoryClientLocalT transactionHistoryClientLocalT) {
 
         this.profilingProxies = profilingProxies;
@@ -150,6 +156,7 @@ public class ProcSochitelServices {
         this.appConfigRepo = appConfigRepo;
         this.internationalProductCatRepo = internationalProductCatRepo;
         this.airtimeRollbackService = airtimeRollbackService;
+        this.airtimeRollbackLogRepository = airtimeRollbackLogRepository;
         this.transactionHistoryClientLocalT = transactionHistoryClientLocalT;
     }
 
@@ -240,6 +247,58 @@ public class ProcSochitelServices {
         res.setStatusCode(statusCode);
         res.setDescription(msg);
         return new ResponseEntity<>(res, HttpStatus.OK);
+    }
+
+    private BaseResponse tryEnsureAirtimeMarketReady(String auth, RegWalletInfo walletInfo,
+            String phoneNumber, String currencyCode, String countryCode, String processId, ProcessTrnsactionReq rq) {
+        String marketCode = resolveMarketCode(countryCode, currencyCode);
+        if ((marketCode == null || marketCode.trim().isEmpty())
+                && (countryCode == null || countryCode.trim().isEmpty())) {
+            return null;
+        }
+        MarketReadinessRequest request = new MarketReadinessRequest();
+        request.setCustomerId(walletInfo.getCustomerId() != null && !walletInfo.getCustomerId().trim().isEmpty()
+                ? walletInfo.getCustomerId() : walletInfo.getWalletId());
+        request.setEmailAddress(walletInfo.getEmail());
+        request.setPhoneNumber(phoneNumber != null ? phoneNumber : walletInfo.getPhoneNumber());
+        request.setMarketCode(marketCode);
+        request.setCountryCode(countryCode);
+        request.setCurrencyCode(currencyCode);
+        request.setTriggerSource("FXPEER");
+        request.setProductType("AIRTIME");
+        request.setProductReference(processId);
+        request.setInitiatingService("fxpeer");
+        request.setCorrelationId(processId);
+        try {
+            return profilingProxies.ensureMarketReady(request);
+        } catch (Exception ex) {
+            log.warn("ensureMarketReady fallback triggered for airtime processId={} marketCode={} currencyCode={} countryCode={} operator={} product={}",
+                    processId, marketCode, currencyCode, countryCode,
+                    rq == null ? null : rq.getOperator(), rq == null ? null : rq.getProduct(), ex);
+            return null;
+        }
+    }
+
+    private String resolveMarketCode(String countryCode, String currencyCode) {
+        if (countryCode == null || currencyCode == null) {
+            return null;
+        }
+        String normalizedCountry = countryCode.trim().toUpperCase(Locale.ROOT);
+        String normalizedCurrency = currencyCode.trim().toUpperCase(Locale.ROOT);
+        if ("NG".equals(normalizedCountry) && "NGN".equals(normalizedCurrency)) {
+            return "NG_RETAIL";
+        }
+        if ("CA".equals(normalizedCountry) && "CAD".equals(normalizedCurrency)) {
+            return "CA_RETAIL";
+        }
+        return null;
+    }
+
+    private boolean isTruthy(Object value) {
+        if (value instanceof Boolean) {
+            return (Boolean) value;
+        }
+        return value != null && "true".equalsIgnoreCase(String.valueOf(value));
     }
 
     public ResponseEntity<ApiResponseModel> getAccountLookup(ValidateAccount rq, String auth) {
@@ -1047,7 +1106,8 @@ public class ProcSochitelServices {
             }
 
             // Pre-debit & internal legs
-            PreDebitResult pre = preDebitAndSettleAirtime(rq, auth, email, phoneNumber, mConfig, processId);
+            String marketCountryCode = valCode.getData() == null ? null : (String) valCode.getData().get("countryCode");
+            PreDebitResult pre = preDebitAndSettleAirtime(rq, auth, email, phoneNumber, mConfig, processId, marketCountryCode);
             System.out.println("[preDebitAndSettleAirtime ::::::::::::::: " + pre);
 
             if (!pre.isSuccess()) {
@@ -1125,13 +1185,15 @@ public class ProcSochitelServices {
                     try {
                         log.error("getStatus.getStatusCode() ::::::::::::::::::: ", getStatus.getStatusCode());
 
-                        if (getStatus.getStatusCode() != 200) {
-                            Map<String, Object> rb = rollbackPreDebitExact(pre, rq, auth, body);
+                        Map<String, Object> payload = new java.util.LinkedHashMap<>();
+                        if (shouldDeferRollbackToReconciliation(http, body, null, getStatus)) {
+                            payload.put("reconciliation", markRollbackForReconciliation(pre, rq, body));
+                        } else if (getStatus.getStatusCode() != 200) {
+                            payload.put("rollback", rollbackPreDebitExact(pre, rq, auth, body));
+                        }
 
-                            Map<String, Object> payload = new java.util.LinkedHashMap<>();
-                            payload.put("rollback", rb);
-
-                            resp.setData(payload);  // OK: single-arg, type Object
+                        if (!payload.isEmpty()) {
+                            resp.setData(payload);
                         }
                     } catch (Exception rbEx) {
                         log.error("Rollback failed", rbEx);
@@ -1145,13 +1207,15 @@ public class ProcSochitelServices {
                     resp.setDescription("Vending failed!");
                     resp.setOther(body.length() > 500 ? body.substring(0, 500) + "…" : body);
                     try {
-                        if (getStatus.getStatusCode() != 200) {
-                            Map<String, Object> rb = rollbackPreDebitExact(pre, rq, auth, body);
+                        Map<String, Object> payload = new java.util.LinkedHashMap<>();
+                        if (shouldDeferRollbackToReconciliation(http, body, null, getStatus)) {
+                            payload.put("reconciliation", markRollbackForReconciliation(pre, rq, body));
+                        } else if (getStatus.getStatusCode() != 200) {
+                            payload.put("rollback", rollbackPreDebitExact(pre, rq, auth, body));
+                        }
 
-                            Map<String, Object> payload = new java.util.LinkedHashMap<>();
-                            payload.put("rollback", rb);
-
-                            resp.setData(payload);  // OK: single-arg, type Object
+                        if (!payload.isEmpty()) {
+                            resp.setData(payload);
                         }
                     } catch (Exception rbEx) {
                         log.error("Rollback failed", rbEx);
@@ -1204,13 +1268,15 @@ public class ProcSochitelServices {
                     resp.setDescription("Vending failed: " + (errSummary != null ? (": " + errSummary) : ""));
                     resp.setOther(body);
                     try {
-                        if (getStatus.getStatusCode() != 200) {
-                            Map<String, Object> rb = rollbackPreDebitExact(pre, rq, auth, body);
+                        Map<String, Object> payload = new java.util.LinkedHashMap<>();
+                        if (shouldDeferRollbackToReconciliation(http, body, null, getStatus)) {
+                            payload.put("reconciliation", markRollbackForReconciliation(pre, rq, body));
+                        } else if (getStatus.getStatusCode() != 200) {
+                            payload.put("rollback", rollbackPreDebitExact(pre, rq, auth, body));
+                        }
 
-                            Map<String, Object> payload = new java.util.LinkedHashMap<>();
-                            payload.put("rollback", rb);
-
-                            resp.setData(payload);  // OK: single-arg, type Object
+                        if (!payload.isEmpty()) {
+                            resp.setData(payload);
                         }
                     } catch (Exception rbEx) {
                         log.error("Rollback failed", rbEx);
@@ -1315,7 +1381,8 @@ public class ProcSochitelServices {
             String email,
             String phoneNumber,
             BaseResponse feeConfig,
-            String processId
+            String processId,
+            String marketCountryCode
     ) {
         PreDebitResult out = new PreDebitResult();
         out.setSuccess(false);
@@ -1349,18 +1416,32 @@ public class ProcSochitelServices {
             BigDecimal receiveAmount = new BigDecimal(rq.getAmount().trim());
             BigDecimal finCharges = receiveAmount.add(fees);
             String accountNumber = null;
+            BaseResponse readinessResponse = null;
 
             if ("CAD".equalsIgnoreCase(rq.getCurrencyCode())) {
                 accountNumber = phoneNumber;
             } else {
-
-                // Resolve debit account (preserve override to phoneNumber)
-                List<AddAccountDetails> acctList = addAccountDetailsRepo.findByEmailAddressrData(email);
-                if (acctList == null || acctList.isEmpty()) {
-                    out.setError(new BaseResponse(404, "No linked accounts for user"));
-                    return out;
+                readinessResponse = tryEnsureAirtimeMarketReady(auth, reg, phoneNumber, rq.getCurrencyCode(), marketCountryCode, processId, rq);
+                if (readinessResponse != null && readinessResponse.getStatusCode() == 200) {
+                    Object active = readinessResponse.getData().get("active");
+                    Object readyAccountNumber = readinessResponse.getData().get("accountNumber");
+                    if (isTruthy(active) && readyAccountNumber != null) {
+                        accountNumber = String.valueOf(readyAccountNumber);
+                    }
                 }
-                accountNumber = acctList.get(0).getAccountNumber();
+
+                if (accountNumber == null || accountNumber.isBlank()) {
+                    List<AddAccountDetails> acctList = addAccountDetailsRepo.findByEmailAddressrData(email);
+                    if (acctList == null || acctList.isEmpty()) {
+                        String message = readinessResponse != null && readinessResponse.getDescription() != null
+                                ? readinessResponse.getDescription() : "No linked accounts for user";
+                        int status = readinessResponse != null && readinessResponse.getStatusCode() != 0
+                                ? readinessResponse.getStatusCode() : 404;
+                        out.setError(new BaseResponse(status, message));
+                        return out;
+                    }
+                    accountNumber = acctList.get(0).getAccountNumber();
+                }
             }
             /*for (AddAccountDetails acc : acctList) {
 
@@ -1492,6 +1573,76 @@ public class ProcSochitelServices {
         } catch (Exception e) {
             out.setError(new BaseResponse(500, "Pre-debit/settlement failed: " + e.getClass().getSimpleName()));
             return out;
+        }
+    }
+
+    private Map<String, Object> markRollbackForReconciliation(PreDebitResult pre, ProcessTrnsactionReq rq, String providerError) {
+        return airtimeRollbackService.deferRollbackForReconciliation(pre, rq, providerError);
+    }
+
+    private boolean shouldDeferRollbackToReconciliation(int http, String body, String errSummary, ApiResponseModel getStatus) {
+        if (getStatus != null && getStatus.getStatusCode() == 200) {
+            return true;
+        }
+        if (http >= 500 || body == null || body.isBlank() || looksLikeHtml(body)) {
+            return true;
+        }
+        String combined = ((errSummary == null ? "" : errSummary) + " " + (body == null ? "" : body)).toLowerCase(Locale.ROOT);
+        return combined.contains("pending")
+                || combined.contains("processing")
+                || combined.contains("in progress")
+                || combined.contains("queued")
+                || combined.contains("timeout")
+                || combined.contains("timed out")
+                || combined.contains("temporar")
+                || combined.contains("unavailable")
+                || combined.contains("retry")
+                || combined.contains("network")
+                || combined.contains("transport")
+                || combined.contains("callback");
+    }
+
+    private boolean isProviderStatusStillPending(ApiResponseModel response) {
+        if (response == null) {
+            return true;
+        }
+        String description = response.getDescription() == null ? "" : response.getDescription().toLowerCase(Locale.ROOT);
+        return description.contains("pending")
+                || description.contains("processing")
+                || description.contains("in progress")
+                || description.contains("queued")
+                || description.contains("timeout")
+                || description.contains("temporar")
+                || description.contains("retry")
+                || description.contains("network");
+    }
+
+    @Scheduled(cron = "${fx.airtime.reconciliation.retry.cron:0 */2 * * * *}", zone = "${fx.timezone:Africa/Lagos}")
+    @SchedulerLock(name = "ProcSochitelServices.reconcileDeferredRollbacks", lockAtMostFor = "10m", lockAtLeastFor = "30s")
+    public void reconcileDeferredRollbacks() {
+        List<AirtimeRollbackLog> deferredLogs = airtimeRollbackLogRepository.findByStatus("RECON_REQUIRED");
+        if (deferredLogs == null || deferredLogs.isEmpty()) {
+            return;
+        }
+
+        Map<String, List<AirtimeRollbackLog>> grouped = deferredLogs.stream()
+                .collect(Collectors.groupingBy(AirtimeRollbackLog::getProcessId));
+
+        for (String processId : grouped.keySet()) {
+            try {
+                ApiResponseModel status = getTransactionStatus("user", processId);
+                String note = status == null ? "Provider requery returned no response" : status.getDescription();
+                if (status != null && status.getStatusCode() == 200) {
+                    airtimeRollbackService.resolveDeferredCase(processId, "Provider requery confirmed success; rollback not required");
+                } else if (isProviderStatusStillPending(status)) {
+                    airtimeRollbackService.keepCaseInReconciliation(processId, note);
+                } else {
+                    airtimeRollbackService.activateDeferredRollback(processId, null, note);
+                }
+            } catch (Exception ex) {
+                airtimeRollbackService.keepCaseInReconciliation(processId, ex.getMessage());
+                log.error("Deferred airtime reconciliation failed for processId={}", processId, ex);
+            }
         }
     }
 

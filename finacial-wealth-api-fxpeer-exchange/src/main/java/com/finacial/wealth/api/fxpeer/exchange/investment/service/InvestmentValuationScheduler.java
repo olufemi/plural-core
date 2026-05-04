@@ -36,6 +36,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Value;
@@ -85,6 +86,7 @@ public class InvestmentValuationScheduler {
     //@Scheduled(cron = "0 55 23 * * *", zone = "Africa/Lagos")
     @jakarta.transaction.Transactional
     @Scheduled(cron = "${fx.investment.run.valuations.snap.shots.cron}", zone = "Africa/Lagos")
+    @SchedulerLock(name = "InvestmentValuationScheduler.snapshotDailyValuations", lockAtMostFor = "30m", lockAtLeastFor = "30s")
     public void snapshotDailyValuations() {
 
         System.out.println(" ****** Investment Checking and Processing SnapshotDailyValuations >>>>>>>>>>>>> *********** ");
@@ -285,6 +287,7 @@ public class InvestmentValuationScheduler {
     }
 
     @Scheduled(cron = "0 10 0 * * *", zone = "Africa/Lagos")
+    @SchedulerLock(name = "InvestmentValuationScheduler.runDailyCapitalizationSweep", lockAtMostFor = "30m", lockAtLeastFor = "30s")
     @Transactional
     public void runDailyCapitalizationSweep() {
 

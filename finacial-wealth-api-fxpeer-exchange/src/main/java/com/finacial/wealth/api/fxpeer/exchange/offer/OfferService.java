@@ -28,6 +28,7 @@ import com.finacial.wealth.api.fxpeer.exchange.model.BaseResponse;
 import com.finacial.wealth.api.fxpeer.exchange.model.CreditWalletCaller;
 import com.finacial.wealth.api.fxpeer.exchange.model.DebitWalletCaller;
 import com.finacial.wealth.api.fxpeer.exchange.model.ManageFeesConfigReq;
+import com.finacial.wealth.api.fxpeer.exchange.model.MarketReadinessRequest;
 import com.finacial.wealth.api.fxpeer.exchange.model.WalletNo;
 import com.finacial.wealth.api.fxpeer.exchange.util.GlobalMethods;
 import com.finacial.wealth.api.fxpeer.exchange.util.UttilityMethods;
@@ -64,6 +65,7 @@ import javax.crypto.NoSuchPaddingException;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.scheduling.annotation.EnableScheduling;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.springframework.scheduling.annotation.Scheduled;
 
 @Service
@@ -136,6 +138,82 @@ public class OfferService {
         history.setTheNarration(source.getTheNarration());
         history.setCurrencyCode(source.getCurrencyCode());
         transactionHistoryClientLocalT.publishFromTxn(history);
+    }
+
+    private String ensureAccountNumberForMarket(String auth, RegWalletInfo walletInfo, AddAccountDetails accountDetails,
+            String requiredCurrencyCode, String correlationId, ApiResponseModel res) {
+        BaseResponse readinessResponse = tryEnsureMarketReady(walletInfo, requiredCurrencyCode,
+                accountDetails.getCountryCode(), correlationId);
+        if (readinessResponse != null && readinessResponse.getStatusCode() == 200) {
+            Object active = readinessResponse.getData().get("active");
+            Object readyAccountNumber = readinessResponse.getData().get("accountNumber");
+            if (isTruthy(active) && readyAccountNumber != null) {
+                return String.valueOf(readyAccountNumber);
+            }
+        }
+
+        AddAccountObj fallbackRequest = new AddAccountObj();
+        fallbackRequest.setCountry(accountDetails.getCountryName());
+        fallbackRequest.setCountryCode(accountDetails.getCountryCode());
+        fallbackRequest.setWalletId(walletInfo.getWalletId());
+        BaseResponse fallbackResponse = profilingProxies.addOtherAccount(fallbackRequest, auth);
+        if (fallbackResponse.getStatusCode() != 200) {
+            res.setStatusCode(fallbackResponse.getStatusCode());
+            res.setDescription(fallbackResponse.getDescription());
+            return null;
+        }
+        Object accountNumber = fallbackResponse.getData().get("accountNumber");
+        return accountNumber == null ? null : String.valueOf(accountNumber);
+    }
+
+    private BaseResponse tryEnsureMarketReady(RegWalletInfo walletInfo, String currencyCode,
+            String countryCode, String correlationId) {
+        String marketCode = resolveMarketCode(countryCode, currencyCode);
+        if ((marketCode == null || marketCode.trim().isEmpty())
+                && (countryCode == null || countryCode.trim().isEmpty())) {
+            return null;
+        }
+        MarketReadinessRequest request = new MarketReadinessRequest();
+        request.setCustomerId(walletInfo.getCustomerId() != null && !walletInfo.getCustomerId().trim().isEmpty()
+                ? walletInfo.getCustomerId() : walletInfo.getWalletId());
+        request.setEmailAddress(walletInfo.getEmail());
+        request.setPhoneNumber(walletInfo.getPhoneNumber());
+        request.setMarketCode(marketCode);
+        request.setCountryCode(countryCode);
+        request.setCurrencyCode(currencyCode);
+        request.setTriggerSource("FXPEER");
+        request.setProductType("OFFER");
+        request.setProductReference(correlationId);
+        request.setInitiatingService("fxpeer");
+        request.setCorrelationId(correlationId);
+        try {
+            return profilingProxies.ensureMarketReady(request);
+        } catch (Exception ex) {
+            // keep backward-compatible offer creation flow on profiling fallback
+            return null;
+        }
+    }
+
+    private String resolveMarketCode(String countryCode, String currencyCode) {
+        if (countryCode == null || currencyCode == null) {
+            return null;
+        }
+        String normalizedCountry = countryCode.trim().toUpperCase(Locale.ENGLISH);
+        String normalizedCurrency = currencyCode.trim().toUpperCase(Locale.ENGLISH);
+        if ("NG".equals(normalizedCountry) && "NGN".equals(normalizedCurrency)) {
+            return "NG_RETAIL";
+        }
+        if ("CA".equals(normalizedCountry) && "CAD".equals(normalizedCurrency)) {
+            return "CA_RETAIL";
+        }
+        return null;
+    }
+
+    private boolean isTruthy(Object value) {
+        if (value instanceof Boolean) {
+            return (Boolean) value;
+        }
+        return value != null && "true".equalsIgnoreCase(String.valueOf(value));
     }
 
     @Transactional(readOnly = true)
@@ -554,27 +632,21 @@ public class OfferService {
 
                 if (!wallCurrencyCode.equals(rq.getCurrencyReceive())) {
                     if (!"CAD".equals(rq.getCurrencyReceive())) {
-                        //create account
-                        AddAccountObj seObj = new AddAccountObj();
-                        seObj.setCountry(getWa.getCountryName());
-                        seObj.setCountryCode(getWa.getCountryCode());
-                        seObj.setWalletId(getRec.get().getWalletId());
-                        bRes = profilingProxies.addOtherAccount(seObj, auth);
-                        if (bRes.getStatusCode() != 200) {
-                            return bad(res, bRes.getDescription(), bRes.getStatusCode());
+                        String preparedAccountNumber = ensureAccountNumberForMarket(auth, getRec.get(), getWa,
+                                rq.getCurrencyReceive(), rq.getProcessId(), res);
+                        if (preparedAccountNumber == null) {
+                            return bad(res, res.getDescription() == null ? "Unable to prepare market account" : res.getDescription(),
+                                    res.getStatusCode() == 0 ? 400 : res.getStatusCode());
                         }
                     }
                 }
                 if (!wallCurrencyCode.equals(rq.getCurrencySell())) {
                     if (!"CAD".equals(rq.getCurrencySell())) {
-                        //create account
-                        AddAccountObj seObj = new AddAccountObj();
-                        seObj.setCountry(getWa.getCountryName());
-                        seObj.setCountryCode(getWa.getCountryCode());
-                        seObj.setWalletId(getRec.get().getWalletId());
-                        bRes = profilingProxies.addOtherAccount(seObj, auth);
-                        if (bRes.getStatusCode() != 200) {
-                            return bad(res, bRes.getDescription(), bRes.getStatusCode());
+                        String preparedAccountNumber = ensureAccountNumberForMarket(auth, getRec.get(), getWa,
+                                rq.getCurrencySell(), rq.getProcessId(), res);
+                        if (preparedAccountNumber == null) {
+                            return bad(res, res.getDescription() == null ? "Unable to prepare market account" : res.getDescription(),
+                                    res.getStatusCode() == 0 ? 400 : res.getStatusCode());
                         }
                     }
                 }
@@ -946,6 +1018,7 @@ public class OfferService {
      */
     //@Scheduled(cron = "0 */5 * * * *", zone = "Africa/Lagos")
     @Scheduled(cron = "${fx.trade.expired.listings.cron}")
+    @SchedulerLock(name = "OfferService.expireDueOffers", lockAtMostFor = "10m", lockAtLeastFor = "30s")
     @Transactional
     public void expireDueOffers() throws NoSuchAlgorithmException,
             NoSuchPaddingException, InvalidKeyException,

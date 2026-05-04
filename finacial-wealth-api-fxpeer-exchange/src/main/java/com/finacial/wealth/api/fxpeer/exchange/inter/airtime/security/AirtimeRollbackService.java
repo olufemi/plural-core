@@ -34,13 +34,14 @@ public class AirtimeRollbackService {
     private static final String STATUS_PENDING = "PENDING";
     private static final String STATUS_FAILED = "FAILED";
     private static final String STATUS_SUCCESS = "SUCCESS";
+    private static final String STATUS_RECON_REQUIRED = "RECON_REQUIRED";
     private static final String ACTION_DEBIT = "DEBIT";
     private static final String ACTION_CREDIT = "CREDIT";
     private static final String LEG_REVERSE_GL_CREDIT = "reverseGLCredit";
     private static final String LEG_REVERSE_SELLER_CREDIT = "reverseSellerCredit";
     private static final String LEG_REVERSE_GL_DEBIT = "reverseGLDebit";
     private static final String LEG_REVERSE_BUYER_DEBIT = "reverseBuyerDebit";
-    private static final List<String> ACTIVE_STATUSES = Arrays.asList(STATUS_PENDING, STATUS_FAILED, STATUS_SUCCESS);
+    private static final List<String> ACTIVE_STATUSES = Arrays.asList(STATUS_PENDING, STATUS_FAILED, STATUS_SUCCESS, STATUS_RECON_REQUIRED);
     private static final List<String> RETRYABLE_STATUSES = Arrays.asList(STATUS_PENDING, STATUS_FAILED);
 
     private final AirtimeRollbackLogRepository rollbackLogRepository;
@@ -76,6 +77,73 @@ public class AirtimeRollbackService {
         return response;
     }
 
+    public Map<String, Object> deferRollbackForReconciliation(PreDebitResult pre, ProcessTrnsactionReq rq, String providerError) {
+        Map<String, Object> response = new HashMap<>();
+        response.put("rollbackDeferred", true);
+        List<AirtimeRollbackLog> logs = upsertRollbackLegs(pre, rq, providerError);
+        Instant now = Instant.now();
+        for (AirtimeRollbackLog logItem : logs) {
+            if (!STATUS_SUCCESS.equals(logItem.getStatus())) {
+                logItem.setStatus(STATUS_RECON_REQUIRED);
+                logItem.setCompletedAt(null);
+                logItem.setLastError(providerError == null || providerError.isBlank()
+                        ? "Deferred for reconciliation"
+                        : "Deferred for reconciliation: " + providerError);
+                logItem.setLastModifiedDate(now);
+                rollbackLogRepository.save(logItem);
+            }
+        }
+        response.put("processId", pre.getProcessId());
+        response.put("status", deriveOverallStatus(rollbackLogRepository.findByProcessIdOrderByIdAsc(pre.getProcessId())));
+        return response;
+    }
+
+    public void resolveDeferredCase(String processId, String note) {
+        Instant now = Instant.now();
+        List<AirtimeRollbackLog> logs = rollbackLogRepository.findByProcessIdOrderByIdAsc(processId);
+        for (AirtimeRollbackLog logItem : logs) {
+            if (!STATUS_SUCCESS.equals(logItem.getStatus())) {
+                logItem.setStatus(STATUS_SUCCESS);
+                logItem.setCompletedAt(now);
+                logItem.setLastError(note);
+                logItem.setLastResponseCode(200);
+                logItem.setLastModifiedDate(now);
+                rollbackLogRepository.save(logItem);
+            }
+        }
+    }
+
+    public void keepCaseInReconciliation(String processId, String note) {
+        Instant now = Instant.now();
+        List<AirtimeRollbackLog> logs = rollbackLogRepository.findByProcessIdOrderByIdAsc(processId);
+        for (AirtimeRollbackLog logItem : logs) {
+            if (STATUS_RECON_REQUIRED.equals(logItem.getStatus())) {
+                logItem.setRetryCount(logItem.getRetryCount() + 1);
+                logItem.setLastError(note);
+                logItem.setLastModifiedDate(now);
+                rollbackLogRepository.save(logItem);
+            }
+        }
+    }
+
+    public void activateDeferredRollback(String processId, String auth, String note) {
+        String authToUse = (auth == null || auth.isBlank()) ? (schedulerAuthorization == null ? "" : schedulerAuthorization) : auth;
+        List<AirtimeRollbackLog> logs = rollbackLogRepository.findByProcessIdOrderByIdAsc(processId);
+        for (AirtimeRollbackLog logItem : logs) {
+            if (STATUS_RECON_REQUIRED.equals(logItem.getStatus())) {
+                logItem.setStatus(STATUS_PENDING);
+                logItem.setLastError(note);
+                logItem.setLastModifiedDate(Instant.now());
+                rollbackLogRepository.save(logItem);
+            }
+        }
+        for (AirtimeRollbackLog logItem : rollbackLogRepository.findByProcessIdOrderByIdAsc(processId)) {
+            if (RETRYABLE_STATUSES.contains(logItem.getStatus())) {
+                executeRollbackLeg(logItem, authToUse);
+            }
+        }
+    }
+
     @Scheduled(cron = "${fx.airtime.rollback.retry.cron:0 */2 * * * *}", zone = "${fx.timezone:Africa/Lagos}")
     @SchedulerLock(name = "AirtimeRollbackService.retryPendingRollbacks", lockAtMostFor = "10m", lockAtLeastFor = "30s")
     public void retryPendingRollbacks() {
@@ -94,12 +162,14 @@ public class AirtimeRollbackService {
         long success = grouped.stream().filter(m -> STATUS_SUCCESS.equals(m.get("status"))).count();
         long pending = grouped.stream().filter(m -> STATUS_PENDING.equals(m.get("status"))).count();
         long failed = grouped.stream().filter(m -> STATUS_FAILED.equals(m.get("status"))).count();
+        long reconRequired = grouped.stream().filter(m -> STATUS_RECON_REQUIRED.equals(m.get("status"))).count();
 
         Map<String, Object> summary = new LinkedHashMap<>();
         summary.put("totalCount", grouped.size());
         summary.put("successfulCount", success);
         summary.put("pendingCount", pending);
         summary.put("failedCount", failed);
+        summary.put("reconRequiredCount", reconRequired);
 
         ApiResponseModel response = new ApiResponseModel();
         response.setStatusCode(200);
@@ -128,6 +198,12 @@ public class AirtimeRollbackService {
         }
 
         for (AirtimeRollbackLog logItem : logs) {
+            if (STATUS_RECON_REQUIRED.equals(logItem.getStatus())) {
+                logItem.setStatus(STATUS_PENDING);
+                logItem.setLastError("Manual retry triggered from reconciliation hold");
+                logItem.setLastModifiedDate(Instant.now());
+                rollbackLogRepository.save(logItem);
+            }
             if (!RETRYABLE_STATUSES.contains(logItem.getStatus())) {
                 continue;
             }
@@ -219,6 +295,9 @@ public class AirtimeRollbackService {
 
         if (statuses.contains(STATUS_PENDING)) {
             return STATUS_PENDING;
+        }
+        if (statuses.contains(STATUS_RECON_REQUIRED)) {
+            return STATUS_RECON_REQUIRED;
         }
         if (statuses.contains(STATUS_FAILED)) {
             return STATUS_FAILED;

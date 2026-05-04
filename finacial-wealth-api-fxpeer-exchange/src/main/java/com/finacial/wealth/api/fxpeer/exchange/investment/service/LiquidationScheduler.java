@@ -6,6 +6,7 @@ package com.finacial.wealth.api.fxpeer.exchange.investment.service;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -25,6 +26,7 @@ public class LiquidationScheduler {
     }
 
     @Scheduled(cron = "${liquidation.scheduler.cron:0 */5 * * * *}")
+    @SchedulerLock(name = "LiquidationScheduler.runLiquidationJob", lockAtMostFor = "15m", lockAtLeastFor = "30s")
     public void runLiquidationJob() {
         try {
             log.info("Running liquidation batch job...");

@@ -11,4 +11,6 @@ public interface AirtimeRollbackLogRepository extends JpaRepository<AirtimeRollb
     List<AirtimeRollbackLog> findByProcessIdOrderByIdAsc(String processId);
 
     List<AirtimeRollbackLog> findByStatusIn(Collection<String> statuses);
+
+    List<AirtimeRollbackLog> findByStatus(String status);
 }

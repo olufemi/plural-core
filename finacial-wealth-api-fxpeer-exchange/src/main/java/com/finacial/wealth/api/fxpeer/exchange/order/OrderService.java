@@ -30,6 +30,7 @@ import com.finacial.wealth.api.fxpeer.exchange.model.BaseResponse;
 import com.finacial.wealth.api.fxpeer.exchange.model.CreditWalletCaller;
 import com.finacial.wealth.api.fxpeer.exchange.model.DebitWalletCaller;
 import com.finacial.wealth.api.fxpeer.exchange.model.ManageFeesConfigReq;
+import com.finacial.wealth.api.fxpeer.exchange.model.MarketReadinessRequest;
 import com.finacial.wealth.api.fxpeer.exchange.model.WalletNo;
 import com.finacial.wealth.api.fxpeer.exchange.offer.CreateOfferCaller;
 import com.finacial.wealth.api.fxpeer.exchange.offer.Offer;
@@ -119,6 +120,82 @@ public class OrderService {
         return new ResponseEntity<>(res, HttpStatus.OK);
 
         // return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(res);
+    }
+
+    private String ensureAccountNumberForMarket(String auth, RegWalletInfo walletInfo, AddAccountDetails accountDetails,
+            String requiredCurrencyCode, String fallbackPhoneNumber, String correlationId, ApiResponseModel res) {
+        BaseResponse readinessResponse = tryEnsureMarketReady(walletInfo, accountDetails, requiredCurrencyCode,
+                fallbackPhoneNumber, correlationId);
+        if (readinessResponse != null && readinessResponse.getStatusCode() == 200) {
+            Object active = readinessResponse.getData().get("active");
+            Object readyAccountNumber = readinessResponse.getData().get("accountNumber");
+            if (isTruthy(active) && readyAccountNumber != null) {
+                return String.valueOf(readyAccountNumber);
+            }
+        }
+
+        AddAccountObj fallbackRequest = new AddAccountObj();
+        fallbackRequest.setCountry(accountDetails.getCountryName());
+        fallbackRequest.setCountryCode(accountDetails.getCountryCode());
+        fallbackRequest.setWalletId(walletInfo.getWalletId());
+        BaseResponse fallbackResponse = profilingProxies.addOtherAccount(fallbackRequest, auth);
+        if (fallbackResponse.getStatusCode() != 200) {
+            res.setStatusCode(fallbackResponse.getStatusCode());
+            res.setDescription(fallbackResponse.getDescription());
+            return null;
+        }
+        Object accountNumber = fallbackResponse.getData().get("accountNumber");
+        return accountNumber == null ? null : String.valueOf(accountNumber);
+    }
+
+    private BaseResponse tryEnsureMarketReady(RegWalletInfo walletInfo, AddAccountDetails accountDetails,
+            String requiredCurrencyCode, String fallbackPhoneNumber, String correlationId) {
+        String marketCode = resolveMarketCode(accountDetails.getCountryCode(), requiredCurrencyCode);
+        if (marketCode == null) {
+            return null;
+        }
+        MarketReadinessRequest request = new MarketReadinessRequest();
+        request.setCustomerId(walletInfo.getCustomerId() != null && !walletInfo.getCustomerId().trim().isEmpty()
+                ? walletInfo.getCustomerId() : walletInfo.getWalletId());
+        request.setEmailAddress(walletInfo.getEmail());
+        request.setPhoneNumber(fallbackPhoneNumber != null ? fallbackPhoneNumber : walletInfo.getPhoneNumber());
+        request.setMarketCode(marketCode);
+        request.setCountryCode(accountDetails.getCountryCode());
+        request.setCurrencyCode(requiredCurrencyCode);
+        request.setTriggerSource("FXPEER");
+        request.setProductType("OFFER");
+        request.setProductReference(correlationId);
+        request.setInitiatingService("fxpeer");
+        request.setCorrelationId(correlationId);
+        try {
+            return profilingProxies.ensureMarketReady(request);
+        } catch (Exception ex) {
+            logger.warn("ensureMarketReady fallback triggered for marketCode={} currencyCode={} countryCode={}",
+                    marketCode, requiredCurrencyCode, accountDetails.getCountryCode(), ex);
+            return null;
+        }
+    }
+
+    private String resolveMarketCode(String countryCode, String currencyCode) {
+        if (countryCode == null || currencyCode == null) {
+            return null;
+        }
+        String normalizedCountry = countryCode.trim().toUpperCase();
+        String normalizedCurrency = currencyCode.trim().toUpperCase();
+        if ("NG".equals(normalizedCountry) && "NGN".equals(normalizedCurrency)) {
+            return "NG_RETAIL";
+        }
+        if ("CA".equals(normalizedCountry) && "CAD".equals(normalizedCurrency)) {
+            return "CA_RETAIL";
+        }
+        return null;
+    }
+
+    private boolean isTruthy(Object value) {
+        if (value instanceof Boolean) {
+            return (Boolean) value;
+        }
+        return value != null && "true".equalsIgnoreCase(String.valueOf(value));
     }
 
     private void publishCanonicalHistory(FinWealthPaymentTransaction source,
@@ -374,16 +451,12 @@ public class OrderService {
                     if (!"CAD".equals(off.get(0).getCurrencyReceive().toString())) {
                         System.out.println("entered second if::::::::::::::::  %S  ");
                         //create account
-                        AddAccountObj seObj = new AddAccountObj();
-                        seObj.setCountry(getWa.getCountryName());
-                        seObj.setCountryCode(getWa.getCountryCode());
-                        seObj.setWalletId(getRec.get().getWalletId());
-                        bRes = profilingProxies.addOtherAccount(seObj, auth);
-                        if (bRes.getStatusCode() != 200) {
-                            return bad(res, bRes.getDescription(), bRes.getStatusCode());
+                        accountNumber = ensureAccountNumberForMarket(auth, getRec.get(), getWa,
+                                off.get(0).getCurrencyReceive().toString(), phoneNumber, rq.getOfferCorrelationId(), res);
+                        if (accountNumber == null) {
+                            return bad(res, res.getDescription() == null ? "Unable to prepare market account" : res.getDescription(),
+                                    res.getStatusCode() == 0 ? 400 : res.getStatusCode());
                         }
-                        accountNumber = (String) bRes.getData()
-                                .get("accountNumber");
                     } else {
 
                         accountNumber = phoneNumber;
@@ -401,17 +474,12 @@ public class OrderService {
                     if (!"CAD".equals(off.get(0).getCurrencySell().toString())) {
                         System.out.println("entered first if::::::::::::::::  %S  ");
                         //create account
-                        AddAccountObj seObj = new AddAccountObj();
-                        seObj.setCountry(getWa.getCountryName());
-                        seObj.setCountryCode(getWa.getCountryCode());
-                        seObj.setWalletId(getRec.get().getWalletId());
-                        bRes = profilingProxies.addOtherAccount(seObj, auth);
-
-                        if (bRes.getStatusCode() != 200) {
-                            return bad(res, bRes.getDescription(), bRes.getStatusCode());
+                        accountNumber = ensureAccountNumberForMarket(auth, getRec.get(), getWa,
+                                off.get(0).getCurrencySell().toString(), phoneNumber, rq.getOfferCorrelationId(), res);
+                        if (accountNumber == null) {
+                            return bad(res, res.getDescription() == null ? "Unable to prepare market account" : res.getDescription(),
+                                    res.getStatusCode() == 0 ? 400 : res.getStatusCode());
                         }
-                        accountNumber = (String) bRes.getData()
-                                .get("accountNumber");
                     }
                 }
 

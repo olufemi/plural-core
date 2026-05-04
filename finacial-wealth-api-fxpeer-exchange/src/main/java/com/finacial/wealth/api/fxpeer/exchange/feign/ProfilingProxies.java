@@ -7,6 +7,7 @@ package com.finacial.wealth.api.fxpeer.exchange.feign;
 import com.finacial.wealth.api.fxpeer.exchange.model.AddAccountObj;
 import com.finacial.wealth.api.fxpeer.exchange.model.ApiResponseModel;
 import com.finacial.wealth.api.fxpeer.exchange.model.BaseResponse;
+import com.finacial.wealth.api.fxpeer.exchange.model.MarketReadinessRequest;
 import com.finacial.wealth.api.fxpeer.exchange.model.ValidateCountryCode;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -26,5 +27,8 @@ public interface ProfilingProxies {
 
     @RequestMapping(value = "/countries/validate/country-code", consumes = "application/json", method = RequestMethod.POST)
     public BaseResponse validateCountryCode(@RequestBody ValidateCountryCode rq, @RequestHeader("Authorization") String authorization);
+
+    @RequestMapping(value = "/walletmgt/markets/ensure-ready", consumes = "application/json", method = RequestMethod.POST)
+    public BaseResponse ensureMarketReady(@RequestBody MarketReadinessRequest rq);
 
 }

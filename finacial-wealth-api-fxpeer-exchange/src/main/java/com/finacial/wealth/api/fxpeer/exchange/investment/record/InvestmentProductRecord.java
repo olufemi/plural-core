@@ -49,6 +49,8 @@ public class InvestmentProductRecord {
 
     private boolean active = true;
 
+    private String enableProduct;
+
     private String partnerProductCode;   // identifier known by partner
 
     private BigDecimal percentageCurrValue;

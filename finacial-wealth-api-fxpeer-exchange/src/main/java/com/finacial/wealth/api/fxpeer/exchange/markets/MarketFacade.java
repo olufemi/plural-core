@@ -46,7 +46,7 @@ public class MarketFacade {
                 .collect(Collectors.toMap(Function.identity(), ratings::sellerStats));
 
         return p.map(o -> new OfferView(
-                o.getId(), o.getSellerUserId(), o.getCurrencySell(), o.getCurrencyReceive(),
+                o.getId(), o.getCorrelationId(), o.getSellerUserId(), o.getCurrencySell(), o.getCurrencyReceive(),
                 o.getRate(), o.getQtyAvailable(), o.getQtyTotal(),
                 statsBySeller.get(o.getSellerUserId())
         ));

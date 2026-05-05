@@ -11,6 +11,7 @@ package com.finacial.wealth.api.fxpeer.exchange.config;
 import com.finacial.wealth.api.fxpeer.exchange.model.ApiResponseModel;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MissingRequestHeaderException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -19,12 +20,14 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 @RestControllerAdvice
 public class GlobalApiErrorHandler {
 
+    private static final String FEATURED_CONFIG_GUIDE =
+            "featureKey is required; featureGroup must be FX or INVESTMENT; strategy is required; manualTargetId is required only when strategy = ADMIN_SELECTED.";
+
     @ExceptionHandler(MissingRequestHeaderException.class)
     public ResponseEntity<ApiResponseModel> onMissingHeader(MissingRequestHeaderException ex) {
         ApiResponseModel resp = new ApiResponseModel();
 
         resp.setStatusCode(400);
-        resp.setDescription("Missing required header: " + ex.getHeaderName());
         resp.setDescription("Provide the '" + ex.getHeaderName() + "' header.");
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(resp);
     }
@@ -34,8 +37,16 @@ public class GlobalApiErrorHandler {
         ApiResponseModel resp = new ApiResponseModel();
 
         resp.setStatusCode(400);
-        resp.setDescription("Validation error");
-        resp.setDescription(ex.getBindingResult().toString());
+        resp.setDescription(FEATURED_CONFIG_GUIDE);
+        return ResponseEntity.badRequest().body(resp);
+    }
+
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ApiResponseModel> onUnreadableBody(HttpMessageNotReadableException ex) {
+        ApiResponseModel resp = new ApiResponseModel();
+
+        resp.setStatusCode(400);
+        resp.setDescription(FEATURED_CONFIG_GUIDE);
         return ResponseEntity.badRequest().body(resp);
     }
 
@@ -44,7 +55,6 @@ public class GlobalApiErrorHandler {
         ApiResponseModel resp = new ApiResponseModel();
 
         resp.setStatusCode(500);
-        resp.setDescription("Internal error");
         resp.setDescription(ex.getMessage());
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(resp);
     }

@@ -812,6 +812,7 @@ public class OfferService {
             kTrans2b.setReceiver("FxPeer");
             kTrans2b.setSender(accountToDebit);
             kTrans2b.setTransactionId(rqD.getTransactionId());
+            kTrans2b.setTransactionType("Withdrawal");
             kTrans2b.setSenderTransactionType("Withdrawal");
             kTrans2b.setReceiverTransactionType("Deposit");
             kTrans2b.setReceiverBankName("FxPeer");
@@ -1166,6 +1167,7 @@ public class OfferService {
             kTrans2b.setReceiver(rqC.getPhoneNumber());
             kTrans2b.setSender("FxPeer");
             kTrans2b.setTransactionId(rqC.getTransactionId());
+            kTrans2b.setTransactionType("Deposit");
             kTrans2b.setSenderTransactionType("Withdrawal");
             kTrans2b.setReceiverTransactionType("Deposit");
             kTrans2b.setReceiverBankName("FxPeer");

@@ -27,6 +27,9 @@ public interface OfferRepository extends JpaRepository<Offer, Long>, JpaSpecific
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     Optional<Offer> findById(Long id);
 
+    @Query("SELECT o FROM Offer o WHERE o.id = :id")
+    Optional<Offer> findUnlockedById(@Param("id") Long id);
+
     Page<Offer> findBySellerUserId(Long sellerId, Pageable pageable);
 
     Page<Offer> findBySellerUserIdAndStatus(Long sellerId, OfferStatus status, Pageable pageable);

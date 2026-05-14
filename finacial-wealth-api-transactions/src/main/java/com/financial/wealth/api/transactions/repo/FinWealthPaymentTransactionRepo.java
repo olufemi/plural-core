@@ -7,6 +7,7 @@ package com.financial.wealth.api.transactions.repo;
 
 import com.financial.wealth.api.transactions.domain.FinWealthPaymentTransaction;
 import java.math.BigDecimal;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.domain.Page;
@@ -27,6 +28,9 @@ public interface FinWealthPaymentTransactionRepo
 
     @Query("SELECT o FROM FinWealthPaymentTransaction o WHERE o.sender = :walletNo OR o.receiver = :walletNo OR o.walletNo = :walletNo")
     List<FinWealthPaymentTransaction> findByWalletNoList(@Param("walletNo") String walletNo);
+
+    @Query("SELECT o FROM FinWealthPaymentTransaction o WHERE o.sender IN :walletNos OR o.receiver IN :walletNos OR o.walletNo IN :walletNos OR o.emailAddress IN :walletNos")
+    List<FinWealthPaymentTransaction> findByAnyWalletNo(@Param("walletNos") Collection<String> walletNos);
 
     @Query("SELECT bs FROM FinWealthPaymentTransaction bs WHERE bs.walletNo = :walletNo")
     FinWealthPaymentTransaction findByWalletNoDe(@Param("walletNo") String walletNo);
@@ -61,4 +65,3 @@ public interface FinWealthPaymentTransactionRepo
 
     List<FinWealthPaymentTransaction> findByTransactionId(String transactionId);
 }
-

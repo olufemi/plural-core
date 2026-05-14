@@ -799,7 +799,8 @@ public class InvestmentOrderService {
                 // 5) Populate position
                 position.setUnits(order.getUnits());
                 position.setInvestedAmount(order.getAmount());
-                if (resolveValuationMethod(product) == ValuationMethod.UNIT_PRICE) {
+                position.setValuationMethod(resolveValuationMethod(product));
+                if (position.getValuationMethod() == ValuationMethod.UNIT_PRICE) {
                     position.setCurrentValue(computeUnitPriceValue(order.getUnits(), resolveUnitPrice(product)));
                     position.setAccruedInterest(BigDecimal.ZERO);
                     position.setTotalAccruedInterest(BigDecimal.ZERO);
@@ -1270,7 +1271,7 @@ public class InvestmentOrderService {
         BigDecimal currentValue = nvl(position.getCurrentValue());
         BigDecimal reserved = nvl(position.getReservedLiquidationAmount());
         InvestmentProduct product = position.getProduct();
-        ValuationMethod valuationMethod = resolveValuationMethod(product);
+        ValuationMethod valuationMethod = resolveValuationMethod(position);
         BigDecimal unitPrice = resolveUnitPrice(product);
 
         // 2) release reserved
@@ -1790,11 +1791,11 @@ public class InvestmentOrderService {
             InvestmentPosition updatePos = positionRepo.findByOrderRefUpdate(rq.orderRef());
             BigDecimal newCapital = nz(updatePos.getInvestedAmount()).add(topupAmount);
             InvestmentProduct positionProduct = updatePos.getProduct();
-            ValuationMethod valuationMethod = resolveValuationMethod(positionProduct);
+            ValuationMethod valuationMethod = resolveValuationMethod(updatePos);
 
             updatePos.setInvestedAmount(newCapital);
             if (valuationMethod == ValuationMethod.UNIT_PRICE) {
-                BigDecimal topupUnits = computeUnits(positionProduct, topupAmount);
+                BigDecimal topupUnits = computeUnits(updatePos, topupAmount);
                 BigDecimal newUnits = nz(updatePos.getUnits()).add(topupUnits);
                 updatePos.setUnits(newUnits);
                 updatePos.setAccruedInterest(BigDecimal.ZERO);
@@ -1962,6 +1963,51 @@ public class InvestmentOrderService {
         return amount.divide(unitPrice, 8, RoundingMode.HALF_UP);
     }
 
+    private BigDecimal computeUnits(InvestmentPosition position, BigDecimal amount) {
+        if (resolveValuationMethod(position) != ValuationMethod.UNIT_PRICE) {
+            return BigDecimal.ONE;
+        }
+        BigDecimal unitPrice = resolveUnitPrice(position != null ? position.getProduct() : null);
+        return amount.divide(unitPrice, 8, RoundingMode.HALF_UP);
+    }
+
+    private ValuationMethod resolveValuationMethod(InvestmentPosition position) {
+        if (position == null) {
+            return ValuationMethod.RATE;
+        }
+        if (position.getValuationMethod() != null) {
+            return position.getValuationMethod();
+        }
+        ValuationMethod inferred = inferLegacyValuationMethod(position);
+        position.setValuationMethod(inferred);
+        return inferred;
+    }
+
+    private ValuationMethod inferLegacyValuationMethod(InvestmentPosition position) {
+        InvestmentProduct product = position.getProduct();
+        BigDecimal unitModeValue = computeUnitPriceValue(position.getUnits(), resolveUnitPrice(product));
+        BigDecimal invested = nz(position.getInvestedAmount());
+        BigDecimal currentValue = nz(position.getCurrentValue());
+        BigDecimal totalAccrued = nz(position.getTotalAccruedInterest());
+
+        if (totalAccrued.compareTo(BigDecimal.ZERO) > 0) {
+            return ValuationMethod.RATE;
+        }
+
+        if (valuesClose(invested, unitModeValue)
+                && valuesClose(currentValue, unitModeValue)
+                && nz(position.getUnits()).compareTo(BigDecimal.ONE) > 0) {
+            return ValuationMethod.UNIT_PRICE;
+        }
+
+        if (valuesDifferMeaningfully(invested, unitModeValue)
+                || valuesDifferMeaningfully(currentValue, unitModeValue)) {
+            return ValuationMethod.RATE;
+        }
+
+        return resolveValuationMethod(product);
+    }
+
     private ValuationMethod resolveValuationMethod(InvestmentProduct product) {
         if (product == null) {
             return ValuationMethod.RATE;
@@ -1980,6 +2026,14 @@ public class InvestmentOrderService {
         return nz(units)
                 .multiply(unitPrice)
                 .setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private boolean valuesClose(BigDecimal left, BigDecimal right) {
+        return nz(left).subtract(nz(right)).abs().compareTo(new BigDecimal("0.01")) <= 0;
+    }
+
+    private boolean valuesDifferMeaningfully(BigDecimal left, BigDecimal right) {
+        return !valuesClose(left, right);
     }
 
     private BigDecimal getFeePercentFromMeta(

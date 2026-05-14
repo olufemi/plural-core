@@ -11,6 +11,7 @@ package com.finacial.wealth.api.profiling.breezpay.virt.get.bvn;
 import com.finacial.wealth.api.profiling.breezpay.virt.get.bvn.GetSingleBvnResponse.BvnData;
 import com.finacial.wealth.api.profiling.domain.AddFailedTransLog;
 import com.finacial.wealth.api.profiling.domain.RegWalletInfo;
+import com.finacial.wealth.api.profiling.market.service.impl.MarketProfileSyncService;
 import com.finacial.wealth.api.profiling.proxies.BreezePayVirtAcctProxy;
 import com.finacial.wealth.api.profiling.proxies.BreezePayVirtApiDevAcctProxy;
 import com.finacial.wealth.api.profiling.proxies.UtilitiesProxy;
@@ -33,6 +34,7 @@ import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 
 @Service
@@ -60,6 +62,9 @@ public class BvnService {
 
     @Value("${fin.wealth.goto.breeze}")
     private String gotoBreezeapay;
+
+    @Autowired
+    private MarketProfileSyncService marketProfileSyncService;
 
     // Optional: configurable freshness window (e.g., 30 days)
     private final Period freshness = Period.ofDays(30);
@@ -131,6 +136,20 @@ public class BvnService {
             responseModel.setDescription(getOtpRes.getDescription());
             responseModel.setStatusCode(getOtpRes.getStatusCode());
             responseModel.setData(addExit);
+
+            try {
+                DecodedJWTToken decoded = DecodedJWTToken.getDecoded(auth);
+                regWalletInfoRepo.findByEmail(decoded.emailAddress).ifPresent(regWalletInfo ->
+                        marketProfileSyncService.syncNigeriaKycPending(
+                                regWalletInfo,
+                                "BVN",
+                                otpReqId,
+                                otpProcessId
+                        )
+                );
+            } catch (Exception syncEx) {
+                syncEx.printStackTrace();
+            }
 
             //send otp impl
         } catch (Exception ex) {

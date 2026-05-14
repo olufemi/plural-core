@@ -48,6 +48,7 @@ public class TransactionHistoryClientNgnInterbank {
         e.setReceiverBankName(req.getReceiverBankName());
 
         e.setTransactionId(req.getTransactionId());   // ✅ FIXED
+        e.setTransactionType(req.getTransactionType());
         e.setPaymentType(req.getPaymentType());       // ✅ NOT hardcoded (or set default if null)
         e.setAmmount(req.getAmmount());
         e.setFees(req.getFees());

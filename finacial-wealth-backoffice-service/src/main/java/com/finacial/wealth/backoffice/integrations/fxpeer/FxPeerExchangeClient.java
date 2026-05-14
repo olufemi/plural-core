@@ -18,7 +18,7 @@ public interface FxPeerExchangeClient {
     @PostMapping("/investment/offers/update-offer")
     Map<String, Object> updateOffer(@RequestBody Map<String, Object> request);
 
-    @GetMapping(value = "/investments/get-products", produces = MediaType.APPLICATION_JSON_VALUE)
+    @GetMapping(value = "/investments/admin/products", produces = MediaType.APPLICATION_JSON_VALUE)
     Map<String, Object> getInvestmentProducts(@RequestHeader("authorization") String auth);
 
     @GetMapping(value = "/fxothers/services/featured", produces = MediaType.APPLICATION_JSON_VALUE)

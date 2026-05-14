@@ -7,8 +7,10 @@ package com.financial.wealth.api.transactions.config;
 
 import com.financial.wealth.api.transactions.services.WalletCreditRetryScheduler;
 import com.financial.wealth.api.transactions.tranfaar.services.WebhookKeyService;
+import java.util.Arrays;
 
 import java.util.Calendar;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -36,26 +38,32 @@ public class SchedulerComponent {
     @Value("${sch.cron.disable}")
     private String disable;
 
-    // run 1 am
-    //@Scheduled(fixedRate=60*60*1000*3)
-    //@Scheduled(cron = "${pool.process.webhook.withdrawal.cron}")
-    public void processWebHookWithdrawal() {
+    @Value("${spring.profiles.active:}")
+    private String activeProfiles;
 
-        if (disable.equalsIgnoreCase("false")) {
+    private boolean isDevProfile() {
+        return Arrays.stream(activeProfiles.split(","))
+                .map(String::trim)
+                .anyMatch("dev"::equalsIgnoreCase);
+    }
+
+    //@Scheduled(fixedRate = 60 * 60 * 1000 * 3)
+    @Scheduled(cron = "${pool.process.webhook.withdrawal.cron}")
+    @SchedulerLock(name = "SchedulerComponent.processWebHookWithdrawal", lockAtMostFor = "10m", lockAtLeastFor = "30s")
+    public void processWebHookWithdrawal() {
+        if (disable.equalsIgnoreCase("false") && isDevProfile()) {
             webhookKeyService.processWebHookWithdrawal();
             LOG.info("****** running scheduled processWebHookWithdrawal  >>> " + Calendar.getInstance().getTime() + "******");
         }
-
     }
 
     @Scheduled(cron = "${pool.process.webhook.deposit.cron}")
+    @SchedulerLock(name = "SchedulerComponent.processWebHookDeposit", lockAtMostFor = "10m", lockAtLeastFor = "30s")
     public void processWebHookDeposit() {
-
-        if (disable.equalsIgnoreCase("false")) {
+        if (disable.equalsIgnoreCase("false") && isDevProfile()) {
             webhookKeyService.processWebHookDeposit();
             LOG.info("****** running scheduled processWebHookDeposit  >>> " + Calendar.getInstance().getTime() + "******");
         }
-
     }
 
     // @Scheduled(cron = "${pool.process.retry.failed.credit.wallet.cron}")
@@ -76,5 +84,20 @@ public class SchedulerComponent {
             LOG.info("****** running scheduled retryFailedDebits  >>> " + Calendar.getInstance().getTime() + "******");
         }
 
+    }
+
+    private boolean shouldRunWebhookSchedulers() {
+        if (!"false".equalsIgnoreCase(disable)) {
+            return false;
+        }
+        if (activeProfiles == null || activeProfiles.trim().isEmpty()) {
+            return false;
+        }
+        for (String profile : activeProfiles.split(",")) {
+            if ("dev".equalsIgnoreCase(profile.trim())) {
+                return true;
+            }
+        }
+        return false;
     }
 }

@@ -586,6 +586,7 @@ public class WebhookKeyService {
             kTrans2b.setReceiver(rqC.getPhoneNumber());
             kTrans2b.setSender(rqC.getPhoneNumber());
             kTrans2b.setTransactionId(quoteId + "-CUSTOMER_CR");
+            kTrans2b.setTransactionType("Deposit");
             kTrans2b.setSenderTransactionType("");
             kTrans2b.setReceiverTransactionType("Deposit");
 

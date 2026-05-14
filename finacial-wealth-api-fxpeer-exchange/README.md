@@ -1,5 +1,19 @@
 # finacial-wealth-api-fxpeer-exchange
 
+## Implementation Notes
+
+### Investment valuation mode guard
+
+The investment valuation fix for legacy positions that were reinterpreted after a product valuation-mode change is documented here:
+
+- [Investment Valuation Mode Guard](./INVESTMENT_VALUATION_MODE_GUARD.md)
+
+Read this note if you are working on:
+- investment valuation
+- top-up or liquidation math
+- product valuation-method updates
+- schema rollout for `fx_investment_position.valuation_method`
+
 ## Featured Services API Handoff
 
 This document explains the `featured services` APIs that power curated cards for mobile and the admin configuration endpoints used by backoffice.

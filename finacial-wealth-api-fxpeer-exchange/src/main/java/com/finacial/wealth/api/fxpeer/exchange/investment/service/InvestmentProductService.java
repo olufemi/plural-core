@@ -11,6 +11,7 @@ import com.finacial.wealth.api.fxpeer.exchange.investment.domain.InvestmentProdu
 import com.finacial.wealth.api.fxpeer.exchange.investment.ennum.LiquidationFeeAppliedTo;
 import com.finacial.wealth.api.fxpeer.exchange.investment.ennum.LiquidationFeeType;
 import com.finacial.wealth.api.fxpeer.exchange.investment.ennum.ValuationMethod;
+import com.finacial.wealth.api.fxpeer.exchange.investment.record.InvestmentProductRecord;
 import com.finacial.wealth.api.fxpeer.exchange.investment.record.InvestmentProductUpsertRequest;
 import com.finacial.wealth.api.fxpeer.exchange.investment.repo.InvestmentProductRepository;
 import com.finacial.wealth.api.fxpeer.exchange.model.ApiResponseModel;
@@ -60,6 +61,22 @@ public class InvestmentProductService {
             res.put("description", "Something went wrong");
             res.put("data", Collections.emptyList());
             return res;
+        }
+    }
+
+    @Transactional(readOnly = true)
+    public ApiResponseModel getAdminProducts() {
+        try {
+            List<Object> products = repo.findAllByOrderByNameAsc().stream()
+                    .map(this::toRecord)
+                    .collect(java.util.stream.Collectors.toList());
+
+            return resp(200,
+                    products.isEmpty() ? "No investment products available." : "Investment products fetched successfully.",
+                    products);
+        } catch (Exception ex) {
+            ex.printStackTrace();
+            return resp(500, "Unable to fetch investment products at the moment. Please try again.", Collections.emptyList());
         }
     }
 
@@ -184,6 +201,39 @@ public class InvestmentProductService {
         }
 
         p.setSubscriptionCutOffTime(r.getSubscriptionCutOffTime());
+    }
+
+    private InvestmentProductRecord toRecord(InvestmentProduct product) {
+        InvestmentProductRecord record = new InvestmentProductRecord();
+        record.setActive(product.isActive());
+        record.setEnableProduct(product.getEnableProduct());
+        record.setCurrency(product.getCurrency());
+        record.setInvestmentType(product.getType() != null ? product.getType().toString() : null);
+        record.setMaturityAtEndOfDay(product.getMaturityAtEndOfDay());
+        record.setMinimumInvestmentAmount(product.getMinimumInvestmentAmount());
+        record.setName(product.getName());
+        record.setPartnerProductCode(product.getPartnerProductCode());
+        record.setPercentageCurrValue(product.getPercentageCurrValue());
+        record.setProductCode(product.getProductCode());
+        record.setProductId(product.getId() == null ? null : product.getId().toString());
+        record.setTenorDays(product.getTenorDays());
+        record.setTenorMinutes(product.getTenorMinutes());
+        record.setUnitPrice(product.getUnitPrice());
+        record.setValuationMethod(product.getValuationMethod() != null ? product.getValuationMethod().name() : null);
+        record.setLiquidationFeeAppliedTo(readFeeAppliedTo(product.getMetaJson(), "liquidationFee").map(Enum::name).orElse(null));
+        record.setLiquidationFeeType(readFeeType(product.getMetaJson(), "liquidationFee").map(Enum::name).orElse(null));
+        record.setLiquidationFeeRate(readFeeAmount(product.getMetaJson(), "liquidationFee", "rate"));
+        record.setMinLiquidationFee(readFeeAmount(product.getMetaJson(), "liquidationFee", "minFee"));
+        record.setLiquidationFeeCap(readFeeAmount(product.getMetaJson(), "liquidationFee", "cap"));
+        record.setLockEnabled(readBooleanFromMeta(product.getMetaJson(), "lockConfig", "enabled"));
+        record.setLockDays(readIntegerFromMeta(product.getMetaJson(), "lockConfig", "days"));
+        record.setEarlyLiquidationFeeAppliedTo(readFeeAppliedTo(product.getMetaJson(), "earlyLiquidationFee").map(Enum::name).orElse(null));
+        record.setEarlyLiquidationFeeType(readFeeType(product.getMetaJson(), "earlyLiquidationFee").map(Enum::name).orElse(null));
+        record.setEarlyLiquidationFeeRate(readFeeAmount(product.getMetaJson(), "earlyLiquidationFee", "rate"));
+        record.setEarlyLiquidationFeeCap(readFeeAmount(product.getMetaJson(), "earlyLiquidationFee", "cap"));
+        record.setYieldPa(product.getYieldPa());
+        record.setYieldYtd(product.getYieldYtd());
+        return record;
     }
 
     private String validate(InvestmentProductUpsertRequest req, InvestmentProduct existingProduct) {
@@ -432,6 +482,50 @@ public class InvestmentProductService {
             return null;
         }
         return value.asInt();
+    }
+
+    private java.util.Optional<LiquidationFeeAppliedTo> readFeeAppliedTo(String metaJson, String nodeName) {
+        String value = readTextFromMeta(metaJson, nodeName, "appliedTo");
+        if (value == null) {
+            return java.util.Optional.empty();
+        }
+        try {
+            return java.util.Optional.of(LiquidationFeeAppliedTo.valueOf(value));
+        } catch (IllegalArgumentException ex) {
+            return java.util.Optional.empty();
+        }
+    }
+
+    private java.util.Optional<LiquidationFeeType> readFeeType(String metaJson, String nodeName) {
+        String value = readTextFromMeta(metaJson, nodeName, "type");
+        if (value == null) {
+            return java.util.Optional.empty();
+        }
+        try {
+            return java.util.Optional.of(LiquidationFeeType.valueOf(value));
+        } catch (IllegalArgumentException ex) {
+            return java.util.Optional.empty();
+        }
+    }
+
+    private BigDecimal readFeeAmount(String metaJson, String nodeName, String fieldName) {
+        JsonNode value = readMetaJson(metaJson).path(nodeName).path(fieldName);
+        if (value.isMissingNode() || value.isNull() || value.asText().isBlank()) {
+            return null;
+        }
+        try {
+            return value.decimalValue();
+        } catch (Exception ex) {
+            return null;
+        }
+    }
+
+    private String readTextFromMeta(String metaJson, String nodeName, String fieldName) {
+        JsonNode value = readMetaJson(metaJson).path(nodeName).path(fieldName);
+        if (value.isMissingNode() || value.isNull() || value.asText().isBlank()) {
+            return null;
+        }
+        return value.asText();
     }
 
     private void markRollbackOnly() {

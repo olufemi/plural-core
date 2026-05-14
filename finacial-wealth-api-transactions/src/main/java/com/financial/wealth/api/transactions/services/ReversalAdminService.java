@@ -24,7 +24,7 @@ import org.springframework.stereotype.Service;
 @Service
 public class ReversalAdminService {
 
-    private static final List<String> REVERSAL_STATUSES = Arrays.asList("PENDING", "FAILED", "SUCCESS");
+    private static final List<String> REVERSAL_STATUSES = Arrays.asList("PENDING", "FAILED", "SUCCESS", "RECON_REQUIRED");
 
     private final SuccessDebitLogRepo successDebitLogRepo;
     private final UttilityMethods utilMeth;
@@ -40,12 +40,14 @@ public class ReversalAdminService {
         long success = grouped.stream().filter(m -> "SUCCESS".equals(m.get("status"))).count();
         long pending = grouped.stream().filter(m -> "PENDING".equals(m.get("status"))).count();
         long failed = grouped.stream().filter(m -> "FAILED".equals(m.get("status"))).count();
+        long reconRequired = grouped.stream().filter(m -> "RECON_REQUIRED".equals(m.get("status"))).count();
 
         Map<String, Object> summary = new LinkedHashMap<>();
         summary.put("totalCount", grouped.size());
         summary.put("successfulCount", success);
         summary.put("pendingCount", pending);
         summary.put("failedCount", failed);
+        summary.put("reconRequiredCount", reconRequired);
 
         ApiResponseModel response = new ApiResponseModel();
         response.setStatusCode(200);
@@ -200,6 +202,9 @@ public class ReversalAdminService {
 
         if (statuses.contains("PENDING")) {
             return "PENDING";
+        }
+        if (statuses.contains("RECON_REQUIRED")) {
+            return "RECON_REQUIRED";
         }
         if (statuses.contains("FAILED")) {
             return "FAILED";

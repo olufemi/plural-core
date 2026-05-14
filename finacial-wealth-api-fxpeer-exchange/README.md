@@ -1,5 +1,19 @@
 # finacial-wealth-api-fxpeer-exchange
 
+## Implementation Notes
+
+### Investment valuation mode guard
+
+The investment valuation fix for legacy positions that were reinterpreted after a product valuation-mode change is documented here:
+
+- [Investment Valuation Mode Guard](./INVESTMENT_VALUATION_MODE_GUARD.md)
+
+Read this note if you are working on:
+- investment valuation
+- top-up or liquidation math
+- product valuation-method updates
+- schema rollout for `fx_investment_position.valuation_method`
+
 ## Featured Services API Handoff
 
 This document explains the `featured services` APIs that power curated cards for mobile and the admin configuration endpoints used by backoffice.
@@ -52,6 +66,7 @@ Example response:
       },
       "payload": {
         "offerId": 145,
+        "correlationId": "177788287906445376",
         "sellerUserId": 88,
         "currencySell": "CAD",
         "currencyReceive": "NGN",
@@ -67,6 +82,16 @@ Example response:
   ]
 }
 ```
+
+Important behavior:
+- `GET /fxothers/services/featured` returns `400` when no card resolves
+- description will be:
+  - `No featured services configured.` when no enabled config exists
+  - `No valid featured services available.` when config exists but none of the configured items resolve successfully
+- for `FX + ADMIN_SELECTED`, a configured offer must still be feature-eligible at read time:
+  - offer exists
+  - status is `LIVE` or `PARTIALLY_FILLED`
+  - `qtyAvailable > 0`
 
 Mapping for the mobile screen in your screenshot:
 - `Top Deals (1)`: use `GET /fxothers/services/featured` and render the returned `FX` card(s)
@@ -206,9 +231,38 @@ Minimal valid payload:
 
 Validation rules:
 - `featureKey` is required
-- `featureGroup` is required
+- `featureGroup` must be `FX` or `INVESTMENT`
 - `strategy` is required
-- `manualTargetId` is required when `strategy = ADMIN_SELECTED`
+- `manualTargetId` is required only when `strategy = ADMIN_SELECTED`
+
+Manual target behavior:
+- for `FX + ADMIN_SELECTED`, `manualTargetId` must be the marketplace `offer id`
+- for `INVESTMENT + ADMIN_SELECTED`, `manualTargetId` must be the investment `productCode` or `productId`
+- invalid `manualTargetId` entries are skipped when other valid items exist in the same payload
+- if every configured item is invalid, save returns `400`
+- save-time validation for `FX + ADMIN_SELECTED` also checks feature eligibility, not just existence
+
+Example manual FX payload:
+
+```json
+{
+  "items": [
+    {
+      "featureKey": "fx-manual-offer-1",
+      "featureGroup": "FX",
+      "strategy": "ADMIN_SELECTED",
+      "manualTargetId": "82",
+      "enabled": true,
+      "priority": 10,
+      "titleOverride": "Featured FX Deal",
+      "subtitleOverride": "Best hand-picked offer",
+      "badge": "FEATURED",
+      "ctaLabel": "Trade now",
+      "targetScreen": "FX_OFFER_DETAIL"
+    }
+  ]
+}
+```
 
 ## Enum Guide
 
@@ -258,6 +312,13 @@ If saving config fails with a MySQL error like `Data too long for column 'config
 ALTER TABLE app_config
 MODIFY COLUMN config_value LONGTEXT;
 ```
+
+## Backoffice Investment Products Note
+
+- mobile/client-facing investment products endpoint remains: `GET /investments/get-products`
+- that endpoint only returns customer-visible enabled products
+- backoffice product listing should use: `GET /investments/admin/products`
+- this admin route returns all investment products, including newly created ones that may not yet have `enableProduct = "1"`
 
 ## Source References
 

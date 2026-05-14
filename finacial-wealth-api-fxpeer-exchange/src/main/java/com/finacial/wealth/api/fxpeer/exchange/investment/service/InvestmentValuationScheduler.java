@@ -107,7 +107,7 @@ public class InvestmentValuationScheduler {
             BigDecimal invested = nz(pos.getInvestedAmount());
             BigDecimal totalAccrued = nz(pos.getTotalAccruedInterest());
             BigDecimal currentUnitPrice = resolveUnitPrice(pos.getProduct());
-            ValuationMethod valuationMethod = resolveValuationMethod(pos.getProduct());
+            ValuationMethod valuationMethod = resolveValuationMethod(pos);
 
             // 2) Enforce "no interest until next day"
             LocalDate interestStart = pos.getInterestStartDate();
@@ -120,6 +120,15 @@ public class InvestmentValuationScheduler {
                 }
                 pos.setInterestStartDate(interestStart);
             }
+
+            totalAccrued = restoreLegacyRateAccrualIfNeeded(
+                    pos,
+                    today,
+                    valuationMethod,
+                    invested,
+                    totalAccrued,
+                    currentUnitPrice
+            );
 
             BigDecimal todaysAccruedInterest = BigDecimal.ZERO;
             BigDecimal currentValue;
@@ -460,11 +469,117 @@ public class InvestmentValuationScheduler {
         return v == null ? BigDecimal.ZERO : v;
     }
 
-    private ValuationMethod resolveValuationMethod(InvestmentProduct product) {
+    private ValuationMethod resolveValuationMethod(InvestmentPosition position) {
+        if (position == null) {
+            return ValuationMethod.RATE;
+        }
+        if (position.getValuationMethod() != null) {
+            return position.getValuationMethod();
+        }
+        ValuationMethod inferred = inferLegacyValuationMethod(position);
+        position.setValuationMethod(inferred);
+        return inferred;
+    }
+
+    private ValuationMethod inferLegacyValuationMethod(InvestmentPosition position) {
+        InvestmentProduct product = position.getProduct();
+        BigDecimal unitModeValue = computeUnitPriceValue(position.getUnits(), resolveUnitPrice(product));
+        BigDecimal invested = nz(position.getInvestedAmount());
+        BigDecimal currentValue = nz(position.getCurrentValue());
+        BigDecimal totalAccrued = nz(position.getTotalAccruedInterest());
+
+        if (totalAccrued.compareTo(BigDecimal.ZERO) > 0) {
+            return ValuationMethod.RATE;
+        }
+
+        if (valuesClose(invested, unitModeValue)
+                && valuesClose(currentValue, unitModeValue)
+                && nz(position.getUnits()).compareTo(BigDecimal.ONE) > 0) {
+            return ValuationMethod.UNIT_PRICE;
+        }
+
+        if (valuesDifferMeaningfully(invested, unitModeValue)
+                || valuesDifferMeaningfully(currentValue, unitModeValue)) {
+            return ValuationMethod.RATE;
+        }
+
         if (product == null) {
             return ValuationMethod.RATE;
         }
         return product.resolvedValuationMethod();
+    }
+
+    private BigDecimal restoreLegacyRateAccrualIfNeeded(
+            InvestmentPosition position,
+            LocalDate valuationDate,
+            ValuationMethod valuationMethod,
+            BigDecimal invested,
+            BigDecimal totalAccrued,
+            BigDecimal currentUnitPrice
+    ) {
+        if (valuationMethod != ValuationMethod.RATE) {
+            return totalAccrued;
+        }
+
+        if (!looksLikeFlattenedRatePosition(position, invested, currentUnitPrice)) {
+            return totalAccrued;
+        }
+
+        BigDecimal recoveredAccrued = recoverAccruedFromHistory(position, valuationDate, currentUnitPrice);
+        if (recoveredAccrued.compareTo(BigDecimal.ZERO) <= 0) {
+            return totalAccrued;
+        }
+
+        position.setAccruedInterest(BigDecimal.ZERO);
+        position.setTotalAccruedInterest(recoveredAccrued);
+        position.setCurrentValue(invested.add(recoveredAccrued));
+        return recoveredAccrued;
+    }
+
+    private boolean looksLikeFlattenedRatePosition(
+            InvestmentPosition position,
+            BigDecimal invested,
+            BigDecimal currentUnitPrice
+    ) {
+        BigDecimal unitModeValue = computeUnitPriceValue(position.getUnits(), currentUnitPrice);
+        BigDecimal currentValue = nz(position.getCurrentValue());
+
+        return valuesClose(currentValue, unitModeValue)
+                && valuesDifferMeaningfully(invested, unitModeValue);
+    }
+
+    private BigDecimal recoverAccruedFromHistory(
+            InvestmentPosition position,
+            LocalDate valuationDate,
+            BigDecimal fallbackUnitPrice
+    ) {
+        List<InvestmentPositionHistory> histories = historyRepo.findByPositionIdOrderByValuationDateAsc(position.getId());
+
+        for (int index = histories.size() - 1; index >= 0; index--) {
+            InvestmentPositionHistory history = histories.get(index);
+            if (history.getValuationDate() == null || history.getValuationDate().isAfter(valuationDate)) {
+                continue;
+            }
+
+            BigDecimal historyPrice = history.getPrice() != null && history.getPrice().compareTo(BigDecimal.ZERO) > 0
+                    ? history.getPrice()
+                    : fallbackUnitPrice;
+            BigDecimal unitModeValue = computeUnitPriceValue(history.getUnits(), historyPrice);
+            BigDecimal historyInvested = nz(history.getSubscriptionAmount());
+            BigDecimal historyMarketValue = nz(history.getMarketValue());
+
+            if (valuesClose(historyMarketValue, unitModeValue)
+                    && valuesDifferMeaningfully(historyInvested, unitModeValue)) {
+                continue;
+            }
+
+            BigDecimal recoveredAccrued = historyMarketValue.subtract(historyInvested);
+            return recoveredAccrued.compareTo(BigDecimal.ZERO) > 0
+                    ? recoveredAccrued
+                    : BigDecimal.ZERO;
+        }
+
+        return BigDecimal.ZERO;
     }
 
     private BigDecimal resolveUnitPrice(InvestmentProduct product) {
@@ -478,6 +593,14 @@ public class InvestmentValuationScheduler {
         return nz(units)
                 .multiply(unitPrice)
                 .setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private boolean valuesClose(BigDecimal left, BigDecimal right) {
+        return nz(left).subtract(nz(right)).abs().compareTo(new BigDecimal("0.01")) <= 0;
+    }
+
+    private boolean valuesDifferMeaningfully(BigDecimal left, BigDecimal right) {
+        return !valuesClose(left, right);
     }
 
     private LocalDate retDate(Instant exp) {

@@ -325,6 +325,16 @@ Notes:
 - Requires a valid bearer token.
 - Returns the product catalog from the exchange service.
 
+#### Get product
+
+`GET /bo/backoffice/investments/products/{productCode}`
+
+Notes:
+
+- Requires a valid bearer token.
+- Returns a single product resolved from the backoffice product catalog.
+- Returns `404` if the product code is not found.
+
 #### Create product
 
 `POST /bo/backoffice/investments/products`
@@ -461,7 +471,101 @@ Frontend note:
 
 - Use `cutoffBucket` to separate same-day eligible orders from next-business-day queue items.
 
-### 3b. Performance Dashboard
+### 3b. Dashboard Overview
+
+#### Frontend dashboard
+
+`GET /bo/backoffice/investments/dashboard`
+
+Direct service alias: `GET /backoffice/investments/dashboard`
+
+Query params:
+
+- `range`: month range such as `1M`, `3M`, `6M`, or `12M`; default `3M`
+- `productCode`: optional investment product code filter
+- `fromDate` in `YYYY-MM-DD`; optional override for the range start
+- `toDate` in `YYYY-MM-DD`; optional override for the range end
+
+Date behavior:
+
+- If only `range=3M` is supplied, the backend uses the last completed calendar month as `toDate` and counts backward by the requested month count.
+- Example: on `2026-05-05`, `range=3M` resolves to `fromDate=2026-02-01` and `toDate=2026-04-01`.
+- If `fromDate` or `toDate` is supplied, that explicit value wins over the calculated range value.
+
+Response shape:
+
+```json
+{
+  "statusCode": 200,
+  "description": "Dashboard data retrieved successfully",
+  "data": {
+    "filters": {
+      "range": "3M",
+      "fromDate": "2026-02-01",
+      "toDate": "2026-04-01",
+      "refreshIntervalMs": 60000
+    },
+    "summaryMetrics": {
+      "totalAum": 20500000,
+      "activeCustomers": 0,
+      "pendingTransactions": 0,
+      "todaysTransactionVolume": 0
+    },
+    "aumTrend": [
+      {
+        "date": "2026-02-01",
+        "aum": 17920000
+      },
+      {
+        "date": "2026-03-01",
+        "aum": 19100000
+      },
+      {
+        "date": "2026-04-01",
+        "aum": 20500000
+      }
+    ],
+    "productReturns": [
+      {
+        "productCode": "GFUND",
+        "productName": "Growth Fund",
+        "returnPct": 20.8
+      }
+    ],
+    "recentActivity": [
+      {
+        "id": "INVESTMENT_TOPUP-2026-04-20T10:30:00-0",
+        "activityType": "INVESTMENT_TOPUP",
+        "productCode": "GFUND",
+        "productName": "Growth Fund",
+        "description": "Investment topup successful for product: TOPUP-123",
+        "amount": 50000,
+        "createdAt": "2026-04-20T10:30:00"
+      }
+    ],
+    "products": [
+      {
+        "productCode": "GFUND",
+        "productName": "Growth Fund"
+      }
+    ],
+    "lastUpdatedAt": "2026-05-05T10:53:17.845Z"
+  }
+}
+```
+
+Frontend notes:
+
+- This is the preferred endpoint for the main backoffice dashboard screen.
+- Use `filters.refreshIntervalMs` for auto-refresh timing.
+- Use `summaryMetrics` for the four headline cards.
+- Use `aumTrend` for the AUM line chart.
+- Use `productReturns` for the product performance bar chart.
+- Use `recentActivity` for the activity feed.
+- Use `products` for product filter dropdown options.
+- The current `activeCustomers`, `pendingTransactions`, and `todaysTransactionVolume` values are placeholders until those source metrics are wired from their owning services.
+
+### 3c. Performance Dashboard
 
 #### Performance dashboard
 
@@ -532,12 +636,13 @@ Response shape:
 
 Frontend notes:
 
+- Prefer `GET /bo/backoffice/investments/dashboard` for the composed dashboard shown in the current frontend design.
 - Leave `productCode` empty to show all products.
 - Leave dates empty to default to the latest three-month window.
 - Use the `products` array to populate the product filter dropdown.
 - Use `aumTrend` for the line chart and `recentActivity` for the activity card/list.
 
-### 3c. Oversight Dashboard
+### 3d. Oversight Dashboard
 
 #### Oversight dashboard
 
@@ -1028,10 +1133,16 @@ Notes:
 - forgot-password start: `POST /bo/auth/password/recovery/start`
 - forgot-password complete: `POST /bo/auth/password/recovery/complete`
 
-### Dashboard Counters
+### Dashboard Screen
 
-- liquidation pending count: `GET /bo/backoffice/investments/liquidations`
-- approval inbox count: `GET /bo/backoffice/approvals`
+- dashboard load: `GET /bo/backoffice/investments/dashboard?range=3M`
+- supported ranges: `1M`, `3M`, `6M`, `12M`
+- optional filters: `productCode`, `fromDate`, `toDate`
+- auto-refresh interval: use `data.filters.refreshIntervalMs`
+- headline cards: `data.summaryMetrics`
+- AUM chart: `data.aumTrend`
+- product performance chart: `data.productReturns`
+- recent activity feed: `data.recentActivity`
 
 ### Liquidation Queue Screen
 
@@ -1045,11 +1156,16 @@ Notes:
 
 ### Performance Screen
 
-- dashboard load: `GET /bo/backoffice/investments/performance`
+- raw performance load: `GET /bo/backoffice/investments/performance`
 - product filter: pass `productCode`
 - date filter: pass `fromDate` and `toDate`
 
 ### Oversight Screen
+
+- dashboard load: `GET /bo/backoffice/investments/oversight`
+- filters: pass `productCode`, `fromDate`, `toDate`, `actionType`, `status`
+- table rows: `data.actions`
+- headline cards: `data.summary`
 
 ### Group Savings Contribution & Payout Monitoring
 
@@ -1196,11 +1312,6 @@ Response shape:
 
 - `Contribution & Payout Monitoring` consumes `GET /bo/backoffice/group-savings/contribution-payout-monitoring`
 - `Slot Assignment & Tracking` consumes `GET /bo/backoffice/group-savings/slot-assignment-tracking`
-
-- dashboard load: `GET /bo/backoffice/investments/oversight`
-- filters: pass `productCode`, `fromDate`, `toDate`, `actionType`, `status`
-- table rows: `data.actions`
-- headline cards: `data.summary`
 
 ### Customer Detail Screen
 

@@ -7,6 +7,7 @@ package com.financial.wealth.api.transactions.services;
 
 import com.financial.wealth.api.transactions.config.LogstashConfig;
 import com.financial.wealth.api.transactions.services.notify.FcmService;
+import com.financial.wealth.api.transactions.breezepay.payout.AddAccountDetails;
 import com.financial.wealth.api.transactions.domain.CommissionCfg;
 import com.financial.wealth.api.transactions.domain.DeviceChangeLimitConfig;
 import com.financial.wealth.api.transactions.domain.DeviceDetails;
@@ -40,6 +41,7 @@ import com.financial.wealth.api.transactions.models.SaveBeneficiary;
 import com.financial.wealth.api.transactions.models.WalletNoReq;
 import com.financial.wealth.api.transactions.models.local.trans.NameLookUp;
 import com.financial.wealth.api.transactions.repo.CommissionCfgRepo;
+import com.financial.wealth.api.transactions.repo.AddAccountDetailsRepo;
 import com.financial.wealth.api.transactions.repo.DeviceChangeLimitConfigRepo;
 import com.financial.wealth.api.transactions.repo.DeviceDetailsRepo;
 import com.financial.wealth.api.transactions.repo.FinWealthPayServiceConfigRepo;
@@ -70,7 +72,9 @@ import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Date;
+import java.util.LinkedHashSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -120,6 +124,7 @@ public class LocalTransferService {
     private final MessageCenterService messageCenterService;
     private static final String CCY = "CAD";
     private final TransactionHistoryClientLocalT transactionHistoryClientLocalT;
+    private final AddAccountDetailsRepo addAccountDetailsRepo;
 
     private final ReceiptSigningFacade receiptSigningFacade;
 
@@ -150,6 +155,7 @@ public class LocalTransferService {
             DeviceDetailsRepo deviceDetailsRepo,
             MessageCenterService messageCenterService,
             TransactionHistoryClientLocalT transactionHistoryClientLocalT,
+            AddAccountDetailsRepo addAccountDetailsRepo,
             ReceiptSigningFacade receiptSigningFacade) {
 
         this.localTransFailedTransInfoRepo = localTransFailedTransInfoRepo;
@@ -171,6 +177,7 @@ public class LocalTransferService {
         this.deviceDetailsRepo = deviceDetailsRepo;
         this.messageCenterService = messageCenterService;
         this.transactionHistoryClientLocalT = transactionHistoryClientLocalT;
+        this.addAccountDetailsRepo = addAccountDetailsRepo;
         this.receiptSigningFacade = receiptSigningFacade;
     }
 
@@ -2120,23 +2127,12 @@ public class LocalTransferService {
             DecodedJWTToken getDecoded = DecodedJWTToken.getDecoded(auth); // keep if you need it
             String processId = String.valueOf(GlobalMethods.generateTransactionId()); // keep if you need it
 
-            boolean isWalletId = true;
-            boolean isPhonenUmber = true;
+            String requestedMemberId = safeString(rq == null ? null : rq.getMemberId());
             String userPhoneNumber = null;
+            LinkedHashSet<String> historyWalletNos = new LinkedHashSet<>();
+            historyWalletNos.add(requestedMemberId);
 
-            List<RegWalletInfo> getReceiver;
-
-            // --- your existing validation logic ---
-            if (GlobalMethods.isTenDigits(rq.getMemberId().trim()) == false) {
-                isWalletId = false;
-                isPhonenUmber = true;
-            }
-
-            System.out.println("isWalletIdBool :::::::: " + "     " + isWalletId);
-            System.out.println("isPhonenUmberBool :::::::: " + "     " + isPhonenUmber);
-
-            if (isWalletId == false && isPhonenUmber == false) {
-
+            if (requestedMemberId.isEmpty()) {
                 LocalTransFailedTransInfo procFailedTrans = new LocalTransFailedTransInfo(
                         "Wallet-Wallet-Transfer", "Wallet to Wallet transfer, invalid Receiver!",
                         String.valueOf(GlobalMethods.generateTransactionId()), "", channel,
@@ -2150,51 +2146,59 @@ public class LocalTransferService {
                 return responseModel;
             }
 
-            if (isWalletId) {
-                System.out.println("isWalletId :::::::: " + "     ");
-                getReceiver = regWalletInfoRepository.findByWalletIdList(rq.getMemberId());
-
-                if (getReceiver.size() <= 0) {
-
-                    LocalTransFailedTransInfo procFailedTrans = new LocalTransFailedTransInfo(
-                            "Wallet-Wallet-Transfer", "User does not exists!",
-                            String.valueOf(GlobalMethods.generateTransactionId()), "", channel,
-                            "Local-Transfer-Service"
-                    );
-
-                    responseModel.setDescription("User does not exists!");
-                    responseModel.setStatusCode(statusCode);
-
-                    localTransFailedTransInfoRepo.save(procFailedTrans);
-                    return responseModel;
-                }
-                userPhoneNumber = getReceiver.get(0).getPhoneNumber();
+            List<RegWalletInfo> getReceiver = new ArrayList<>();
+            if (GlobalMethods.isTenDigits(requestedMemberId)) {
+                getReceiver.addAll(regWalletInfoRepository.findByWalletIdList(requestedMemberId));
+            }
+            if (getReceiver.isEmpty()) {
+                getReceiver.addAll(regWalletInfoRepository.findByPhoneNumberData(requestedMemberId));
+            }
+            if (getReceiver.isEmpty() && !safeString(getDecoded.emailAddress).isEmpty()) {
+                getReceiver.addAll(regWalletInfoRepository.findByEmailsList(getDecoded.emailAddress));
             }
 
-            if (isPhonenUmber) {
-                System.out.println("isPhonenUmber :::::::: " + "     ");
-                getReceiver = regWalletInfoRepository.findByPhoneNumberData(rq.getMemberId());
+            for (RegWalletInfo walletInfo : getReceiver) {
+                addWalletAliases(historyWalletNos, walletInfo);
+                userPhoneNumber = firstNonBlank(userPhoneNumber, walletInfo.getPhoneNumber());
+                addAccountAliasesByEmail(historyWalletNos, walletInfo.getEmail());
+            }
 
-                if (getReceiver.size() <= 0) {
+            List<AddAccountDetails> linkedAccounts = new ArrayList<>();
+            linkedAccounts.addAll(addAccountDetailsRepo.findByWalletId(requestedMemberId));
+            linkedAccounts.addAll(addAccountDetailsRepo.findByAccountNumberList(requestedMemberId));
+            linkedAccounts.addAll(addAccountDetailsRepo.findByVirtualAccountNumberList(requestedMemberId));
 
-                    LocalTransFailedTransInfo procFailedTrans = new LocalTransFailedTransInfo(
-                            "Wallet-Wallet-Transfer", "User does not exists!",
-                            String.valueOf(GlobalMethods.generateTransactionId()), "", channel,
-                            "Local-Transfer-Service"
-                    );
+            if (!safeString(getDecoded.emailAddress).isEmpty()) {
+                linkedAccounts.addAll(addAccountDetailsRepo.findByEmailAddress(getDecoded.emailAddress));
+            }
 
-                    responseModel.setDescription("User does not exists!");
-                    responseModel.setStatusCode(statusCode);
-
-                    localTransFailedTransInfoRepo.save(procFailedTrans);
-                    return responseModel;
+            for (AddAccountDetails account : linkedAccounts) {
+                addAccountAliases(historyWalletNos, account);
+                userPhoneNumber = firstNonBlank(userPhoneNumber, account.getPhoneNumber(), account.getAccountNumber());
+                if (!safeString(account.getEmailAddress()).isEmpty()) {
+                    addAccountAliasesByEmail(historyWalletNos, account.getEmailAddress());
+                    for (RegWalletInfo walletInfo : regWalletInfoRepository.findByEmailsList(account.getEmailAddress())) {
+                        addWalletAliases(historyWalletNos, walletInfo);
+                        userPhoneNumber = firstNonBlank(userPhoneNumber, walletInfo.getPhoneNumber());
+                    }
                 }
+            }
 
-                userPhoneNumber = getReceiver.get(0).getPhoneNumber();
+            historyWalletNos.removeIf(value -> value == null || value.trim().isEmpty());
+            if (historyWalletNos.isEmpty()) {
+                LocalTransFailedTransInfo procFailedTrans = new LocalTransFailedTransInfo(
+                        "Wallet-Wallet-Transfer", "User does not exists!",
+                        String.valueOf(GlobalMethods.generateTransactionId()), "", channel,
+                        "Local-Transfer-Service"
+                );
+                responseModel.setDescription("User does not exists!");
+                responseModel.setStatusCode(statusCode);
+                localTransFailedTransInfoRepo.save(procFailedTrans);
+                return responseModel;
             }
 
             List<FinWealthPaymentTransaction> getKulTrans
-                    = finWealthPaymentTransactionRepo.findByWalletNoList(userPhoneNumber);
+                    = finWealthPaymentTransactionRepo.findByAnyWalletNo(historyWalletNos);
             getKulTrans = expandFxPeerCompanionTransactions(getKulTrans);
 
             if (getKulTrans.size() <= 0) {
@@ -2238,8 +2242,8 @@ public class LocalTransferService {
                 getK.setId(getKul.getId());
                 getK.setHistoryEntryId(getKul.getId() == null ? null : String.valueOf(getKul.getId()));
                 getK.setGroupReference(getKul.getTransactionId());
-                getK.setEntryDirection(resolveDirection(getKul, userPhoneNumber));
-                getK.setCounterparty(resolveCounterparty(getKul, userPhoneNumber));
+                getK.setEntryDirection(resolveDirection(getKul, historyWalletNos));
+                getK.setCounterparty(resolveCounterparty(getKul, historyWalletNos));
                 getK.setAmmount(getKul.getAmmount());
                 getK.setTransactionDate(formDate(getKul.getCreatedDate()));
                 getK.setCreatedDate(getKul.getCreatedDate());
@@ -2255,7 +2259,7 @@ public class LocalTransferService {
                 getK.setReceiverBankName(getKul.getReceiverBankName());
                 getK.setReceiverName(getKul.getReceiverName());
                 getK.setTheNarration(getKul.getTheNarration());
-                getK.setTransactionType(getKul.getTransactionType());
+                getK.setTransactionType(resolveTransactionType(getKul, historyWalletNos));
                 getK.setCurrencyCode(getKul.getCurrencyCode() == null ? CCY : getKul.getCurrencyCode());
                 getK.setStatus(resolveStatusFallback(getKul));
 
@@ -2314,23 +2318,91 @@ public class LocalTransferService {
     private boolean isFxPeerHistory(FinWealthPaymentTransaction tx) {
         return tx != null
                 && "FxPeer Transfer".equalsIgnoreCase(safeString(tx.getPaymentType()))
-                && "Fx Peer-Peer Transfer".equalsIgnoreCase(safeString(tx.getTheNarration()));
+                && (safeString(tx.getTheNarration()).toLowerCase(java.util.Locale.ROOT).contains("fx peer-peer")
+                || safeString(tx.getTheNarration()).toLowerCase(java.util.Locale.ROOT).contains("fxpeer"));
     }
 
-    private String resolveDirection(FinWealthPaymentTransaction tx, String userPhoneNumber) {
+    private void addWalletAliases(Collection<String> aliases, RegWalletInfo walletInfo) {
+        if (walletInfo == null) {
+            return;
+        }
+        aliases.add(walletInfo.getPhoneNumber());
+        aliases.add(walletInfo.getWalletId());
+        aliases.add(walletInfo.getAccountNumber());
+        aliases.add(walletInfo.getEmail());
+    }
+
+    private void addAccountAliasesByEmail(Collection<String> aliases, String emailAddress) {
+        String email = safeString(emailAddress);
+        if (email.isEmpty()) {
+            return;
+        }
+        aliases.add(email);
+        for (AddAccountDetails account : addAccountDetailsRepo.findByEmailAddress(email)) {
+            addAccountAliases(aliases, account);
+        }
+    }
+
+    private void addAccountAliases(Collection<String> aliases, AddAccountDetails account) {
+        if (account == null) {
+            return;
+        }
+        aliases.add(account.getPhoneNumber());
+        aliases.add(account.getWalletId());
+        aliases.add(account.getAccountNumber());
+        aliases.add(account.getVirtualAccountNumber());
+        aliases.add(account.getEmailAddress());
+    }
+
+    private String resolveTransactionType(FinWealthPaymentTransaction tx, Collection<String> userAliases) {
+        String transactionType = safeString(tx == null ? null : tx.getTransactionType());
+        if (!transactionType.isEmpty()) {
+            return transactionType;
+        }
+        String direction = resolveDirection(tx, userAliases);
+        if ("DEBIT".equals(direction)) {
+            return firstNonBlank(tx.getSenderTransactionType(), "Withdrawal");
+        }
+        if ("CREDIT".equals(direction)) {
+            return firstNonBlank(tx.getReceiverTransactionType(), "Deposit");
+        }
+        return firstNonBlank(tx.getReceiverTransactionType(), tx.getSenderTransactionType(), tx.getPaymentType());
+    }
+
+    private String resolveTransactionType(FinWealthPaymentTransaction tx, String userPhoneNumber) {
+        String transactionType = safeString(tx == null ? null : tx.getTransactionType());
+        if (!transactionType.isEmpty()) {
+            return transactionType;
+        }
+        String direction = resolveDirection(tx, userPhoneNumber);
+        if ("DEBIT".equals(direction)) {
+            return firstNonBlank(tx.getSenderTransactionType(), "Withdrawal");
+        }
+        if ("CREDIT".equals(direction)) {
+            return firstNonBlank(tx.getReceiverTransactionType(), "Deposit");
+        }
+        return firstNonBlank(tx.getReceiverTransactionType(), tx.getSenderTransactionType(), tx.getPaymentType());
+    }
+
+    private String resolveDirection(FinWealthPaymentTransaction tx, Collection<String> userAliases) {
         if (tx == null) {
             return "UNKNOWN";
         }
         String sender = safeString(tx.getSender());
         String receiver = safeString(tx.getReceiver());
         String walletNo = safeString(tx.getWalletNo());
-        String user = safeString(userPhoneNumber);
-        if (!user.isEmpty()) {
-            if (user.equals(sender) || user.equals(walletNo)) {
-                return "DEBIT";
-            }
-            if (user.equals(receiver)) {
+        if (containsAlias(userAliases, receiver)) {
+            return "CREDIT";
+        }
+        if (containsAlias(userAliases, sender)) {
+            return "DEBIT";
+        }
+        if (containsAlias(userAliases, walletNo)) {
+            if ("Deposit".equalsIgnoreCase(safeString(tx.getReceiverTransactionType()))) {
                 return "CREDIT";
+            }
+            if ("Withdrawal".equalsIgnoreCase(safeString(tx.getSenderTransactionType()))) {
+                return "DEBIT";
             }
         }
         if ("Withdrawal".equalsIgnoreCase(safeString(tx.getSenderTransactionType()))) {
@@ -2342,6 +2414,50 @@ public class LocalTransferService {
         return "UNKNOWN";
     }
 
+    private String resolveDirection(FinWealthPaymentTransaction tx, String userPhoneNumber) {
+        if (tx == null) {
+            return "UNKNOWN";
+        }
+        String sender = safeString(tx.getSender());
+        String receiver = safeString(tx.getReceiver());
+        String walletNo = safeString(tx.getWalletNo());
+        String user = safeString(userPhoneNumber);
+        if (!user.isEmpty()) {
+            if (user.equals(receiver)) {
+                return "CREDIT";
+            }
+            if (user.equals(sender)) {
+                return "DEBIT";
+            }
+            if (user.equals(walletNo)) {
+                if ("Deposit".equalsIgnoreCase(safeString(tx.getReceiverTransactionType()))) {
+                    return "CREDIT";
+                }
+                if ("Withdrawal".equalsIgnoreCase(safeString(tx.getSenderTransactionType()))) {
+                    return "DEBIT";
+                }
+            }
+        }
+        if ("Withdrawal".equalsIgnoreCase(safeString(tx.getSenderTransactionType()))) {
+            return "DEBIT";
+        }
+        if ("Deposit".equalsIgnoreCase(safeString(tx.getReceiverTransactionType()))) {
+            return "CREDIT";
+        }
+        return "UNKNOWN";
+    }
+
+    private String resolveCounterparty(FinWealthPaymentTransaction tx, Collection<String> userAliases) {
+        String direction = resolveDirection(tx, userAliases);
+        if ("DEBIT".equals(direction)) {
+            return firstNonBlank(tx.getReceiverName(), tx.getReceiver());
+        }
+        if ("CREDIT".equals(direction)) {
+            return firstNonBlank(tx.getSenderName(), tx.getSender());
+        }
+        return firstNonBlank(tx.getReceiverName(), tx.getReceiver(), tx.getSenderName(), tx.getSender());
+    }
+
     private String resolveCounterparty(FinWealthPaymentTransaction tx, String userPhoneNumber) {
         String direction = resolveDirection(tx, userPhoneNumber);
         if ("DEBIT".equals(direction)) {
@@ -2351,6 +2467,19 @@ public class LocalTransferService {
             return firstNonBlank(tx.getSenderName(), tx.getSender());
         }
         return firstNonBlank(tx.getReceiverName(), tx.getReceiver(), tx.getSenderName(), tx.getSender());
+    }
+
+    private boolean containsAlias(Collection<String> aliases, String value) {
+        String safeValue = safeString(value);
+        if (safeValue.isEmpty() || aliases == null) {
+            return false;
+        }
+        for (String alias : aliases) {
+            if (safeValue.equals(safeString(alias))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private String firstNonBlank(String... values) {

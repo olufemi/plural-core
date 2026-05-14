@@ -38,6 +38,7 @@ import com.finacial.wealth.api.profiling.domain.VerifyEmailAddLog;
 import com.finacial.wealth.api.profiling.domain.VerifyReqIdDetailsAuth;
 import com.finacial.wealth.api.profiling.email.EmailPublisher;
 import com.finacial.wealth.api.profiling.fx.p.p.wallet.WalletTransactionsDetailsRepo;
+import com.finacial.wealth.api.profiling.market.service.impl.MarketProfileSyncService;
 import com.finacial.wealth.api.profiling.models.AddNewUserToLimit;
 import com.finacial.wealth.api.profiling.models.ApiResponseModel;
 import com.finacial.wealth.api.profiling.models.ChangeDevice;
@@ -128,6 +129,7 @@ import org.apache.commons.lang.StringUtils;
 import org.joda.time.format.DateTimeFormat;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
@@ -200,6 +202,8 @@ public class WalletServices {
     private final InvestmentProductRepository investmentProductRepository;
     private final InvestmentPositionRepository investmentPositionRepository;
     private final EmailPublisher emailPublisher;
+    @Autowired
+    private MarketProfileSyncService marketProfileSyncService;
 
     @Value("${fin.wealth.foot.print.key}")
     private String secretKeyConfoged;
@@ -1319,12 +1323,14 @@ public class WalletServices {
 
                 if (!existingWalletInfo.isPresent()) {
                     regWalletInfoRepo.save(walletInfo);
+                    safeSyncCanadaMarketProfile(walletInfo);
                 } else {
                     // optionally update missing fields if needed
                     // e.g existingWalletInfo.setUuid(walletInfo.getUuid());
                     // regWalletInfoRepo.save(existingWalletInfo);
                 }
 
+                safeSyncCanadaMarketProfile(existingWalletInfo.orElse(walletInfo));
                 return successResponse("Customer onboarded successfully, kindly login to create PIN. Thank you.");
             }
 
@@ -1356,12 +1362,21 @@ public class WalletServices {
             }
 
             regWalletInfoRepo.save(walletInfo);
+            safeSyncCanadaMarketProfile(walletInfo);
 
             return successResponse("Customer onboarded successfully, kindly login to create PIN. Thank you.");
 
         } catch (Exception ex) {
             ex.printStackTrace();
             return failAndLog("create-wallet", "An error occured,please try again", processId, phone, 500);
+        }
+    }
+
+    private void safeSyncCanadaMarketProfile(RegWalletInfo regWalletInfo) {
+        try {
+            marketProfileSyncService.syncCanadaOnboarding(regWalletInfo);
+        } catch (Exception ex) {
+            log.warn("Unable to sync CA_RETAIL market profile after onboarding", ex);
         }
     }
 

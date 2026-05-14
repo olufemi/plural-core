@@ -262,6 +262,38 @@ public class NipBankService {
         successDebitLogRepo.save(log);
     }
 
+    private void markForReconciliation(String transactionId, String errorMessage) {
+        SuccessDebitLog log = successDebitLogRepo.findFirstByTransactionId(transactionId);
+        if (log == null) {
+            return;
+        }
+
+        log.setMarkForRollBack(0);
+        log.setResolved(false);
+        log.setReversalStatus("RECON_REQUIRED");
+        log.setReversalRequestedAt(Instant.now());
+        log.setReversalCompletedAt(null);
+        log.setReversalLastError(errorMessage);
+        log.setLastModifiedDate(Instant.now());
+        successDebitLogRepo.save(log);
+    }
+
+    private boolean shouldDeferRollbackToReconciliation(String responseCode, String responseMessage) {
+        String combined = ((responseCode == null ? "" : responseCode) + " " + (responseMessage == null ? "" : responseMessage)).toLowerCase();
+        return combined.contains("pending")
+                || combined.contains("processing")
+                || combined.contains("in progress")
+                || combined.contains("queued")
+                || combined.contains("timeout")
+                || combined.contains("timed out")
+                || combined.contains("temporar")
+                || combined.contains("unavailable")
+                || combined.contains("retry")
+                || combined.contains("network")
+                || combined.contains("transport")
+                || combined.contains("callback");
+    }
+
     public BaseResponse nameLookUp(NameLookUpInterBank rq, String channel, String auth) {
 
         BaseResponse responseModel = new BaseResponse();
@@ -1476,9 +1508,15 @@ public class NipBankService {
                         nipReqLog.setCreditBankName("Access Bank");
                         nipCredAcccTranLogRepo.save(nipReqLog);
 
-                        markForRollback(rq.getProcessId(), nipCre.getResponseMessage());
-                        markForRollback(rq.getProcessId() + "-NGN_GL", nipCre.getResponseMessage());
-                        responseModel.setDescription("Wallet to Bank transfer, your request is being processed, Thank you.");
+                        if (shouldDeferRollbackToReconciliation(nipCre.getResponseCode(), nipCre.getResponseMessage())) {
+                            markForReconciliation(rq.getProcessId(), nipCre.getResponseMessage());
+                            markForReconciliation(rq.getProcessId() + "-NGN_GL", nipCre.getResponseMessage());
+                            responseModel.setDescription("Wallet to Bank transfer, your request is awaiting reconciliation, Thank you.");
+                        } else {
+                            markForRollback(rq.getProcessId(), nipCre.getResponseMessage());
+                            markForRollback(rq.getProcessId() + "-NGN_GL", nipCre.getResponseMessage());
+                            responseModel.setDescription("Wallet to Bank transfer, your request is being processed, Thank you.");
+                        }
                         responseModel.setStatusCode(statusCode);
 
                         return responseModel;

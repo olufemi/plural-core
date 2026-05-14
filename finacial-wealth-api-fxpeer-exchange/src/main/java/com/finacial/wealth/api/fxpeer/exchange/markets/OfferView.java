@@ -14,6 +14,7 @@ import java.math.BigDecimal;
 
 public record OfferView(
         Long offerId,
+        String correlationId,
         Long sellerUserId,
         CurrencyCode currencySell,
         CurrencyCode currencyReceive,

@@ -125,6 +125,7 @@ public class BreezePayWebhookKeyService {
                 kTrans2b.setReceiver(getAcct.get(0).getAccountNumber());
                 kTrans2b.setSender(rq.getVirtualAccount());
                 kTrans2b.setTransactionId(rq.getProcessId());
+                kTrans2b.setTransactionType("Deposit");
                 kTrans2b.setSenderTransactionType("");
                 kTrans2b.setReceiverTransactionType("Deposit");
                 kTrans2b.setCurrencyCode(CCY);

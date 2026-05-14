@@ -33,13 +33,18 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.StringJoiner;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 
 @Service
 public class FeaturedServicesService {
+
+    private static final Logger logger = LoggerFactory.getLogger(FeaturedServicesService.class);
 
     private final AppConfigRepo appConfigRepo;
     private final OfferRepository offerRepository;
@@ -76,20 +81,35 @@ public class FeaturedServicesService {
     public ResponseEntity<ApiResponseModel> getFeaturedServices() {
         ApiResponseModel response = new ApiResponseModel();
         try {
-            List<FeaturedServiceCard> cards = readConfig().getItems().stream()
+            FeaturedServicesConfigRequest config = readConfig();
+            List<FeaturedServiceConfigItem> items = config.getItems() == null ? List.of() : config.getItems();
+
+            List<FeaturedServiceCard> cards = items.stream()
+                    .filter(java.util.Objects::nonNull)
                     .filter(item -> !Boolean.FALSE.equals(item.getEnabled()))
                     .sorted(Comparator.comparingInt(item -> item.getPriority() == null ? 100 : item.getPriority()))
-                    .map(this::resolveCard)
+                    .map(this::safelyResolveCard)
                     .filter(java.util.Objects::nonNull)
                     .toList();
 
+            boolean configEmpty = items.stream()
+                    .filter(java.util.Objects::nonNull)
+                    .anyMatch(item -> !Boolean.FALSE.equals(item.getEnabled()));
+
+            if (cards.isEmpty()) {
+                response.setStatusCode(400);
+                response.setDescription(configEmpty
+                        ? "No valid featured services available."
+                        : "No featured services configured.");
+                response.setData(cards);
+                return ResponseEntity.badRequest().body(response);
+            }
+
             response.setStatusCode(200);
-            response.setDescription(cards.isEmpty()
-                    ? "No featured services configured."
-                    : "Featured services fetched successfully.");
+            response.setDescription("Featured services fetched successfully.");
             response.setData(cards);
         } catch (Exception ex) {
-            ex.printStackTrace();
+            logger.error("Unable to fetch featured services", ex);
             response.setStatusCode(500);
             response.setDescription("Unable to fetch featured services.");
             response.setData(new ArrayList<>());
@@ -104,7 +124,7 @@ public class FeaturedServicesService {
             response.setDescription("Featured services config fetched successfully.");
             response.setData(readConfig());
         } catch (Exception ex) {
-            ex.printStackTrace();
+            logger.error("Unable to fetch featured services config", ex);
             response.setStatusCode(500);
             response.setDescription("Unable to fetch featured services config.");
             response.setData(new FeaturedServicesConfigRequest());
@@ -116,7 +136,17 @@ public class FeaturedServicesService {
     public ResponseEntity<ApiResponseModel> saveFeaturedServicesConfig(FeaturedServicesConfigRequest request) {
         ApiResponseModel response = new ApiResponseModel();
         try {
+            request = normalizeConfig(request);
             validateRequest(request);
+            ValidationOutcome validationOutcome = filterInvalidManualTargets(request);
+
+            if (!validationOutcome.invalidFeatureKeys().isEmpty() && validationOutcome.validRequest().getItems().isEmpty()) {
+                response.setStatusCode(400);
+                response.setDescription("Invalid feature configuration. manualTargetId not found or not feature-eligible for featureKey(s): "
+                        + joinFeatureKeys(validationOutcome.invalidFeatureKeys()));
+                response.setData(request);
+                return ResponseEntity.ok(response);
+            }
 
             AppConfig config = appConfigRepo.findByConfigName(AppConfigConUtil.SETTING_KEY_FEATURED_SERVICES_CONFIG)
                     .stream()
@@ -125,18 +155,21 @@ public class FeaturedServicesService {
 
             config.setConfigName(AppConfigConUtil.SETTING_KEY_FEATURED_SERVICES_CONFIG);
             config.setConfigDescription("Featured services cards configuration");
-            config.setConfigValue(objectMapper.writeValueAsString(request));
+            config.setConfigValue(objectMapper.writeValueAsString(validationOutcome.validRequest()));
             appConfigRepo.save(config);
 
             response.setStatusCode(200);
-            response.setDescription("Featured services config saved successfully.");
-            response.setData(request);
+            response.setDescription(validationOutcome.invalidFeatureKeys().isEmpty()
+                    ? "Featured services config saved successfully."
+                    : "Featured services config saved successfully. Skipped featureKey(s) with manualTargetId not found or not feature-eligible: "
+                    + joinFeatureKeys(validationOutcome.invalidFeatureKeys()));
+            response.setData(validationOutcome.validRequest());
         } catch (IllegalArgumentException ex) {
             response.setStatusCode(400);
             response.setDescription(ex.getMessage());
             response.setData(request);
         } catch (Exception ex) {
-            ex.printStackTrace();
+            logger.error("Unable to save featured services config", ex);
             response.setStatusCode(500);
             response.setDescription("Unable to save featured services config.");
             response.setData(request);
@@ -144,7 +177,19 @@ public class FeaturedServicesService {
         return ResponseEntity.ok(response);
     }
 
+    private FeaturedServiceCard safelyResolveCard(FeaturedServiceConfigItem item) {
+        try {
+            return resolveCard(item);
+        } catch (Exception ex) {
+            logger.error("Unable to resolve featured service card for featureKey={}", item == null ? null : item.getFeatureKey(), ex);
+            return null;
+        }
+    }
+
     private FeaturedServiceCard resolveCard(FeaturedServiceConfigItem item) {
+        if (item == null || item.getFeatureGroup() == null || item.getStrategy() == null) {
+            return null;
+        }
         FeaturedServiceCard card = resolveCard(item, item.getStrategy());
         if (card == null && item.getFallbackStrategy() != null && item.getFallbackStrategy() != item.getStrategy()) {
             card = resolveCard(item, item.getFallbackStrategy());
@@ -171,6 +216,39 @@ public class FeaturedServicesService {
         card.setFeatureKey(item.getFeatureKey());
         card.setStrategy(item.getStrategy());
         return card;
+    }
+
+    private ValidationOutcome filterInvalidManualTargets(FeaturedServicesConfigRequest request) {
+        FeaturedServicesConfigRequest validRequest = new FeaturedServicesConfigRequest();
+        List<String> invalidFeatureKeys = new ArrayList<>();
+
+        for (FeaturedServiceConfigItem item : request.getItems()) {
+            if (item != null && item.getStrategy() == FeatureStrategy.ADMIN_SELECTED && !isManualTargetResolvable(item)) {
+                invalidFeatureKeys.add(hasText(item.getFeatureKey()) ? item.getFeatureKey() : "<unknown>");
+                continue;
+            }
+            validRequest.getItems().add(item);
+        }
+
+        return new ValidationOutcome(validRequest, invalidFeatureKeys);
+    }
+
+    private boolean isManualTargetResolvable(FeaturedServiceConfigItem item) {
+        if (item == null || item.getFeatureGroup() == null || !hasText(item.getManualTargetId())) {
+            return false;
+        }
+        return switch (item.getFeatureGroup()) {
+            case FX -> resolveManualOffer(item.getManualTargetId()) != null;
+            case INVESTMENT -> resolveManualInvestment(item.getManualTargetId()) != null;
+        };
+    }
+
+    private String joinFeatureKeys(List<String> featureKeys) {
+        StringJoiner joiner = new StringJoiner(", ");
+        for (String featureKey : featureKeys) {
+            joiner.add(featureKey);
+        }
+        return joiner.toString();
     }
 
     private FeaturedServiceCard resolveCard(FeaturedServiceConfigItem item, FeatureStrategy strategy) {
@@ -242,7 +320,7 @@ public class FeaturedServicesService {
         } catch (NumberFormatException ex) {
             return null;
         }
-        return offerRepository.findById(offerId)
+        return offerRepository.findUnlockedById(offerId)
                 .filter(this::isOfferEligible)
                 .map(this::toOfferView)
                 .orElse(null);
@@ -269,7 +347,7 @@ public class FeaturedServicesService {
         Map<Long, Long> countsByOffer = orderRepository.findAll().stream()
                 .filter(order -> order.getStatus() == OrderStatus.RELEASED)
                 .filter(order -> order.getOfferId() != null)
-                .filter(order -> !order.getCreatedAt().isBefore(since))
+                .filter(order -> hasCreatedAtOnOrAfter(order.getCreatedAt(), since))
                 .filter(order -> matchesOfferFilters(order.getCurrencySell(), order.getCurrencyReceive(), filters))
                 .collect(Collectors.groupingBy(Order::getOfferId, Collectors.counting()));
 
@@ -286,7 +364,7 @@ public class FeaturedServicesService {
         Map<Long, Long> countsBySeller = orderRepository.findAll().stream()
                 .filter(order -> order.getStatus() == OrderStatus.RELEASED)
                 .filter(order -> order.getSellerUserId() != null)
-                .filter(order -> !order.getCreatedAt().isBefore(since))
+                .filter(order -> hasCreatedAtOnOrAfter(order.getCreatedAt(), since))
                 .filter(order -> matchesOfferFilters(order.getCurrencySell(), order.getCurrencyReceive(), filters))
                 .collect(Collectors.groupingBy(Order::getSellerUserId, Collectors.counting()));
 
@@ -300,7 +378,8 @@ public class FeaturedServicesService {
                     .filter(this::isOfferEligible)
                     .filter(candidate -> sellerId.equals(candidate.getSellerUserId()))
                     .filter(candidate -> matchesOfferFilters(candidate.getCurrencySell(), candidate.getCurrencyReceive(), filters))
-                    .sorted(Comparator.comparing(Offer::getRate).reversed().thenComparing(Offer::getCreatedAt, Comparator.reverseOrder()))
+                    .sorted(Comparator.comparing(Offer::getRate, Comparator.nullsLast(Comparator.naturalOrder())).reversed()
+                            .thenComparing(Offer::getCreatedAt, Comparator.nullsLast(Comparator.reverseOrder())))
                     .map(this::toOfferView)
                     .findFirst();
             if (offer.isPresent()) {
@@ -314,9 +393,9 @@ public class FeaturedServicesService {
         Instant since = Instant.now().minus(boostHours(filters, 12), ChronoUnit.HOURS);
         return offerRepository.findAll().stream()
                 .filter(this::isOfferEligible)
-                .filter(offer -> !offer.getCreatedAt().isBefore(since))
+                .filter(offer -> hasCreatedAtOnOrAfter(offer.getCreatedAt(), since))
                 .filter(offer -> matchesOfferFilters(offer.getCurrencySell(), offer.getCurrencyReceive(), filters))
-                .sorted(Comparator.comparing(Offer::getCreatedAt, Comparator.reverseOrder()))
+                .sorted(Comparator.comparing(Offer::getCreatedAt, Comparator.nullsLast(Comparator.reverseOrder())))
                 .map(this::toOfferView)
                 .findFirst()
                 .orElse(null);
@@ -325,14 +404,16 @@ public class FeaturedServicesService {
     private OfferView resolveFirstTimerSellerBoost(Map<String, Object> filters) {
         Instant since = Instant.now().minus(boostHours(filters, 12), ChronoUnit.HOURS);
         Map<Long, Long> offersPerSeller = offerRepository.findAll().stream()
+                .filter(offer -> offer.getSellerUserId() != null)
                 .collect(Collectors.groupingBy(Offer::getSellerUserId, Collectors.counting()));
 
         return offerRepository.findAll().stream()
                 .filter(this::isOfferEligible)
-                .filter(offer -> !offer.getCreatedAt().isBefore(since))
+                .filter(offer -> offer.getSellerUserId() != null)
+                .filter(offer -> hasCreatedAtOnOrAfter(offer.getCreatedAt(), since))
                 .filter(offer -> offersPerSeller.getOrDefault(offer.getSellerUserId(), 0L) == 1L)
                 .filter(offer -> matchesOfferFilters(offer.getCurrencySell(), offer.getCurrencyReceive(), filters))
-                .sorted(Comparator.comparing(Offer::getCreatedAt, Comparator.reverseOrder()))
+                .sorted(Comparator.comparing(Offer::getCreatedAt, Comparator.nullsLast(Comparator.reverseOrder())))
                 .map(this::toOfferView)
                 .findFirst()
                 .orElse(null);
@@ -362,7 +443,9 @@ public class FeaturedServicesService {
         Instant since = since(filters, 30);
         Map<String, Long> countsByProductCode = investmentOrderRepository.findAll().stream()
                 .filter(this::isCompletedSubscriptionLike)
-                .filter(order -> !order.getCreatedAt().isBefore(since))
+                .filter(order -> hasCreatedAtOnOrAfter(order.getCreatedAt(), since))
+                .filter(order -> order.getProduct() != null)
+                .filter(order -> hasText(order.getProduct().getProductCode()))
                 .filter(order -> matchesInvestmentFilters(order.getProduct(), filters))
                 .collect(Collectors.groupingBy(order -> order.getProduct().getProductCode(), Collectors.counting()));
 
@@ -378,7 +461,10 @@ public class FeaturedServicesService {
         Instant since = since(filters, 30);
         Map<String, BigDecimal> amountByProductCode = investmentOrderRepository.findAll().stream()
                 .filter(this::isCompletedSubscriptionLike)
-                .filter(order -> !order.getCreatedAt().isBefore(since))
+                .filter(order -> hasCreatedAtOnOrAfter(order.getCreatedAt(), since))
+                .filter(order -> order.getProduct() != null)
+                .filter(order -> hasText(order.getProduct().getProductCode()))
+                .filter(order -> order.getAmount() != null)
                 .filter(order -> matchesInvestmentFilters(order.getProduct(), filters))
                 .collect(Collectors.groupingBy(
                         order -> order.getProduct().getProductCode(),
@@ -447,6 +533,7 @@ public class FeaturedServicesService {
     private OfferView toOfferView(Offer offer) {
         return new OfferView(
                 offer.getId(),
+                offer.getCorrelationId(),
                 offer.getSellerUserId(),
                 offer.getCurrencySell(),
                 offer.getCurrencyReceive(),
@@ -486,8 +573,10 @@ public class FeaturedServicesService {
     ) {
         String sell = filterValue(filters, "currencySell");
         String receive = filterValue(filters, "currencyReceive");
-        return (!hasText(sell) || sell.equalsIgnoreCase(currencySell.name()))
-                && (!hasText(receive) || receive.equalsIgnoreCase(currencyReceive.name()));
+        String sellCode = currencySell == null ? null : currencySell.name();
+        String receiveCode = currencyReceive == null ? null : currencyReceive.name();
+        return (!hasText(sell) || sell.equalsIgnoreCase(sellCode))
+                && (!hasText(receive) || receive.equalsIgnoreCase(receiveCode));
     }
 
     private boolean matchesInvestmentFilters(InvestmentProduct product, Map<String, Object> filters) {
@@ -512,29 +601,53 @@ public class FeaturedServicesService {
                 .findFirst()
                 .orElse(null);
         if (config == null || !hasText(config.getConfigValue())) {
-            return new FeaturedServicesConfigRequest();
+            return normalizeConfig(new FeaturedServicesConfigRequest());
         }
-        return objectMapper.readValue(config.getConfigValue(), FeaturedServicesConfigRequest.class);
+        return normalizeConfig(objectMapper.readValue(config.getConfigValue(), FeaturedServicesConfigRequest.class));
     }
 
     private void validateRequest(FeaturedServicesConfigRequest request) {
         if (request == null) {
-            throw new IllegalArgumentException("Request body is required");
+            throw new IllegalArgumentException("Request body is required. featureKey is required; featureGroup must be FX or INVESTMENT; strategy is required; manualTargetId is required only when strategy = ADMIN_SELECTED.");
         }
+        request = normalizeConfig(request);
         for (FeaturedServiceConfigItem item : request.getItems()) {
+            if (item == null) {
+                throw new IllegalArgumentException("items cannot contain null entries. featureKey is required; featureGroup must be FX or INVESTMENT; strategy is required; manualTargetId is required only when strategy = ADMIN_SELECTED.");
+            }
             if (item.getFeatureGroup() == null) {
-                throw new IllegalArgumentException("featureGroup is required for each item");
+                throw new IllegalArgumentException("featureGroup must be FX or INVESTMENT.");
             }
             if (item.getStrategy() == null) {
-                throw new IllegalArgumentException("strategy is required for each item");
+                throw new IllegalArgumentException("strategy is required.");
             }
             if (!hasText(item.getFeatureKey())) {
-                throw new IllegalArgumentException("featureKey is required for each item");
+                throw new IllegalArgumentException("featureKey is required.");
             }
             if (item.getStrategy() == FeatureStrategy.ADMIN_SELECTED && !hasText(item.getManualTargetId())) {
-                throw new IllegalArgumentException("manualTargetId is required for ADMIN_SELECTED strategy");
+                throw new IllegalArgumentException("manualTargetId is required only when strategy = ADMIN_SELECTED.");
             }
         }
+    }
+
+    private FeaturedServicesConfigRequest normalizeConfig(FeaturedServicesConfigRequest request) {
+        if (request == null) {
+            request = new FeaturedServicesConfigRequest();
+        }
+        if (request.getItems() == null) {
+            request.setItems(new ArrayList<>());
+        }
+        return request;
+    }
+
+    private boolean hasCreatedAtOnOrAfter(Instant createdAt, Instant since) {
+        return createdAt != null && !createdAt.isBefore(since);
+    }
+
+    private record ValidationOutcome(
+            FeaturedServicesConfigRequest validRequest,
+            List<String> invalidFeatureKeys
+    ) {
     }
 
     private FeaturedServiceTarget target(String configuredScreen, String defaultScreen, String id) {

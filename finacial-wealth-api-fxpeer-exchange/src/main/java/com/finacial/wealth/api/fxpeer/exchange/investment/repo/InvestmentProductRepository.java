@@ -38,4 +38,6 @@ public interface InvestmentProductRepository extends JpaRepository<InvestmentPro
     boolean existsByProductCode(String productCode);
     
     List<InvestmentProduct> findByActiveTrueOrderByNameAsc();
+
+    List<InvestmentProduct> findAllByOrderByNameAsc();
 }

@@ -1,0 +1,11 @@
+package com.finacial.wealth.api.profiling.market.enums;
+
+public enum NextAction {
+    NONE,
+    COMPLETE_SDK_ONBOARDING,
+    COMPLETE_MARKET_KYC,
+    COMPLETE_IDENTITY_VERIFICATION,
+    COMPLETE_ACCOUNT_PROVISIONING_STEP,
+    RETRY_ACCOUNT_PROVISION,
+    CONTACT_SUPPORT
+}

@@ -268,6 +268,16 @@ public class InvestmentServicesController {
         return investmentOrderService.getProducts();
     }
 
+    @GetMapping(
+            path = "/admin/products",
+            produces = MediaType.APPLICATION_JSON_VALUE
+    )
+    public ResponseEntity<ApiResponseModel> getAdminProducts(
+            @RequestHeader(name = "authorization", required = true) String auth
+    ) {
+        return ResponseEntity.ok(productService.getAdminProducts());
+    }
+
     @PostMapping(
             path = "/create-subscription",
             produces = MediaType.APPLICATION_JSON_VALUE

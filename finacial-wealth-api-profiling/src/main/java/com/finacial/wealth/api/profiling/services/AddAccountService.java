@@ -10,6 +10,7 @@ import com.finacial.wealth.api.profiling.breezpay.virt.create.acct.GenerateVirtu
 import com.finacial.wealth.api.profiling.breezpay.virt.get.bvn.BvnLookup;
 import com.finacial.wealth.api.profiling.breezpay.virt.get.bvn.BvnLookupRepository;
 import com.finacial.wealth.api.profiling.client.model.WalletSystemResponse;
+import com.finacial.wealth.api.profiling.market.service.impl.MarketProfileSyncService;
 import com.finacial.wealth.api.profiling.domain.AddAccountDetails;
 import com.finacial.wealth.api.profiling.domain.AddFailedTransLog;
 import com.finacial.wealth.api.profiling.domain.Countries;
@@ -40,6 +41,7 @@ import java.util.Map;
 import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -65,6 +67,8 @@ public class AddAccountService {
     private final UttilityMethods uttilityMethods;
     private final VerifyReqIdDetailsAuthRepo verifyReqIdDetailsAuthRepo;
     private final UtilitiesProxy utilitiesProxy;
+    @Autowired
+    private MarketProfileSyncService marketProfileSyncService;
 
     private static final int STATUS_CODE_NIGERIA_ONBOARDING_FLOW_CODE = 58;
     private static final String STATUS_CODE_NIGERIA_ONBOARDING_FLOW_DESCRIPTION = "Please validate bvn";
@@ -252,6 +256,13 @@ public class AddAccountService {
                 responseModel.setDescription("The account exists.");
                 responseModel.setData(addExit);
                 responseModel.setStatusCode(200);
+                try {
+                    if (getRec.isPresent()) {
+                        marketProfileSyncService.syncNigeriaAccountProvisioned(getRec.get(), getAcct.get(0));
+                    }
+                } catch (Exception ex) {
+                    logger.warn("Unable to sync NG_RETAIL market profile for existing account", ex);
+                }
                 return responseModel;
 
             }
@@ -377,6 +388,11 @@ public class AddAccountService {
             }
 
             addAccountDetailsRepo.save(addDe);
+            try {
+                marketProfileSyncService.syncNigeriaAccountProvisioned(getRec.get(), addDe);
+            } catch (Exception ex) {
+                logger.warn("Unable to sync NG_RETAIL market profile after account provisioning", ex);
+            }
 
             Map added = new HashMap();
             added.put("accountNumber", addDe.getAccountNumber());

@@ -33,16 +33,19 @@ public class FinacialWealthApiUtilityApplication {
 
         String encryptionKeyPilot = "ed36e39b7de30ad8db7137af61f898ec";
         // String aactTopDebit = decrypt("BZ9wNGTmmfNBt2Je+mZznHNDVGEHVlDVcQwgiy1hDIM=", encryptionKeyPilot);
-        String encrypt = encyrpt("0823345692", encryptionKeyPilot);
-        System.out.println("encrypt  " + "  ::::::::::::::::::::: " + encrypt);
+        String encrypt = encyrpt("2220000504", encryptionKeyPilot);
+        System.out.println("NGN_REFERRAL_GGL_ACCOUNT  " + "  ::::::::::::::::::::: " + encrypt);
+
+        String encryptCAD_REFERRAL_GGL_ACCOUNT = encyrpt("2220000503", encryptionKeyPilot);
+        System.out.println("CAD_REFERRAL_GGL_ACCOUNT  " + "  ::::::::::::::::::::: " + encryptCAD_REFERRAL_GGL_ACCOUNT);
+
         //System.out.println("password " + "  ::::::::::::::::::::: " + password);
 //05044400198 -
         // String clientidDec = decrypt("sZSmsolo1Lg1sTSF1bFySA==", encryptionKeyPilot);
         //System.out.println("clientidDec " + "  ::::::::::::::::::::: " + clientidDec);
-        String decrypt = decrypt("WsmqJHl8mnRynYeSjAl2Sg==", encryptionKeyPilot);
-        System.out.println("decrypt " + "  ::::::::::::::::::::: " + decrypt);
+        // String decrypt = decrypt("WsmqJHl8mnRynYeSjAl2Sg==", encryptionKeyPilot);
+        //System.out.println("decrypt " + "  ::::::::::::::::::::: " + decrypt);
         // String password = encyrpt("CliPwd$@2024connect", encryptionKeyPilot);
-
     }
 
     public static String encyrpt(String text, String key) throws NoSuchAlgorithmException, NoSuchPaddingException, InvalidKeyException, IllegalBlockSizeException, BadPaddingException {

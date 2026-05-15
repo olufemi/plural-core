@@ -339,6 +339,8 @@ public class UtilityService {
                 updateWallet2.setPushNotificationToken(rq.getPushNotificationToken());
                 regWalletInfoRepo.save(updateWallet2);
 
+                resultWallet = ensureReferralDetails(resultWallet);
+
                 List<WalletTierVerifyBizness> getBiz = walletTierVerifyBiznessRepo.findByWalletNo(resultWallet.getPhoneNumber());
                 String merchantId = null;
                 String merchantLink = null;
@@ -398,6 +400,45 @@ public class UtilityService {
 
         return responseModel;
 
+    }
+
+    private RegWalletInfo ensureReferralDetails(RegWalletInfo walletInfo) {
+        if (walletInfo == null) {
+            return null;
+        }
+
+        boolean missingReferralCode = walletInfo.getReferralCode() == null || walletInfo.getReferralCode().trim().isEmpty();
+        boolean missingReferralLink = walletInfo.getReferralCodeLink() == null || walletInfo.getReferralCodeLink().trim().isEmpty();
+        if (!missingReferralCode && !missingReferralLink) {
+            return walletInfo;
+        }
+
+        RegWalletInfo persistedWallet = regWalletInfoRepo.findByPhoneNumberId(walletInfo.getPhoneNumber());
+        if (persistedWallet == null) {
+            return walletInfo;
+        }
+
+        if (persistedWallet.getReferralCode() == null || persistedWallet.getReferralCode().trim().isEmpty()) {
+            persistedWallet.setReferralCode(generateUniqueReferralCode());
+        }
+
+        if (persistedWallet.getReferralCodeLink() == null || persistedWallet.getReferralCodeLink().trim().isEmpty()) {
+            String referralBaseLink = utilMeth.getSETTING_REF_LINK();
+            if (referralBaseLink == null) {
+                referralBaseLink = "";
+            }
+            persistedWallet.setReferralCodeLink(referralBaseLink + persistedWallet.getReferralCode());
+        }
+
+        return regWalletInfoRepo.save(persistedWallet);
+    }
+
+    private String generateUniqueReferralCode() {
+        String referralCode = utilMeth.generateReferralCode("Customer-Onboarding");
+        while (regWalletInfoRepo.existsByReferralCode(referralCode)) {
+            referralCode = utilMeth.generateReferralCode("Customer-Onboarding");
+        }
+        return referralCode;
     }
 
 }

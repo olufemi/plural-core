@@ -392,7 +392,8 @@ public class SessionManagerClientUserService {
                 userId.toLowerCase().trim(), ISSUER, SUBJECT, expire, response.getCustomerId(),
                 uuid, response.getCustomerAccountNo(), response.getBvn(), response.getFirstName(),
                 response.getLastName(), response.getEmailAddress(), response.getMobile(),
-                baseResponse.getData().get("pinCreated").toString(), response.getPhoneNumber());
+                baseResponse.getData().get("pinCreated").toString(), response.getPhoneNumber(),
+                response.getReferralCode(), response.getReferralCodeLink());
         return token;
     }
 
@@ -401,7 +402,8 @@ public class SessionManagerClientUserService {
             String subject, Date expire, String customerId, String uuid,
             String accountNo, String bvn,
             String firstName, String lastName, String email,
-            String mobile, String pinCreated, String phoneNumber) {
+            String mobile, String pinCreated, String phoneNumber,
+            String referralCode, String referralCodeLink) {
 
         SignatureAlgorithm signatureAlgorithm = SignatureAlgorithm.HS256;
         long nowMillis = System.currentTimeMillis();
@@ -423,6 +425,8 @@ public class SessionManagerClientUserService {
         claims.put("pinCreated", pinCreated);
         claims.put("emailAddressVerification", emailAddressVerification);
         claims.put("uniqueIdentificationNo", uniqueIdentificationNo);
+        claims.put("referralCode", referralCode);
+        claims.put("referralCodeLink", referralCodeLink);
         claims.put("exp", expire.getTime());
 
         JwtBuilder builder = Jwts.builder()

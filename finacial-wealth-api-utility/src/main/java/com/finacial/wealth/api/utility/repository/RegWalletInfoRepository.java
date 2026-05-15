@@ -34,6 +34,8 @@ public interface RegWalletInfoRepository extends
 
     boolean existsByUuid(String uuid);
 
+    boolean existsByReferralCode(String referralCode);
+
     @Query("select bs from RegWalletInfo bs where bs.phoneNumber=:phoneNumber")
     RegWalletInfo findByPhoneNumberId(String phoneNumber);
 

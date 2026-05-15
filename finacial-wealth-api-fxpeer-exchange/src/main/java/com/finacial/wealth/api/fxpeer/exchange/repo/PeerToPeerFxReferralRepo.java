@@ -20,7 +20,7 @@ public interface PeerToPeerFxReferralRepo extends
     @Query("SELECT u FROM PeerToPeerFxReferral u where u.emailAddress = :emailAddress")
     List<PeerToPeerFxReferral> findByEmailAddress(@Param("emailAddress") String emailAddress);
 
-    @Query("SELECT u FROM PeerToPeerFxReferral u where u.emailAddress = :referralCode")
+    @Query("SELECT u FROM PeerToPeerFxReferral u where u.referralCode = :referralCode")
     List<PeerToPeerFxReferral> findByReferralCode(@Param("referralCode") String referralCode);
 
 }

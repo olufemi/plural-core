@@ -28,6 +28,7 @@ public class AppConfigConUtil {
     public static final String SETTING_KEY_GET_WALLET_AS_SIMPLE = "walletTypeSimple";
     public static final String SETTING_KEY_WAL_EX_DAYS = "walPinExpiDays";
     public static final String SETTING_KEY_GET_WALLET_USER_GROUP_ID = "walletUserGroup";
+    public static final String SETTING_REF_LINK = "onboardRefLink";
     public static final String SETTING_KEY_GET_IS_BVN_VALIDATION_ENABLED = "validateBVN";
     public static final String SETTING_KEY_GET_TIER_1 = "tier1";
     public static final String SETTING_KEY_GET_TIER_2 = "tier2";

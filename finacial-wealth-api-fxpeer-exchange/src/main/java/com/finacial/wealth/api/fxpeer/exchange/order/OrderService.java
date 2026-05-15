@@ -17,7 +17,6 @@ import com.finacial.wealth.api.fxpeer.exchange.domain.AddAccountDetailsRepo;
 import com.finacial.wealth.api.fxpeer.exchange.domain.AppConfig;
 import com.finacial.wealth.api.fxpeer.exchange.domain.AppConfigRepo;
 import com.finacial.wealth.api.fxpeer.exchange.domain.FinWealthPaymentTransaction;
-import com.finacial.wealth.api.fxpeer.exchange.domain.PeerToPeerFxReferral;
 import com.finacial.wealth.api.fxpeer.exchange.domain.RegWalletInfo;
 import com.finacial.wealth.api.fxpeer.exchange.domain.RegWalletInfoRepository;
 import com.finacial.wealth.api.fxpeer.exchange.feign.ProfilingProxies;
@@ -25,16 +24,20 @@ import com.finacial.wealth.api.fxpeer.exchange.feign.TransactionServiceProxies;
 import com.finacial.wealth.api.fxpeer.exchange.investment.service.TransactionHistoryClientLocalT;
 import com.finacial.wealth.api.fxpeer.exchange.fx.p.p.wallet.FinWealthPaymentTransactionRepo;
 import com.finacial.wealth.api.fxpeer.exchange.model.AddAccountObj;
+import com.finacial.wealth.api.fxpeer.exchange.model.ApplyReferralAttributionRequest;
 import com.finacial.wealth.api.fxpeer.exchange.model.ApiResponseModel;
 import com.finacial.wealth.api.fxpeer.exchange.model.BaseResponse;
+import com.finacial.wealth.api.fxpeer.exchange.model.BatchPostingLegRequest;
+import com.finacial.wealth.api.fxpeer.exchange.model.BatchPostingRequest;
+import com.finacial.wealth.api.fxpeer.exchange.model.CompleteReferralAttributionRequest;
 import com.finacial.wealth.api.fxpeer.exchange.model.CreditWalletCaller;
 import com.finacial.wealth.api.fxpeer.exchange.model.DebitWalletCaller;
 import com.finacial.wealth.api.fxpeer.exchange.model.ManageFeesConfigReq;
+import com.finacial.wealth.api.fxpeer.exchange.model.QualifyReferralAttributionRequest;
 import com.finacial.wealth.api.fxpeer.exchange.model.WalletNo;
 import com.finacial.wealth.api.fxpeer.exchange.offer.CreateOfferCaller;
 import com.finacial.wealth.api.fxpeer.exchange.offer.Offer;
 import com.finacial.wealth.api.fxpeer.exchange.offer.OfferRepository;
-import com.finacial.wealth.api.fxpeer.exchange.repo.PeerToPeerFxReferralRepo;
 import com.finacial.wealth.api.fxpeer.exchange.util.GlobalMethods;
 import com.finacial.wealth.api.fxpeer.exchange.util.UttilityMethods;
 import com.finacial.wealth.api.fxpeer.exchange.fx.p.p.wallet.WalletIndivTransactionsDetails;
@@ -83,7 +86,6 @@ public class OrderService {
     private final WalletTransactionsDetailsRepo walletTransactionsDetailsRepo;
     private final WalletIndivTransactionsDetailsRepo walletIndivTransactionsDetailsRepo;
     private final AppConfigRepo appConfigRepo;
-    private final PeerToPeerFxReferralRepo peerToPeerFxReferralRepo;
     private final ObjectMapper mapper;
     private final FinWealthPaymentTransactionRepo finWealthPaymentTransactionRepo;
     private final TransactionHistoryClientLocalT transactionHistoryClientLocalT;
@@ -94,7 +96,7 @@ public class OrderService {
             AddAccountDetailsRepo addAccountDetailsRepo,
             ProfilingProxies profilingProxies, WalletTransactionsDetailsRepo walletTransactionsDetailsRepo,
             WalletIndivTransactionsDetailsRepo walletIndivTransactionsDetailsRepo,
-            AppConfigRepo appConfigRepo, PeerToPeerFxReferralRepo peerToPeerFxReferralRepo,
+            AppConfigRepo appConfigRepo,
             ObjectMapper mapper, TransactionHistoryClientLocalT transactionHistoryClientLocalT) {
         this.finWealthPaymentTransactionRepo = finWealthPaymentTransactionRepo;
         this.orders = orders;
@@ -107,7 +109,6 @@ public class OrderService {
         this.walletTransactionsDetailsRepo = walletTransactionsDetailsRepo;
         this.walletIndivTransactionsDetailsRepo = walletIndivTransactionsDetailsRepo;
         this.appConfigRepo = appConfigRepo;
-        this.peerToPeerFxReferralRepo = peerToPeerFxReferralRepo;
         this.mapper = mapper;
         this.transactionHistoryClientLocalT = transactionHistoryClientLocalT;
     }
@@ -189,6 +190,34 @@ public class OrderService {
 
     private static boolean isBlank(String s) {
         return s == null || s.trim().isEmpty();
+    }
+
+    private String normalizeReferralCode(String referralCode) {
+        return isBlank(referralCode) || "0".equalsIgnoreCase(referralCode.trim())
+                ? null
+                : referralCode.trim();
+    }
+
+    private boolean sameCustomer(RegWalletInfo left, RegWalletInfo right) {
+        if (left == null || right == null) {
+            return false;
+        }
+        if (!isBlank(left.getWalletId()) && !isBlank(right.getWalletId())) {
+            return left.getWalletId().equalsIgnoreCase(right.getWalletId());
+        }
+        if (!isBlank(left.getEmail()) && !isBlank(right.getEmail())) {
+            return left.getEmail().equalsIgnoreCase(right.getEmail());
+        }
+        return false;
+    }
+
+    private int countCompletedP2PTrades(String emailAddress) {
+        if (isBlank(emailAddress)) {
+            return 0;
+        }
+        List<WalletIndivTransactionsDetails> asBuyer = walletIndivTransactionsDetailsRepo.findByBuyerEmailAddress(emailAddress);
+        List<WalletIndivTransactionsDetails> asSeller = walletIndivTransactionsDetailsRepo.findBySellerEmailAddress(emailAddress);
+        return (asBuyer == null ? 0 : asBuyer.size()) + (asSeller == null ? 0 : asSeller.size());
     }
 
     /**
@@ -298,22 +327,35 @@ public class OrderService {
             String phoneNumber = utilService.getClaimFromJwt(auth, "phoneNumber"); // preferred if your JWT has sellerId
             Optional<RegWalletInfo> getRec = regWalletInfoRepository.findByPhoneNumber(phoneNumber);
 
-            String refCode = rq.getReferralCode() == null ? "0" : rq.getReferralCode();
-
-            List<PeerToPeerFxReferral> getRefCode = peerToPeerFxReferralRepo.findByReferralCode(refCode);
-
-            boolean refCodeExists = false;
-            String refererName = null;
-
-            if (getRefCode.size() > 0) {
-
-                if (getRefCode.get(0).getEmailAddress().equals(getRec.get().getEmail())) {
-                    return bad(res, "Referral code mismatched!", 400);
+            String referralCode = normalizeReferralCode(rq.getReferralCode());
+            if (referralCode != null) {
+                int buyerCompletedTrades = countCompletedP2PTrades(getRec.get().getEmail());
+                if (buyerCompletedTrades > 0) {
+                    return bad(res, "Referral rewards are for new users only.", 400);
                 }
 
-                refererName = getRefCode.get(0).getReferrer();
+                List<RegWalletInfo> referrers = regWalletInfoRepository.findByReferralCode(referralCode);
+                if (referrers == null || referrers.isEmpty()) {
+                    return bad(res, "That code isn’t valid or has expired.", 400);
+                }
 
-                refCodeExists = true;
+                RegWalletInfo referrerWallet = referrers.get(0);
+                if (sameCustomer(getRec.get(), referrerWallet)) {
+                    return bad(res, "That code isn’t valid or has expired.", 400);
+                }
+
+                if (countCompletedP2PTrades(referrerWallet.getEmail()) <= 0) {
+                    return bad(res, "That code isn’t valid or has expired.", 400);
+                }
+
+                ApplyReferralAttributionRequest applyRequest = new ApplyReferralAttributionRequest();
+                applyRequest.setProductType("P2P");
+                applyRequest.setReferralCode(referralCode);
+
+                BaseResponse applyResponse = profilingProxies.applyReferralAttribution(applyRequest, auth);
+                if (applyResponse.getStatusCode() != 200) {
+                    return bad(res, applyResponse.getDescription(), applyResponse.getStatusCode());
+                }
             }
 
             //validate pin
@@ -799,50 +841,12 @@ public class OrderService {
                 Order orddd = buyNow(getRec.get().getFirstName(), sellerAcctNumberName, off.get(0).getId(), setAmount, walletId, 0L, rq.getOfferCorrelationId(),
                         String.valueOf(off.get(0).getSellerUserId()), "0.00", transactionId, auth);
 
-                String referralSharingPayment;
-
-                /*List<PeerToPeerFxReferral> getRef = peerToPeerFxReferralRepo.findByEmailAddress(getRec.get().getEmail());
-                if (getRef.size() <= 0) {
-
-                    if (refCodeExists == true) {
-
-                        //  referralSharingPayment = getRef.get(0).getReferralSharingPayment() == null ? "0" : getRef.get(0).getReferralSharingPayment();
-                        //save and generate the customer referral code 
-                        PeerToPeerFxReferral refGen = new PeerToPeerFxReferral();
-                        refGen.setCreatedDate(Instant.now());
-                        refGen.setEmailAddress(getRec.get().getEmail());
-                        refGen.setReferee(getRec.get().getFirstName() + " " + getRec.get().getLastName());
-                        refGen.setRefereeCode(GlobalMethods.generateReferal(getRec.get().getFirstName()));
-                        refGen.setReferrer(refererName);
-                        refGen.setReferralCode(rq.getReferralCode());
-                        refGen.setReferralSharingPayment("1");
-                        //peerToPeerFxReferralRepo.save(refGen);
-
-                        //give buyer payment in wallet -- this depends on currency to SELL if naira (fillNig08006763319) in appConfig table
-                        ManageFeesConfigReq getBonus = new ManageFeesConfigReq();
-                        getBonus.setAmount(receiveAmount.toString());
-                        getBonus.setCurrencyCode(refCode);
-                        if (getBonus.getCurrencyCode().equals("NGN")) {
-                            getBonus.setTransType("fxbonusnigeria");
-                        }
-                        if (getBonus.getCurrencyCode().equals("CAD")) {
-                            getBonus.setTransType("fxbonuscanada");
-                        }
-
-                        BaseResponse getBonusRes = utilService.getFeesConfig(getBonus);
-
-                        //give buyer payment in wallet -- this depends on currency to SELL if dollar () in appConfig table
-                        //give seller payment in wallet -- this depends on currency to RECEIVE if naira (fillNig08006763319) in appConfig table
-                        //give buyer payment in wallet -- this depends on currency to RECEIVE if dollar () in appConfig table
-                        //give the Referral payemnt in wallet
-                    }
-
-                } else {
-                    referralSharingPayment = getRef.get(0).getReferralSharingPayment();
-                    if (!referralSharingPayment.equals("1")) {
-
-                    }
-                }*/
+                try {
+                    qualifyAndPayP2PReferral(auth, getRec.get(), off.get(0), wallInd);
+                } catch (Exception referralEx) {
+                    logger.warn("Referral runtime failed after successful P2P trade transactionId={} correlationId={}",
+                            transactionId, rq.getOfferCorrelationId(), referralEx);
+                }
 
  /*
                  buyNow(long offerId, BigDecimal amount, long buyerId, long lockTtlSeconds,
@@ -865,6 +869,287 @@ public class OrderService {
                     auth != null,
                     ex);
             return bad(res, "An error occurred, please try again.", 500);
+        }
+    }
+
+    private void qualifyAndPayP2PReferral(String auth, RegWalletInfo buyer, Offer offer,
+            WalletIndivTransactionsDetails trade) {
+        QualifyReferralAttributionRequest qualifyRequest = new QualifyReferralAttributionRequest();
+        qualifyRequest.setProductType("P2P");
+        qualifyRequest.setTransactionId(trade.getTransactionId());
+        qualifyRequest.setCorrelationId(trade.getCorrelationId());
+        qualifyRequest.setTransactionAmount(scaleMoney(trade.getQuantityPurchased()));
+        qualifyRequest.setTradeCurrencyCode(offer.getCurrencySell().toString());
+        qualifyRequest.setCompletedTransactionCount(countCompletedP2PTrades(buyer.getEmail()));
+
+        BaseResponse qualifyResponse = profilingProxies.qualifyReferralAttribution(qualifyRequest, auth);
+        if (qualifyResponse.getStatusCode() != 200) {
+            logger.info("Referral qualification skipped transactionId={} reason={}",
+                    trade.getTransactionId(), qualifyResponse.getDescription());
+            return;
+        }
+
+        if (!extractBoolean(qualifyResponse.getData().get("shouldReward"))) {
+            return;
+        }
+
+        Long attributionId = extractLong(qualifyResponse.getData().get("attributionId"));
+        if (attributionId == null) {
+            logger.warn("Referral qualification returned no attributionId transactionId={}", trade.getTransactionId());
+            return;
+        }
+
+        String rewardCurrencyCode = extractString(qualifyResponse.getData().get("rewardCurrencyCode"));
+        BigDecimal referrerRewardAmount = extractBigDecimal(qualifyResponse.getData().get("referrerRewardAmount"));
+        BigDecimal refereeRewardAmount = extractBigDecimal(qualifyResponse.getData().get("refereeRewardAmount"));
+        String referrerWalletId = extractString(qualifyResponse.getData().get("referrerWalletId"));
+        String refereeWalletId = extractString(qualifyResponse.getData().get("refereeWalletId"));
+        ReferralFundingConfig referralFundingConfig = resolveReferralFundingConfig(rewardCurrencyCode);
+        if (referralFundingConfig == null) {
+            logger.warn("Referral funding config missing for rewardCurrencyCode={} transactionId={}",
+                    rewardCurrencyCode, trade.getTransactionId());
+            return;
+        }
+
+        BatchPostingRequest batchPostingRequest = new BatchPostingRequest();
+        batchPostingRequest.setGroupRef(trade.getTransactionId() + "-REFERRAL");
+
+        CompleteReferralAttributionRequest completeRequest = new CompleteReferralAttributionRequest();
+        List<String> payoutReferences = new ArrayList<>();
+
+        if (referrerRewardAmount.compareTo(BigDecimal.ZERO) > 0) {
+            String referrerDestination = resolveRewardDestinationAccount(auth, referrerWalletId, rewardCurrencyCode);
+            if (isBlank(referrerDestination)) {
+                logger.warn("Unable to resolve referrer reward destination walletId={} currency={}",
+                        referrerWalletId, rewardCurrencyCode);
+                return;
+            }
+            String referrerRequestRef = trade.getTransactionId() + "-REFERRER-BONUS";
+            batchPostingRequest.getLegs().add(buildRewardDebitLeg(referralFundingConfig,
+                    referrerRewardAmount, rewardCurrencyCode, referrerRequestRef + "-GL-DR"));
+            batchPostingRequest.getLegs().add(buildRewardCreditLeg(referrerDestination,
+                    referrerRewardAmount, rewardCurrencyCode, referrerRequestRef, "Referral_Referrer"));
+            completeRequest.setReferrerRewardPaid(Boolean.TRUE);
+            completeRequest.setReferrerPayoutReference(referrerRequestRef);
+            payoutReferences.add(referrerRequestRef);
+        }
+
+        if (refereeRewardAmount.compareTo(BigDecimal.ZERO) > 0) {
+            String refereeDestination = resolveRewardDestinationAccount(auth, refereeWalletId, rewardCurrencyCode);
+            if (isBlank(refereeDestination)) {
+                logger.warn("Unable to resolve referee reward destination walletId={} currency={}",
+                        refereeWalletId, rewardCurrencyCode);
+                return;
+            }
+            String refereeRequestRef = trade.getTransactionId() + "-REFEREE-BONUS";
+            batchPostingRequest.getLegs().add(buildRewardDebitLeg(referralFundingConfig,
+                    refereeRewardAmount, rewardCurrencyCode, refereeRequestRef + "-GL-DR"));
+            batchPostingRequest.getLegs().add(buildRewardCreditLeg(refereeDestination,
+                    refereeRewardAmount, rewardCurrencyCode, refereeRequestRef, "Referral_Referee"));
+            completeRequest.setRefereeRewardPaid(Boolean.TRUE);
+            completeRequest.setRefereePayoutReference(refereeRequestRef);
+            payoutReferences.add(refereeRequestRef);
+        }
+
+        if (batchPostingRequest.getLegs().isEmpty()) {
+            return;
+        }
+
+        BaseResponse payoutResponse = transactionServiceProxies.batchPostWithType(batchPostingRequest, auth);
+        if (payoutResponse.getStatusCode() != 200) {
+            logger.warn("Referral payout failed transactionId={} reason={}",
+                    trade.getTransactionId(), payoutResponse.getDescription());
+            return;
+        }
+
+        BaseResponse completeResponse = profilingProxies.completeReferralAttribution(attributionId, completeRequest, auth);
+        if (completeResponse.getStatusCode() != 200) {
+            logger.warn("Referral payout completion mark failed attributionId={} refs={}",
+                    attributionId, payoutReferences, completeResponse.getDescription());
+        }
+    }
+
+    private BatchPostingLegRequest buildRewardDebitLeg(ReferralFundingConfig fundingConfig, BigDecimal amount,
+            String currencyCode, String requestRef) {
+        BatchPostingLegRequest leg = new BatchPostingLegRequest();
+        String scaledAmount = scaleMoney(amount).toString();
+        leg.setDirection("DEBIT");
+        leg.setRequestRef(requestRef);
+        leg.setUserType(fundingConfig.getGglCode());
+        leg.setFees("0.00");
+        leg.setFinalCHarges(scaledAmount);
+        leg.setNarration(currencyCode + "_Referral_Bonus_Funding");
+        leg.setPhoneNumber(fundingConfig.getAccountNumber());
+        leg.setTransAmount(scaledAmount);
+        leg.setTransactionId(requestRef);
+        leg.setAuth(currencyCode);
+        return leg;
+    }
+
+    private BatchPostingLegRequest buildRewardCreditLeg(String destination, BigDecimal amount, String currencyCode,
+            String requestRef, String authActor) {
+        BatchPostingLegRequest leg = new BatchPostingLegRequest();
+        String scaledAmount = scaleMoney(amount).toString();
+        leg.setDirection("CREDIT");
+        leg.setRequestRef(requestRef);
+        leg.setUserType("CUSTOMER");
+        leg.setFees("0.00");
+        leg.setFinalCHarges(scaledAmount);
+        leg.setNarration(currencyCode + "_Referral_Bonus");
+        leg.setPhoneNumber(destination);
+        leg.setTransAmount(scaledAmount);
+        leg.setTransactionId(requestRef);
+        leg.setAuth(authActor);
+        return leg;
+    }
+
+    private ReferralFundingConfig resolveReferralFundingConfig(String rewardCurrencyCode) {
+        if (isBlank(rewardCurrencyCode)) {
+            return null;
+        }
+
+        String normalizedCurrency = rewardCurrencyCode.trim().toUpperCase();
+        String encryptedAccount = findConfigValue(normalizedCurrency + "_REFERRAL_GGL_ACCOUNT");
+        String gglCode = findConfigValue(normalizedCurrency + "_REFERRAL_GGL_CODE");
+        if (isBlank(encryptedAccount) || isBlank(gglCode)) {
+            return null;
+        }
+
+        try {
+            return new ReferralFundingConfig(utilService.decryptData(encryptedAccount), gglCode.trim());
+        } catch (BadPaddingException | IllegalBlockSizeException | InvalidKeyException
+                | NoSuchAlgorithmException | NoSuchPaddingException ex) {
+            logger.warn("Unable to decrypt referral GL account for currency={}", normalizedCurrency, ex);
+            return null;
+        }
+    }
+
+    private String findConfigValue(String configName) {
+        List<AppConfig> configs = appConfigRepo.findByConfigName(configName);
+        if (configs == null) {
+            return null;
+        }
+
+        for (AppConfig config : configs) {
+            if (config != null && configName.equalsIgnoreCase(config.getConfigName())) {
+                return config.getConfigValue();
+            }
+        }
+        return null;
+    }
+
+    private String resolveRewardDestinationAccount(String auth, String walletId, String currencyCode) {
+        if (isBlank(walletId) || isBlank(currencyCode)) {
+            return null;
+        }
+
+        Optional<RegWalletInfo> customerOptional = regWalletInfoRepository.findByWalletIdOptional(walletId);
+        if (!customerOptional.isPresent()) {
+            return null;
+        }
+
+        RegWalletInfo customer = customerOptional.get();
+        if ("CAD".equalsIgnoreCase(currencyCode)) {
+            return customer.getPhoneNumber();
+        }
+
+        List<AddAccountDetails> accounts = addAccountDetailsRepo.findByWalletIdrData1(walletId);
+        for (AddAccountDetails account : accounts) {
+            if (currencyCode.equalsIgnoreCase(account.getCurrencyCode())) {
+                return account.getAccountNumber();
+            }
+        }
+
+        if (accounts == null || accounts.isEmpty()) {
+            return null;
+        }
+
+        AddAccountDetails seedAccount = accounts.get(0);
+        AddAccountObj addAccountObj = new AddAccountObj();
+        addAccountObj.setCountry(seedAccount.getCountryName());
+        addAccountObj.setCountryCode(seedAccount.getCountryCode());
+        addAccountObj.setWalletId(walletId);
+        BaseResponse addAccountResponse = profilingProxies.addOtherAccount(addAccountObj, auth);
+        if (addAccountResponse.getStatusCode() != 200 || addAccountResponse.getData() == null) {
+            return null;
+        }
+
+        Object accountNumber = addAccountResponse.getData().get("accountNumber");
+        return accountNumber == null ? null : String.valueOf(accountNumber);
+    }
+
+    private static final class ReferralFundingConfig {
+
+        private final String accountNumber;
+        private final String gglCode;
+
+        private ReferralFundingConfig(String accountNumber, String gglCode) {
+            this.accountNumber = accountNumber;
+            this.gglCode = gglCode;
+        }
+
+        private String getAccountNumber() {
+            return accountNumber;
+        }
+
+        private String getGglCode() {
+            return gglCode;
+        }
+    }
+
+    private BigDecimal scaleMoney(BigDecimal value) {
+        if (value == null) {
+            return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+        }
+        return value.setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private String extractString(Object value) {
+        if (value == null) {
+            return null;
+        }
+        String stringValue = String.valueOf(value);
+        return isBlank(stringValue) ? null : stringValue.trim();
+    }
+
+    private boolean extractBoolean(Object value) {
+        if (value == null) {
+            return false;
+        }
+        if (value instanceof Boolean) {
+            return ((Boolean) value).booleanValue();
+        }
+        return Boolean.parseBoolean(String.valueOf(value));
+    }
+
+    private Long extractLong(Object value) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof Number) {
+            return ((Number) value).longValue();
+        }
+        try {
+            return Long.valueOf(String.valueOf(value));
+        } catch (NumberFormatException ex) {
+            return null;
+        }
+    }
+
+    private BigDecimal extractBigDecimal(Object value) {
+        if (value == null) {
+            return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+        }
+        if (value instanceof BigDecimal) {
+            return scaleMoney((BigDecimal) value);
+        }
+        if (value instanceof Number) {
+            return scaleMoney(new BigDecimal(String.valueOf(value)));
+        }
+        try {
+            return scaleMoney(new BigDecimal(String.valueOf(value)));
+        } catch (NumberFormatException ex) {
+            return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
         }
     }
 

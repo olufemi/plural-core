@@ -24,6 +24,7 @@ import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.time.Instant;
 import java.util.Base64;
+import java.util.UUID;
 import javax.crypto.BadPaddingException;
 import javax.crypto.Cipher;
 import javax.crypto.IllegalBlockSizeException;
@@ -50,6 +51,7 @@ public class UttilityMethods {
     String SETTING_KEY_WALLET_SYSTEM_PASSWORD;
     String SETTING_KEY_WALLET_SYSTEM_EMAIL;
     String SETTING_KEY_WALLET_SYSTEM_CLEARANCEID;
+    String SETTING_REF_LINK;
 
     public UttilityMethods(MemoryCache cache) {
         this.cache = cache;
@@ -64,6 +66,7 @@ public class UttilityMethods {
         SETTING_KEY_WALLET_SYSTEM_PASSWORD = cache.getApplicationSetting(AppConfigConUtil.SETTING_KEY_WALLET_SYSTEM_PASSWORD);
         SETTING_KEY_WALLET_SYSTEM_EMAIL = cache.getApplicationSetting(AppConfigConUtil.SETTING_KEY_WALLET_SYSTEM_EMAIL);
         SETTING_KEY_WALLET_SYSTEM_CLEARANCEID = cache.getApplicationSetting(AppConfigConUtil.SETTING_KEY_WALLET_SYSTEM_CLEARANCEID);
+        SETTING_REF_LINK = cache.getApplicationSetting(AppConfigConUtil.SETTING_REF_LINK);
 
     }
 
@@ -88,10 +91,19 @@ public class UttilityMethods {
         return SETTING_KEY_WALLET_SYSTEM_CLEARANCEID;
     }
 
+    public String getSETTING_REF_LINK() {
+        return SETTING_REF_LINK;
+    }
+
     public String returnWalletUserGroupId() {
 
         return SETTING_KEY_GET_WALLET_USER_GROUP_ID;
 
+    }
+
+    public String generateReferralCode(String serviceName) {
+        String servicePrefix = serviceName.substring(0, 2).toUpperCase();
+        return servicePrefix + UUID.randomUUID().toString().replaceAll("-", "").substring(0, 10).toUpperCase();
     }
 
     public String encyrpt(String text, String key) throws NoSuchAlgorithmException, NoSuchPaddingException, InvalidKeyException, IllegalBlockSizeException, BadPaddingException {

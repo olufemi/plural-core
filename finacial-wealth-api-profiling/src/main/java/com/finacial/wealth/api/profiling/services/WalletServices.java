@@ -848,7 +848,7 @@ public class WalletServices {
             result.setSecurityAnswer("");
             result.setSecurityQue("");
             String getRefreCode = utilMeth.generateReferralCode("Customer-Onboarding");
-            String refLink = utilMeth.getSETTING_REF_LINK() + getRefreCode;
+            String refLink = buildReferralLink(utilMeth.getSETTING_REF_LINK(), getRefreCode);
             if (rq.getReferralCode() != null) {
 
                 // validate referralCode
@@ -1459,7 +1459,7 @@ public class WalletServices {
         walletInfo.setSecurityAnswer("");
         walletInfo.setSecurityQue("");
         walletInfo.setReferralCode(referralCode);
-        walletInfo.setReferralCodeLink(utilMeth.getSETTING_REF_LINK() + referralCode);
+        walletInfo.setReferralCodeLink(buildReferralLink(utilMeth.getSETTING_REF_LINK(), referralCode));
         walletInfo.setAccountBankCode("");
         walletInfo.setBvnNumber("");
         walletInfo.setDateOfBirth(rq.getDateOfBirth());
@@ -1540,6 +1540,21 @@ public class WalletServices {
 
     private String safeTrim(String value) {
         return value == null ? null : value.trim();
+    }
+
+    private String buildReferralLink(String referralBaseLink, String referralCode) {
+        String base = referralBaseLink == null ? "" : referralBaseLink.trim();
+        String code = referralCode == null ? "" : referralCode.trim();
+        if (base.isEmpty()) {
+            return code;
+        }
+        if (code.isEmpty()) {
+            return base;
+        }
+        if (base.endsWith("/") || base.endsWith("=") || base.endsWith("?")) {
+            return base + code;
+        }
+        return base + "/" + code;
     }
 
     private String buildFullName(String firstName, String middleName, String lastName) {
@@ -1656,7 +1671,7 @@ public class WalletServices {
             resultOnboard.setSecurityAnswer("");
             resultOnboard.setSecurityQue("");
             String getRefreCode = utilMeth.generateReferralCode("Customer-Onboarding");
-            String refLink = utilMeth.getSETTING_REF_LINK() + getRefreCode;
+            String refLink = buildReferralLink(utilMeth.getSETTING_REF_LINK(), getRefreCode);
             resultOnboard.setReferralCode(getRefreCode);
             resultOnboard.setReferralCodeLink(refLink);
             resultOnboard.setAccountBankCode("");

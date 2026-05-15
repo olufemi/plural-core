@@ -408,8 +408,11 @@ public class UtilityService {
         }
 
         boolean missingReferralCode = walletInfo.getReferralCode() == null || walletInfo.getReferralCode().trim().isEmpty();
+        String expectedReferralLink = buildReferralLink(utilMeth.getSETTING_REF_LINK(), walletInfo.getReferralCode());
         boolean missingReferralLink = walletInfo.getReferralCodeLink() == null || walletInfo.getReferralCodeLink().trim().isEmpty();
-        if (!missingReferralCode && !missingReferralLink) {
+        boolean malformedReferralLink = !missingReferralCode && !missingReferralLink
+                && !expectedReferralLink.equals(walletInfo.getReferralCodeLink().trim());
+        if (!missingReferralCode && !missingReferralLink && !malformedReferralLink) {
             return walletInfo;
         }
 
@@ -422,15 +425,29 @@ public class UtilityService {
             persistedWallet.setReferralCode(generateUniqueReferralCode());
         }
 
-        if (persistedWallet.getReferralCodeLink() == null || persistedWallet.getReferralCodeLink().trim().isEmpty()) {
-            String referralBaseLink = utilMeth.getSETTING_REF_LINK();
-            if (referralBaseLink == null) {
-                referralBaseLink = "";
-            }
-            persistedWallet.setReferralCodeLink(referralBaseLink + persistedWallet.getReferralCode());
+        String normalizedReferralLink = buildReferralLink(utilMeth.getSETTING_REF_LINK(), persistedWallet.getReferralCode());
+        if (persistedWallet.getReferralCodeLink() == null
+                || persistedWallet.getReferralCodeLink().trim().isEmpty()
+                || !normalizedReferralLink.equals(persistedWallet.getReferralCodeLink().trim())) {
+            persistedWallet.setReferralCodeLink(normalizedReferralLink);
         }
 
         return regWalletInfoRepo.save(persistedWallet);
+    }
+
+    private String buildReferralLink(String referralBaseLink, String referralCode) {
+        String base = referralBaseLink == null ? "" : referralBaseLink.trim();
+        String code = referralCode == null ? "" : referralCode.trim();
+        if (base.isEmpty()) {
+            return code;
+        }
+        if (code.isEmpty()) {
+            return base;
+        }
+        if (base.endsWith("/") || base.endsWith("=") || base.endsWith("?")) {
+            return base + code;
+        }
+        return base + "/" + code;
     }
 
     private String generateUniqueReferralCode() {

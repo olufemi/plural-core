@@ -13,6 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class MarketDefinitionBootstrap implements CommandLineRunner {
 
     private static final Logger logger = LoggerFactory.getLogger(MarketDefinitionBootstrap.class);
+    private static final String BOOTSTRAP_ACTOR = "market-bootstrap";
 
     private final MarketDefinitionRepo marketDefinitionRepo;
 
@@ -30,6 +31,7 @@ public class MarketDefinitionBootstrap implements CommandLineRunner {
     private void upsertCanadaRetail() {
         MarketDefinition market = marketDefinitionRepo.findByMarketCodeIgnoreCase("CA_RETAIL")
                 .orElseGet(MarketDefinition::new);
+        applyAuditDefaults(market);
         market.setMarketCode(normalize("CA_RETAIL"));
         market.setCountryCode(normalize("CA"));
         market.setDefaultCurrencyCode(normalize("CAD"));
@@ -57,6 +59,7 @@ public class MarketDefinitionBootstrap implements CommandLineRunner {
     private void upsertNigeriaRetail() {
         MarketDefinition market = marketDefinitionRepo.findByMarketCodeIgnoreCase("NG_RETAIL")
                 .orElseGet(MarketDefinition::new);
+        applyAuditDefaults(market);
         market.setMarketCode(normalize("NG_RETAIL"));
         market.setCountryCode(normalize("NG"));
         market.setDefaultCurrencyCode(normalize("NGN"));
@@ -83,5 +86,12 @@ public class MarketDefinitionBootstrap implements CommandLineRunner {
 
     private String normalize(String value) {
         return value == null ? null : value.trim().toUpperCase(Locale.ENGLISH);
+    }
+
+    private void applyAuditDefaults(MarketDefinition market) {
+        if (market.getCreatedBy() == null || market.getCreatedBy().trim().isEmpty()) {
+            market.setCreatedBy(BOOTSTRAP_ACTOR);
+        }
+        market.setLastModifiedBy(BOOTSTRAP_ACTOR);
     }
 }

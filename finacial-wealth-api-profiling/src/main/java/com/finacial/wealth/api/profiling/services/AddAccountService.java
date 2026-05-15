@@ -10,6 +10,10 @@ import com.finacial.wealth.api.profiling.breezpay.virt.create.acct.GenerateVirtu
 import com.finacial.wealth.api.profiling.breezpay.virt.get.bvn.BvnLookup;
 import com.finacial.wealth.api.profiling.breezpay.virt.get.bvn.BvnLookupRepository;
 import com.finacial.wealth.api.profiling.client.model.WalletSystemResponse;
+import com.finacial.wealth.api.profiling.market.dto.MarketReadinessRequest;
+import com.finacial.wealth.api.profiling.market.dto.MarketReadinessResponse;
+import com.finacial.wealth.api.profiling.market.enums.NextAction;
+import com.finacial.wealth.api.profiling.market.service.MarketOrchestrationService;
 import com.finacial.wealth.api.profiling.market.service.impl.MarketProfileSyncService;
 import com.finacial.wealth.api.profiling.domain.AddAccountDetails;
 import com.finacial.wealth.api.profiling.domain.AddFailedTransLog;
@@ -67,6 +71,7 @@ public class AddAccountService {
     private final UttilityMethods uttilityMethods;
     private final VerifyReqIdDetailsAuthRepo verifyReqIdDetailsAuthRepo;
     private final UtilitiesProxy utilitiesProxy;
+    private final MarketOrchestrationService marketOrchestrationService;
     @Autowired
     private MarketProfileSyncService marketProfileSyncService;
 
@@ -104,7 +109,8 @@ public class AddAccountService {
             RegWalletInfoRepository regWalletInfoRepository,
             GenerateVirtAcctNumbRepo generateVirtAcctNumbRepo, UttilityMethods uttilityMethods,
             VerifyReqIdDetailsAuthRepo verifyReqIdDetailsAuthRepo,
-            UtilitiesProxy utilitiesProxy, BvnLookupRepository repo) {
+            UtilitiesProxy utilitiesProxy, BvnLookupRepository repo,
+            MarketOrchestrationService marketOrchestrationService) {
         this.addFailedTransLoggRepo = addFailedTransLoggRepo;
         this.countryService = countryService;
         this.countriesRepository = countriesRepository;
@@ -118,6 +124,7 @@ public class AddAccountService {
         this.verifyReqIdDetailsAuthRepo = verifyReqIdDetailsAuthRepo;
         this.utilitiesProxy = utilitiesProxy;
         this.repo = repo;
+        this.marketOrchestrationService = marketOrchestrationService;
     }
 
     public BaseResponse addNigeriaAccountCallThirdPartyApi(CreatNigeriaAccount rq) {
@@ -196,8 +203,28 @@ public class AddAccountService {
             statusCode = 400;
             DecodedJWTToken getDecoded = DecodedJWTToken.getDecoded(auth);
             String emailAddress = getDecoded.emailAddress;
-            rq.setCountryCode("NG");
-            rq.setCountry("Nigeria");
+            if (!hasText(rq.getCountryCode())) {
+                rq.setCountryCode("NG");
+            }
+            if (!hasText(rq.getCountry())) {
+                rq.setCountry("Nigeria");
+            }
+
+            Optional<RegWalletInfo> getRec = regWalletInfoRepository.findByEmail(emailAddress);
+            BaseResponse orchestrationResponse = preflightNigeriaMarketReadiness(rq, emailAddress, getRec);
+            if (orchestrationResponse != null) {
+                return orchestrationResponse;
+            }
+
+            if (!getRec.isPresent()) {
+                AddFailedTransLog pinActTransFailed = new AddFailedTransLog("add-account",
+                        "Primary onboarding completion required", "", "", emailAddress);
+                addFailedTransLoggRepo.save(pinActTransFailed);
+                responseModel.setDescription("Primary onboarding completion required");
+                responseModel.setStatusCode(statusCode);
+
+                return responseModel;
+            }
 
             BvnLookup getBvnDe = repo.findByBvn(rq.getBvn()).orElse(null);
 
@@ -230,9 +257,6 @@ public class AddAccountService {
 
                 return responseModel;
             }
-
-            Optional<RegWalletInfo> getRec = regWalletInfoRepository.findByEmail(emailAddress);
-
             //validate country/code
             ValidationResponse resp = countryService.validateCountryPair(rq.getCountryCode(), rq.getCountry());
             if (resp.getStatusCode() != 200) {
@@ -415,6 +439,65 @@ public class AddAccountService {
         }
 
         return responseModel;
+    }
+
+    private BaseResponse preflightNigeriaMarketReadiness(AddAccountObj rq, String emailAddress,
+            Optional<RegWalletInfo> regWalletInfo) {
+        try {
+            MarketReadinessRequest readinessRequest = new MarketReadinessRequest();
+            readinessRequest.setMarketCode("NG_RETAIL");
+            readinessRequest.setCountryCode("NG");
+            readinessRequest.setCurrencyCode("NGN");
+            readinessRequest.setEmailAddress(emailAddress);
+            readinessRequest.setTriggerSource("ADD_OTHER_CURRENCY_ACCOUNT");
+            readinessRequest.setInitiatingService("PROFILING");
+            readinessRequest.setCorrelationId(rq.getRequestId());
+
+            if (regWalletInfo.isPresent()) {
+                readinessRequest.setCustomerId(regWalletInfo.get().getCustomerId());
+                readinessRequest.setPhoneNumber(regWalletInfo.get().getPhoneNumber());
+            }
+
+            MarketReadinessResponse readinessResponse = marketOrchestrationService.ensureReady(readinessRequest);
+            if (readinessResponse == null) {
+                return null;
+            }
+
+            if (Boolean.TRUE.equals(readinessResponse.getActive())) {
+                List<AddAccountDetails> existingAccounts = addAccountDetailsRepo.findByCountryCodeByEmailAddress("NG", emailAddress);
+                if (!existingAccounts.isEmpty()) {
+                    return buildExistingAccountResponse(existingAccounts.get(0));
+                }
+            }
+
+            if (NextAction.COMPLETE_SDK_ONBOARDING.name().equals(readinessResponse.getNextAction())) {
+                BaseResponse response = new BaseResponse();
+                response.setDescription(readinessResponse.getMessage());
+                response.setStatusCode(400);
+                return response;
+            }
+        } catch (Exception ex) {
+            logger.warn("Unable to preflight NG_RETAIL readiness before add-account flow", ex);
+        }
+        return null;
+    }
+
+    private BaseResponse buildExistingAccountResponse(AddAccountDetails details) {
+        BaseResponse response = new BaseResponse();
+        Map addExit = new HashMap();
+        addExit.put("accountNumber", details.getAccountNumber());
+        addExit.put("countryCode", details.getCountryCode());
+        addExit.put("countryName", details.getCountryName());
+        addExit.put("virtualAccountNumber", details.getVirtualAccountNumber());
+        addExit.put("virtualAccountName", details.getVirtualAccountName());
+        response.setDescription("The account exists.");
+        response.setData(addExit);
+        response.setStatusCode(200);
+        return response;
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.trim().isEmpty();
     }
 
 }

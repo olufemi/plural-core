@@ -1430,7 +1430,7 @@ public class ProcSochitelServices {
                     }
                 }
 
-                if (accountNumber == null || accountNumber.isBlank()) {
+                if ((accountNumber == null || accountNumber.isBlank()) && readinessResponse == null) {
                     List<AddAccountDetails> acctList = addAccountDetailsRepo.findByEmailAddressrData(email);
                     if (acctList == null || acctList.isEmpty()) {
                         String message = readinessResponse != null && readinessResponse.getDescription() != null
@@ -1441,6 +1441,15 @@ public class ProcSochitelServices {
                         return out;
                     }
                     accountNumber = acctList.get(0).getAccountNumber();
+                }
+
+                if (accountNumber == null || accountNumber.isBlank()) {
+                    String message = readinessResponse != null && readinessResponse.getDescription() != null
+                            ? readinessResponse.getDescription() : "Unable to resolve debit account number";
+                    int status = readinessResponse != null && readinessResponse.getStatusCode() != 0
+                            ? readinessResponse.getStatusCode() : 400;
+                    out.setError(new BaseResponse(status, message));
+                    return out;
                 }
             }
             /*for (AddAccountDetails acc : acctList) {

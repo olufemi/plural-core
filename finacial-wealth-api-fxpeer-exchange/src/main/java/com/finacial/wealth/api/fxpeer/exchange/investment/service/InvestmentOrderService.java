@@ -421,7 +421,7 @@ public class InvestmentOrderService {
                     }
                 }
 
-                if (accountNumber == null || accountNumber.isBlank()) {
+                if ((accountNumber == null || accountNumber.isBlank()) && readinessResponse == null) {
                     List<AddAccountDetails> acctList = addAccountDetailsRepo.findByEmailAddressrData(email);
                     if (acctList == null || acctList.isEmpty()) {
                         String message = readinessResponse != null && readinessResponse.getDescription() != null
@@ -435,6 +435,15 @@ public class InvestmentOrderService {
                     walletId = acctList.get(0).getWalletId();
                 } else {
                     walletId = regOpt.get().getWalletId();
+                }
+
+                if (accountNumber == null || accountNumber.isBlank()) {
+                    String message = readinessResponse != null && readinessResponse.getDescription() != null
+                            ? readinessResponse.getDescription() : "Unable to resolve debit account number";
+                    int status = readinessResponse != null && readinessResponse.getStatusCode() != 0
+                            ? readinessResponse.getStatusCode() : 400;
+                    out.setError(new BaseResponse(status, message));
+                    return out;
                 }
             }
 

@@ -593,6 +593,19 @@ The safest first implementation cut is:
 
 This is the smallest change that creates a future-proof seam without breaking money flows.
 
+## Current Implementation Note
+
+The `codex/multi-market-onboarding-architecture-hardening` branch has already progressed beyond the initial Phase 1 scaffold inside profiling:
+
+- `MarketDefinition` and `CustomerMarketProfile` are implemented
+- `CA_RETAIL` and `NG_RETAIL` handlers exist
+- the internal `POST /walletmgt/markets/ensure-ready` orchestration endpoint exists
+- Canada SDK onboarding, Nigeria BVN validation, and Nigeria account provisioning already sync `CustomerMarketProfile`
+- `POST /walletmgt/add-other-currency-account` now preflights `NG_RETAIL` readiness through orchestration before continuing with the existing BVN, OTP, and account-provisioning flow
+- FXPeer non-CAD investment and airtime flows now only fall back to legacy linked-account discovery when orchestration is unavailable; if readiness explicitly returns an inactive or pending market state, that response is now treated as authoritative
+
+This keeps the legacy mobile contract stable while moving readiness decisions behind the market-aware orchestration seam.
+
 ## No-Regression Rules
 
 Before merging any implementation:
@@ -613,10 +626,52 @@ codex/multi-market-onboarding-architecture-hardening
 
 That name is good because this is not just a feature. It is a controlled architecture hardening and scalability optimization.
 
+## Branch Sync Workflow
+
+The current stable branch for dev and staging is:
+
+```text
+feature/after-first-user-experience-test-on-dev
+```
+
+The long-running architecture branch is:
+
+```text
+codex/multi-market-onboarding-architecture-hardening
+```
+
+Use this rule consistently:
+
+- stable feeds working branch
+- urgent fixes and environment-stable changes go to `feature/after-first-user-experience-test-on-dev`
+- unfinished architecture work continues on `codex/multi-market-onboarding-architecture-hardening`
+
+Every time a fix is made on the stable branch, sync it into the architecture branch before continuing the larger work:
+
+```bash
+git checkout codex/multi-market-onboarding-architecture-hardening
+git fetch origin
+git merge origin/feature/after-first-user-experience-test-on-dev
+git push origin codex/multi-market-onboarding-architecture-hardening
+```
+
+After the sync merge is complete, switch back to the stable branch if that is still the active deployment branch for the day:
+
+```bash
+git checkout feature/after-first-user-experience-test-on-dev
+```
+
+Operational reminder:
+
+- fix on `feature/after-first-user-experience-test-on-dev`
+- sync into `codex/multi-market-onboarding-architecture-hardening`
+- switch back to the branch you are actively deploying from
+
+Use merge, not rebase, for this sync flow so shared history stays stable and the architecture branch keeps a visible record of stable-branch updates.
+
 ## Next Deliverables
 
 1. A service-by-service CAD and NGN dependency inventory with file references.
 2. A target data model for `MarketDefinition` and `CustomerMarketProfile`.
 3. A compatibility matrix for Canada and Nigeria behaviors.
 4. A profiling-first implementation plan with exact classes, endpoints, and migration order.
-

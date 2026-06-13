@@ -4,25 +4,19 @@
  */
 package com.finacial.wealth.api.fxpeer.exchange.fx.p.p.wallet;
 
-import com.fasterxml.jackson.annotation.JsonIgnore;
-import com.finacial.wealth.api.fxpeer.exchange.common.OfferStatus;
 import com.finacial.wealth.api.fxpeer.exchange.domain.AbstractAuditingEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.io.Serializable;
 import java.math.BigDecimal;
-import java.time.Instant;
-
-import lombok.Data;
-import lombok.EqualsAndHashCode;
 import org.hibernate.annotations.GenericGenerator;
 import org.hibernate.annotations.Parameter;
-import org.springframework.data.annotation.CreatedDate;
-import org.springframework.data.annotation.LastModifiedDate;
 
 /**
  *
@@ -64,14 +58,15 @@ public class WalletTransactionsDetails extends AbstractAuditingEntity implements
     private String buyerAccount;
     private String buyerName;
     private String emailAddress;
+    @Enumerated(EnumType.ORDINAL)
     @Column(nullable = true)
-    private OfferStatus status = OfferStatus.LIVE;
+    private WalletHoldStatus status = WalletHoldStatus.LIVE;
 
-    public OfferStatus getStatus() {
+    public WalletHoldStatus getStatus() {
         return status;
     }
 
-    public void setStatus(OfferStatus status) {
+    public void setStatus(WalletHoldStatus status) {
         this.status = status;
     }
 

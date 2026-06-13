@@ -125,6 +125,10 @@ public class InvestmentOrderService {
 
     @Value("${jobs.one-shot-delay-minutes:10}")
     private long delayMinutes;
+    @Value("${transaction.history.direct-write.enabled:true}")
+    private boolean historyDirectWriteEnabled;
+    @Value("${transaction.history.queue-publish.enabled:false}")
+    private boolean historyQueuePublishEnabled;
 
     private final InvestmentProductRepository productRepo;
     private final InvestmentPositionRepository positionRepo;
@@ -203,7 +207,26 @@ public class InvestmentOrderService {
         history.setSentAmount(source.getSentAmount());
         history.setTheNarration(source.getTheNarration());
         history.setCurrencyCode(source.getCurrencyCode());
+        history.setEmailAddress(source.getEmailAddress());
         transactionHistoryClientLocalT.publishFromTxn(history);
+    }
+
+    private void persistAndMaybePublishHistory(FinWealthPaymentTransaction source,
+            String sender, String receiver, String walletNo, String senderName, String receiverName) {
+        if (!historyDirectWriteEnabled && !historyQueuePublishEnabled) {
+            log.warn("Transaction history is disabled for txId={}", source != null ? source.getTransactionId() : null);
+            return;
+        }
+        if (historyDirectWriteEnabled) {
+            finWealthPaymentTransactionRepo.save(source);
+        }
+        if (historyQueuePublishEnabled) {
+            try {
+                publishCanonicalHistory(source, sender, receiver, walletNo, senderName, receiverName);
+            } catch (Exception ex) {
+                log.warn("Queue history publish failed txId={}", source != null ? source.getTransactionId() : null, ex);
+            }
+        }
     }
 
     @PostConstruct
@@ -479,8 +502,8 @@ public class InvestmentOrderService {
             kTrans2b.setSentAmount(finCharges.toString());
             kTrans2b.setTheNarration("Investment purchase.");
             kTrans2b.setCurrencyCode(rq.getCurrencyCode());
-            finWealthPaymentTransactionRepo.save(kTrans2b);
-            // publishCanonicalHistory(kTrans2b, phoneNumber, "Investment", phoneNumber, regOpt.get().getFullName(), "Investment");
+            kTrans2b.setEmailAddress(regOpt.get().getEmail());
+            persistAndMaybePublishHistory(kTrans2b, phoneNumber, "Investment", phoneNumber, regOpt.get().getFullName(), "Investment");
             return out;
 
         } catch (Exception e) {
@@ -1494,8 +1517,8 @@ public class InvestmentOrderService {
             }
             kTrans2b.setTheNarration("Investment Liquidation.");
             kTrans2b.setCurrencyCode(order.getProduct().getCurrency());
-            finWealthPaymentTransactionRepo.save(kTrans2b);
-            // publishCanonicalHistory(kTrans2b, "Investment", rqC.getPhoneNumber(), rqC.getPhoneNumber(), "Investment", receiverName);
+            kTrans2b.setEmailAddress(order.getEmailAddress());
+            persistAndMaybePublishHistory(kTrans2b, "Investment", rqC.getPhoneNumber(), rqC.getPhoneNumber(), "Investment", receiverName);
         } catch (Exception ex) {
             ex.printStackTrace();
             res.setStatusCode(statusCode);

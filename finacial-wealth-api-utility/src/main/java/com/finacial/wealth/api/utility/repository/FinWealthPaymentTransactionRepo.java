@@ -50,6 +50,21 @@ public interface FinWealthPaymentTransactionRepo extends
     // ✅ idempotency lookup
     boolean existsByTransactionId(String transactionId);
 
+    @Query("SELECT CASE WHEN COUNT(bs) > 0 THEN true ELSE false END "
+            + "FROM FinWealthPaymentTransaction bs "
+            + "WHERE bs.transactionId = :transactionId "
+            + "AND COALESCE(bs.walletNo, '') = COALESCE(:walletNo, '') "
+            + "AND COALESCE(bs.sender, '') = COALESCE(:sender, '') "
+            + "AND COALESCE(bs.receiver, '') = COALESCE(:receiver, '') "
+            + "AND COALESCE(bs.paymentType, '') = COALESCE(:paymentType, '') "
+            + "AND COALESCE(bs.currencyCode, '') = COALESCE(:currencyCode, '')")
+    boolean existsByHistorySignature(@Param("transactionId") String transactionId,
+            @Param("walletNo") String walletNo,
+            @Param("sender") String sender,
+            @Param("receiver") String receiver,
+            @Param("paymentType") String paymentType,
+            @Param("currencyCode") String currencyCode);
+
     Optional<FinWealthPaymentTransaction> findFirstByWalletNoOrderByCreatedDateDesc(String walletNo);
 
     List<FinWealthPaymentTransaction> findByTransactionId(String transactionId);

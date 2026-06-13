@@ -253,6 +253,7 @@ public class ManageWalletService {
             logTrans.setTransactionId("");
             logTrans.setSellerId(rq.getWalletId());
             logTrans.setEmailAddress(getRec.get().getEmail());
+            logTrans.setStatus(WalletHoldStatus.PENDING);
             walletTransactionsDetailsRepo.save(logTrans);
 
             responseModel.setDescription("Success!");

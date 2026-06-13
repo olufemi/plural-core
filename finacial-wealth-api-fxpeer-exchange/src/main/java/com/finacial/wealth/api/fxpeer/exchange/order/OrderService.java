@@ -43,6 +43,7 @@ import com.finacial.wealth.api.fxpeer.exchange.util.UttilityMethods;
 import com.finacial.wealth.api.fxpeer.exchange.fx.p.p.wallet.WalletIndivTransactionsDetails;
 import com.finacial.wealth.api.fxpeer.exchange.fx.p.p.wallet.WalletIndivTransactionsDetailsPojo;
 import com.finacial.wealth.api.fxpeer.exchange.fx.p.p.wallet.WalletIndivTransactionsDetailsRepo;
+import com.finacial.wealth.api.fxpeer.exchange.fx.p.p.wallet.WalletHoldStatus;
 import com.finacial.wealth.api.fxpeer.exchange.fx.p.p.wallet.WalletTransactionsDetails;
 import com.finacial.wealth.api.fxpeer.exchange.fx.p.p.wallet.WalletTransactionsDetailsRepo;
 
@@ -67,6 +68,7 @@ import javax.crypto.IllegalBlockSizeException;
 import javax.crypto.NoSuchPaddingException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 
@@ -89,6 +91,10 @@ public class OrderService {
     private final ObjectMapper mapper;
     private final FinWealthPaymentTransactionRepo finWealthPaymentTransactionRepo;
     private final TransactionHistoryClientLocalT transactionHistoryClientLocalT;
+    @Value("${transaction.history.direct-write.enabled:true}")
+    private boolean historyDirectWriteEnabled;
+    @Value("${transaction.history.queue-publish.enabled:false}")
+    private boolean historyQueuePublishEnabled;
 
     public OrderService(FinWealthPaymentTransactionRepo finWealthPaymentTransactionRepo, OrderRepository orders, OfferRepository offers,
             TransactionServiceProxies transactionServiceProxies,
@@ -141,7 +147,26 @@ public class OrderService {
         history.setSentAmount(source.getSentAmount());
         history.setTheNarration(source.getTheNarration());
         history.setCurrencyCode(source.getCurrencyCode());
+        history.setEmailAddress(source.getEmailAddress());
         transactionHistoryClientLocalT.publishFromTxn(history);
+    }
+
+    private void persistAndMaybePublishHistory(FinWealthPaymentTransaction source,
+            String sender, String receiver, String walletNo, String senderName, String receiverName) {
+        if (!historyDirectWriteEnabled && !historyQueuePublishEnabled) {
+            logger.warn("Transaction history is disabled for txId={}", source != null ? source.getTransactionId() : null);
+            return;
+        }
+        if (historyDirectWriteEnabled) {
+            finWealthPaymentTransactionRepo.save(source);
+        }
+        if (historyQueuePublishEnabled) {
+            try {
+                publishCanonicalHistory(source, sender, receiver, walletNo, senderName, receiverName);
+            } catch (Exception ex) {
+                logger.warn("Queue history publish failed txId={}", source != null ? source.getTransactionId() : null, ex);
+            }
+        }
     }
 
     public BaseResponse validateAmountInRange(String amountStr,
@@ -765,8 +790,15 @@ public class OrderService {
                 kTrans2b.setSentAmount(rqC.getFinalCHarges());
                 kTrans2b.setTheNarration("Fx Peer-Peer Transfer");
                 kTrans2b.setCurrencyCode(off.get(0).getCurrencyReceive().toString());
-                finWealthPaymentTransactionRepo.save(kTrans2b);
-                // publishCanonicalHistory(kTrans2b, phoneNumber, getRecCheSeller.get().getPhoneNumber(), phoneNumber, getRec.get().getFullName(), sellerAcctNumberName);
+                kTrans2b.setEmailAddress(getRecCheSeller.get().getEmail());
+                persistAndMaybePublishHistory(
+                        kTrans2b,
+                        buyerPhoneForHistory != null && !buyerPhoneForHistory.trim().isEmpty() ? buyerPhoneForHistory : accountNumber,
+                        sellerPhoneForHistory != null && !sellerPhoneForHistory.trim().isEmpty() ? sellerPhoneForHistory : sellerAcctNumber,
+                        buyerPhoneForHistory != null && !buyerPhoneForHistory.trim().isEmpty() ? buyerPhoneForHistory : accountNumber,
+                        getRec.get().getFullName(),
+                        sellerAcctNumberName
+                );
 
                 System.out.println("ABOUT TO PUBLISH TXN HISTORY txId=" + kTrans2b.getTransactionId()
                         + " walletNo=" + kTrans2b.getWalletNo()
@@ -783,6 +815,10 @@ public class OrderService {
                 getWalDeupdate.setBuyerName(getRec.get().getFullName());
 
                 getWalDeupdate.setAvailableQuantity(availableQuantity.subtract(setAmount));
+                getWalDeupdate.setStatus(getWalDeupdate.getAvailableQuantity() == null
+                        || getWalDeupdate.getAvailableQuantity().compareTo(BigDecimal.ZERO) <= 0
+                        ? WalletHoldStatus.SOLDOUT
+                        : WalletHoldStatus.PARTIALLY_FILLED);
                 walletTransactionsDetailsRepo.save(getWalDeupdate);
 
                 List<WalletTransactionsDetails> getWalList = walletTransactionsDetailsRepo.findByCorrelationId(rq.getOfferCorrelationId());
@@ -1352,8 +1388,15 @@ public class OrderService {
         kTrans2b.setSentAmount(rqC.getFinalCHarges());
         kTrans2b.setTheNarration("Fx Peer-Peer Transfer");
         kTrans2b.setCurrencyCode(off.get(0).getCurrencySell().toString());
-        finWealthPaymentTransactionRepo.save(kTrans2b);
-        // publishCanonicalHistory(kTrans2b, sellerPhoneForHistory, buyerPhoneForHistory, sellerPhoneForHistory, senderName, receiverAcctName);
+        kTrans2b.setEmailAddress(getRecord != null && !getRecord.isEmpty() ? getRecord.get(0).getEmail() : null);
+        persistAndMaybePublishHistory(
+                kTrans2b,
+                sellerPhoneForHistory != null && !sellerPhoneForHistory.trim().isEmpty() ? sellerPhoneForHistory : getSellerAccttAcct,
+                buyerPhoneForHistory != null && !buyerPhoneForHistory.trim().isEmpty() ? buyerPhoneForHistory : getBuyyAcctAcct,
+                sellerPhoneForHistory != null && !sellerPhoneForHistory.trim().isEmpty() ? sellerPhoneForHistory : getSellerAccttAcct,
+                senderName,
+                receiverAcctName
+        );
         Order ord = new Order();
         ord.setOfferId(off.get(0).getId());
         ord.setSellerUserId(off.get(0).getSellerUserId());

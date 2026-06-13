@@ -37,8 +37,10 @@ public interface WalletTransactionsDetailsRepo extends
 
     @Query("select coalesce(sum(w.availableQuantity), 0) "
             + "from WalletTransactionsDetails w "
-            + "where w.emailAddress = :emailAddress and w.currencyToSell = :currencyToSell")
+            + "where w.emailAddress = :emailAddress and w.currencyToSell = :currencyToSell "
+            + "and (w.status is null or w.status in :activeStatuses)")
     BigDecimal sumEscrowAvailableByEmailAndCurrency(@Param("emailAddress") String emailAddress,
-            @Param("currencyToSell") String currencyToSell);
+            @Param("currencyToSell") String currencyToSell,
+            @Param("activeStatuses") Collection<WalletHoldStatus> activeStatuses);
 
 }

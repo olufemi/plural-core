@@ -48,8 +48,15 @@ public class TransactionHistoryListener {
 
         System.out.println("Received TXN Event: " + e.getTransactionId());
 
-        if (repo.existsByTransactionId(e.getTransactionId())) {
-            System.out.println("Already exists, skipping");
+        if (repo.existsByHistorySignature(
+                e.getTransactionId(),
+                e.getWalletNo(),
+                e.getSender(),
+                e.getReceiver(),
+                e.getPaymentType(),
+                e.getCurrencyCode())) {
+            log.info("Duplicate history signature skipped txId={} walletNo={} sender={} receiver={} paymentType={} currency={}",
+                    e.getTransactionId(), e.getWalletNo(), e.getSender(), e.getReceiver(), e.getPaymentType(), e.getCurrencyCode());
             return;
         }
 

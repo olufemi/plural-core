@@ -36,4 +36,18 @@ public interface TransactionsClient {
       @RequestParam(required = false) Long groupId,
       @RequestParam(required = false) String status
   );
+
+  @GetMapping("/api/transactions/admin/group-savings/groups")
+  Map<String, Object> listGroupSavingsGroups(
+      @RequestParam(required = false) String status,
+      @RequestParam(required = false) String search,
+      @RequestParam(defaultValue = "0") Integer page,
+      @RequestParam(defaultValue = "20") Integer size
+  );
+
+  @GetMapping("/api/transactions/admin/group-savings/groups/{groupId}")
+  Map<String, Object> getGroupSavingsGroup(@PathVariable("groupId") Long groupId);
+
+  @PostMapping("/api/transactions/admin/group-savings/groups/{groupId}/close")
+  Map<String, Object> closeGroupSavingsGroup(@PathVariable("groupId") Long groupId);
 }

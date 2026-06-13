@@ -6,12 +6,15 @@ package com.finacial.wealth.api.fxpeer.exchange.investment.service;
 
 import com.finacial.wealth.api.fxpeer.exchange.common.NotFoundException;
 import com.finacial.wealth.api.fxpeer.exchange.investment.domain.InvestmentOrder;
+import com.finacial.wealth.api.fxpeer.exchange.investment.domain.InvestmentPosition;
 import com.finacial.wealth.api.fxpeer.exchange.investment.ennum.InvestmentOrderStatus;
 import com.finacial.wealth.api.fxpeer.exchange.investment.ennum.InvestmentOrderType;
 import com.finacial.wealth.api.fxpeer.exchange.investment.repo.InvestmentOrderRepository;
+import com.finacial.wealth.api.fxpeer.exchange.investment.repo.InvestmentPositionRepository;
 import com.finacial.wealth.api.fxpeer.exchange.model.BaseResponse;
 import com.finacial.wealth.api.fxpeer.exchange.util.UttilityMethods;
 import jakarta.transaction.Transactional;
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.Collections;
@@ -29,16 +32,19 @@ public class LiquidationActionService {
     private final UttilityMethods utilService; // your JWT claim extractor
     private final ActivityService activityService;
     private final InvestmentOrderService investmentService;
+    private final InvestmentPositionRepository positionRepo;
     // or inject the class where onLiquidationSettled lives
 
     public LiquidationActionService(InvestmentOrderRepository orderRepo,
             UttilityMethods utilService,
             ActivityService activityService,
-            InvestmentOrderService investmentService) {
+            InvestmentOrderService investmentService,
+            InvestmentPositionRepository positionRepo) {
         this.orderRepo = orderRepo;
         this.utilService = utilService;
         this.activityService = activityService;
         this.investmentService = investmentService;
+        this.positionRepo = positionRepo;
     }
     
 
@@ -167,7 +173,7 @@ public class LiquidationActionService {
                 res.setDescription("Invalid token: emailAddress claim missing");
                 return res;
             }*/
-            InvestmentOrder order = orderRepo.findByOrderRef(liquidationOrderRef)
+            InvestmentOrder order = orderRepo.lockByOrderRef(liquidationOrderRef.trim())
                     .orElseThrow(() -> new NotFoundException("Liquidation order not found"));
 
             // Ownership check
@@ -178,11 +184,23 @@ public class LiquidationActionService {
                 return res;
             }
 
-            // Only cancel when processing
-            if (order.getStatus() != InvestmentOrderStatus.LIQUIDATION_PROCESSING) {
+            // Only cancel while the liquidation is still open
+            if (order.getStatus() != InvestmentOrderStatus.LIQUIDATION_PENDING_APPROVAL
+                    && order.getStatus() != InvestmentOrderStatus.LIQUIDATION_PROCESSING) {
                 res.setStatusCode(statusCode);
                 res.setDescription("Liquidation cannot be cancelled in current status: " + order.getStatus());
                 return res;
+            }
+
+            InvestmentPosition position = order.getPosition();
+            if (position != null && order.getAmount() != null && order.getAmount().compareTo(BigDecimal.ZERO) > 0) {
+                InvestmentPosition lockedPosition = positionRepo.lockById(position.getId())
+                        .orElseThrow(() -> new NotFoundException("Investment position not found"));
+                BigDecimal reserved = nvl(lockedPosition.getReservedLiquidationAmount());
+                BigDecimal releaseAmount = order.getAmount().min(reserved);
+                lockedPosition.setReservedLiquidationAmount(reserved.subtract(releaseAmount));
+                lockedPosition.setUpdatedAt(Instant.now());
+                positionRepo.save(lockedPosition);
             }
 
             // Cancel it
@@ -201,5 +219,9 @@ public class LiquidationActionService {
             res.setDescription(description);
             return res;
         }
+    }
+
+    private static BigDecimal nvl(BigDecimal value) {
+        return value == null ? BigDecimal.ZERO : value;
     }
 }

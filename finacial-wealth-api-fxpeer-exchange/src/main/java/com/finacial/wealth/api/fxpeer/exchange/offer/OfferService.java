@@ -18,6 +18,7 @@ import com.finacial.wealth.api.fxpeer.exchange.feign.ProfilingProxies;
 import com.finacial.wealth.api.fxpeer.exchange.feign.TransactionServiceProxies;
 import com.finacial.wealth.api.fxpeer.exchange.investment.service.TransactionHistoryClientLocalT;
 import com.finacial.wealth.api.fxpeer.exchange.fx.p.p.wallet.FinWealthPaymentTransactionRepo;
+import com.finacial.wealth.api.fxpeer.exchange.fx.p.p.wallet.WalletHoldStatus;
 import com.finacial.wealth.api.fxpeer.exchange.fx.p.p.wallet.WalletTransactionsDetails;
 import com.finacial.wealth.api.fxpeer.exchange.fx.p.p.wallet.WalletTransactionsDetailsRepo;
 import com.finacial.wealth.api.fxpeer.exchange.ledger.LedgerClient;
@@ -61,6 +62,8 @@ import java.util.Optional;
 import javax.crypto.BadPaddingException;
 import javax.crypto.IllegalBlockSizeException;
 import javax.crypto.NoSuchPaddingException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.scheduling.annotation.EnableScheduling;
@@ -68,6 +71,8 @@ import org.springframework.scheduling.annotation.Scheduled;
 
 @Service
 public class OfferService {
+
+    private static final Logger log = LoggerFactory.getLogger(OfferService.class);
 
     private final OfferRepository repo;
     private final LedgerClient ledger;
@@ -85,6 +90,10 @@ public class OfferService {
     private String fxEnableRunFxTradeEpiredListingsCron;
     @Value("${fx.trade.expired.listings.cron}")
     private String fxTradeExpiredListingsCron;
+    @Value("${transaction.history.direct-write.enabled:true}")
+    private boolean historyDirectWriteEnabled;
+    @Value("${transaction.history.queue-publish.enabled:false}")
+    private boolean historyQueuePublishEnabled;
     private final FinWealthPaymentTransactionRepo finWealthPaymentTransactionRepo;
     private final TransactionHistoryClientLocalT transactionHistoryClientLocalT;
 
@@ -135,7 +144,26 @@ public class OfferService {
         history.setSentAmount(source.getSentAmount());
         history.setTheNarration(source.getTheNarration());
         history.setCurrencyCode(source.getCurrencyCode());
+        history.setEmailAddress(source.getEmailAddress());
         transactionHistoryClientLocalT.publishFromTxn(history);
+    }
+
+    private void persistAndMaybePublishHistory(FinWealthPaymentTransaction source,
+            String sender, String receiver, String walletNo, String senderName, String receiverName) {
+        if (!historyDirectWriteEnabled && !historyQueuePublishEnabled) {
+            log.warn("Transaction history is disabled for txId={}", source != null ? source.getTransactionId() : null);
+            return;
+        }
+        if (historyDirectWriteEnabled) {
+            finWealthPaymentTransactionRepo.save(source);
+        }
+        if (historyQueuePublishEnabled) {
+            try {
+                publishCanonicalHistory(source, sender, receiver, walletNo, senderName, receiverName);
+            } catch (Exception ex) {
+                log.warn("Queue history publish failed txId={}", source != null ? source.getTransactionId() : null, ex);
+            }
+        }
     }
 
     @Transactional(readOnly = true)
@@ -822,11 +850,19 @@ public class OfferService {
             kTrans2b.setSentAmount(rqD.getFinalCHarges());
             kTrans2b.setTheNarration("Fx Peer-Peer listing.");
             kTrans2b.setCurrencyCode(rq.getCurrencySell().toString());
-            finWealthPaymentTransactionRepo.save(kTrans2b);
-            // String sellerPhoneForHistory = regWalletInfoRepository.findByWalletIdOptional(String.valueOf(sellerId))
-            //         .map(RegWalletInfo::getPhoneNumber)
-            //         .orElse(accountToDebit);
-            // publishCanonicalHistory(kTrans2b, sellerPhoneForHistory, "FxPeer", sellerPhoneForHistory, senderName, "FxPeer");
+            Optional<RegWalletInfo> sellerWalletInfo = regWalletInfoRepository.findByWalletIdOptional(String.valueOf(sellerId));
+            kTrans2b.setEmailAddress(sellerWalletInfo.map(RegWalletInfo::getEmail).orElse(null));
+            String sellerPhoneForHistory = sellerWalletInfo.map(RegWalletInfo::getPhoneNumber)
+                    .filter(phone -> !phone.trim().isEmpty())
+                    .orElse(accountToDebit);
+            persistAndMaybePublishHistory(kTrans2b, sellerPhoneForHistory, "FxPeer", sellerPhoneForHistory, senderName, "FxPeer");
+
+            WalletTransactionsDetails holdDetails = walletTransactionsDetailsRepo.findByCorrelationIdUpdated(correlationId);
+            if (holdDetails != null) {
+                holdDetails.setStatus(WalletHoldStatus.LIVE);
+                holdDetails.setLastModifiedDate(Instant.now());
+                walletTransactionsDetailsRepo.save(holdDetails);
+            }
 
             System.out.println("sellerId" + "  ::::::::::::::::::::: >>>>>>>>>>>>>>>>>>  " + sellerId);
 
@@ -1053,7 +1089,7 @@ public class OfferService {
 
                     System.out.println(" On CANCEL SET availableQuantity to ZERO::::::::::::::::  %S  ");
 
-                    getWalDeupdate.setStatus(OfferStatus.CANCELLED);
+                    getWalDeupdate.setStatus(WalletHoldStatus.EXPIRED);
 
                     getWalDeupdate.setAvailableQuantity(BigDecimal.ZERO);
                     walletTransactionsDetailsRepo.save(getWalDeupdate);
@@ -1177,16 +1213,17 @@ public class OfferService {
             kTrans2b.setSentAmount(rqC.getFinalCHarges());
             kTrans2b.setTheNarration("Fx Peer-Peer listing.");
             kTrans2b.setCurrencyCode(getWalDeupdate.getCurrencyToSell());
-            finWealthPaymentTransactionRepo.save(kTrans2b);
-            // String sellerPhoneForHistory = getRec.get().getPhoneNumber();
-            // publishCanonicalHistory(kTrans2b, "FxPeer", sellerPhoneForHistory, sellerPhoneForHistory, "FxPeer", getWalDeupdate.getSellerName());
+            kTrans2b.setEmailAddress(getWalDeupdate.getEmailAddress());
+            String sellerPhoneForHistory = getRec.get().getPhoneNumber() != null && !getRec.get().getPhoneNumber().trim().isEmpty()
+                    ? getRec.get().getPhoneNumber() : rqC.getPhoneNumber();
+            persistAndMaybePublishHistory(kTrans2b, "FxPeer", sellerPhoneForHistory, sellerPhoneForHistory, "FxPeer", getWalDeupdate.getSellerName());
 
             getWalDeupdate.setLastModifiedDate(Instant.now());
             getWalDeupdate.setBuyerName(getRec.get().getFullName());
 
             System.out.println(" On CANCEL SET availableQuantity to ZERO::::::::::::::::  %S  ");
 
-            getWalDeupdate.setStatus(OfferStatus.CANCELLED);
+            getWalDeupdate.setStatus(WalletHoldStatus.CANCELLED);
 
             getWalDeupdate.setAvailableQuantity(BigDecimal.ZERO);
             walletTransactionsDetailsRepo.save(getWalDeupdate);

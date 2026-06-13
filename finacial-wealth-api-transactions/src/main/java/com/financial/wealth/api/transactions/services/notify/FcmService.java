@@ -117,6 +117,11 @@ public class FcmService {
             //System.out.println("respBody::::::::::::::::  %S  " + new Gson().toJson(respBody));
 
             if (code >= 400) {
+                if (code == 400 && respBody != null
+                        && (respBody.contains("\"message.token\"")
+                        || respBody.contains("not a valid FCM registration token"))) {
+                    throw new InvalidFcmTokenException("Invalid FCM registration token");
+                }
                 throw new RuntimeException("FCM error " + code + ": " + respBody);
             }
         }
@@ -196,6 +201,11 @@ public class FcmService {
                     : "";
             log.info("FCM response: {} {}", code, respBody);
             if (code >= 400) {
+                if (code == 400 && respBody != null
+                        && (respBody.contains("\"message.token\"")
+                        || respBody.contains("not a valid FCM registration token"))) {
+                    throw new InvalidFcmTokenException("Invalid FCM registration token");
+                }
                 throw new RuntimeException("FCM error " + code + ": " + respBody);
             }
         } finally {

@@ -37,6 +37,7 @@ import com.finacial.wealth.api.profiling.domain.UserLimitConfig;
 import com.finacial.wealth.api.profiling.domain.VerifyEmailAddLog;
 import com.finacial.wealth.api.profiling.domain.VerifyReqIdDetailsAuth;
 import com.finacial.wealth.api.profiling.email.EmailPublisher;
+import com.finacial.wealth.api.profiling.fx.p.p.wallet.WalletHoldStatus;
 import com.finacial.wealth.api.profiling.fx.p.p.wallet.WalletTransactionsDetailsRepo;
 import com.finacial.wealth.api.profiling.market.service.impl.MarketProfileSyncService;
 import com.finacial.wealth.api.profiling.models.AddNewUserToLimit;
@@ -3468,7 +3469,8 @@ public class WalletServices {
             return "0";
         }
         BigDecimal sum = walletTransactionsDetailsRepo
-                .sumEscrowAvailableByEmailAndCurrency(email, currency);
+                .sumEscrowAvailableByEmailAndCurrency(email, currency,
+                        Arrays.asList(WalletHoldStatus.LIVE, WalletHoldStatus.PARTIALLY_FILLED));
         return toPlain(sum);
     }
 

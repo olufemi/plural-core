@@ -7,6 +7,8 @@ package com.finacial.wealth.api.profiling.fx.p.p.wallet;
 import com.finacial.wealth.api.profiling.domain.AbstractAuditingEntity;
 import javax.persistence.Column;
 import javax.persistence.Entity;
+import javax.persistence.EnumType;
+import javax.persistence.Enumerated;
 import javax.persistence.GeneratedValue;
 import javax.persistence.GenerationType;
 import javax.persistence.Id;
@@ -58,6 +60,9 @@ public class WalletTransactionsDetails extends AbstractAuditingEntity implements
     private String buyerAccount;
     private String buyerName;
     private String emailAddress;
+    @Enumerated(EnumType.ORDINAL)
+    @Column(nullable = true)
+    private WalletHoldStatus status;
 
     public String getEmailAddress() {
         return emailAddress;
@@ -162,6 +167,14 @@ public class WalletTransactionsDetails extends AbstractAuditingEntity implements
 
     public void setBuyerName(String buyerName) {
         this.buyerName = buyerName;
+    }
+
+    public WalletHoldStatus getStatus() {
+        return status;
+    }
+
+    public void setStatus(WalletHoldStatus status) {
+        this.status = status;
     }
 
 }

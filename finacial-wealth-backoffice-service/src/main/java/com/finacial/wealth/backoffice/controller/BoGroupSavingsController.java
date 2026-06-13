@@ -11,6 +11,7 @@ import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -24,6 +25,49 @@ import org.springframework.web.bind.annotation.RestController;
 public class BoGroupSavingsController {
 
     private final TransactionsClient transactionsClient;
+
+    @GetMapping("/groups")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','ADMIN','OPERATIONS','FINANCE')")
+    @Operation(
+            summary = "List group savings groups",
+            description = "Returns paginated group savings records for the Group Management screen.",
+            security = @SecurityRequirement(name = "bearerAuth")
+    )
+    public Map<String, Object> listGroups(
+            @Parameter(description = "Optional normalized status filter: ALL, INITIATED, CREATED, ACTIVE, IN_PROGRESS, COMPLETED, CLOSED.")
+            @RequestParam(required = false) String status,
+            @Parameter(description = "Optional search across group name, invite code, owner email, phone, wallet id, and transaction references.")
+            @RequestParam(required = false) String search,
+            @Parameter(description = "Zero-based page number.")
+            @RequestParam(defaultValue = "0") Integer page,
+            @Parameter(description = "Page size.")
+            @RequestParam(defaultValue = "20") Integer size
+    ) {
+        return transactionsClient.listGroupSavingsGroups(status, search, page, size);
+    }
+
+    @GetMapping("/groups/{groupId}")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','ADMIN','OPERATIONS','FINANCE')")
+    @Operation(
+            summary = "Get group savings group detail",
+            description = "Returns group detail, members, and cycle schedule for the Group Management detail view.",
+            security = @SecurityRequirement(name = "bearerAuth")
+    )
+    public Map<String, Object> getGroup(@PathVariable Long groupId) {
+        return transactionsClient.getGroupSavingsGroup(groupId);
+    }
+
+    @PostMapping("/groups/{groupId}/close")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','ADMIN')")
+    @Audited(action = "CLOSE_GROUP_SAVING", entityType = "GROUP_SAVINGS")
+    @Operation(
+            summary = "Close a group savings group",
+            description = "Soft-closes a group savings record for administrative cleanup. Pause and resume need a real transaction-service paused state before exposure.",
+            security = @SecurityRequirement(name = "bearerAuth")
+    )
+    public Map<String, Object> closeGroup(@PathVariable Long groupId) {
+        return transactionsClient.closeGroupSavingsGroup(groupId);
+    }
 
     @GetMapping("/contribution-payout-monitoring")
     @PreAuthorize("hasAnyRole('SUPER_ADMIN','ADMIN','OPERATIONS','FINANCE')")

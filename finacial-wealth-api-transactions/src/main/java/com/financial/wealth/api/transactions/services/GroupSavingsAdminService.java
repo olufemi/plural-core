@@ -48,6 +48,56 @@ public class GroupSavingsAdminService {
     private final GroupPayoutRepo groupPayoutRepo;
     private final ObjectMapper objectMapper;
 
+    public ApiResponseModel listGroups(String status, String search, Integer page, Integer size) {
+        int pageNumber = Math.max(page == null ? 0 : page, 0);
+        int pageSize = Math.max(size == null ? 20 : Math.min(size, 100), 1);
+        String normalizedStatus = normalizeFilter(status);
+        String normalizedSearch = normalizeFilter(search);
+
+        List<GroupSavingsData> filtered = groupSavingsDataRepo.findAll().stream()
+                .filter(group -> normalizedStatus == null || normalizedGroupStatus(group).equals(normalizedStatus))
+                .filter(group -> normalizedSearch == null || groupMatchesSearch(group, normalizedSearch))
+                .sorted(Comparator.comparing(GroupSavingsData::getId, Comparator.nullsLast(Comparator.reverseOrder())))
+                .collect(Collectors.toList());
+
+        int fromIndex = Math.min(pageNumber * pageSize, filtered.size());
+        int toIndex = Math.min(fromIndex + pageSize, filtered.size());
+        List<Map<String, Object>> rows = filtered.subList(fromIndex, toIndex).stream()
+                .map(this::toGroupManagementRow)
+                .collect(Collectors.toList());
+
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("content", rows);
+        data.put("page", pageNumber);
+        data.put("size", pageSize);
+        data.put("totalElements", filtered.size());
+        data.put("totalPages", (int) Math.ceil(filtered.size() / (double) pageSize));
+        data.put("statusOptions", java.util.Arrays.asList("ALL", "INITIATED", "CREATED", "ACTIVE", "IN_PROGRESS", "COMPLETED", "CLOSED"));
+
+        return success("Group savings groups fetched successfully.", data);
+    }
+
+    public ApiResponseModel getGroup(Long groupId) {
+        return groupSavingsDataRepo.findById(groupId)
+                .map(group -> success("Group savings group fetched successfully.", toGroupDetail(group)))
+                .orElseGet(() -> error(404, "Group savings group not found."));
+    }
+
+    public ApiResponseModel closeGroup(Long groupId) {
+        return groupSavingsDataRepo.findById(groupId)
+                .map(group -> {
+                    if ("CLOSED".equals(normalizedGroupStatus(group))) {
+                        return success("Group savings group is already closed.", toGroupDetail(group));
+                    }
+                    group.setIsTrnsactionDeleted("1");
+                    group.setIsTrnsactionDeletedDesc("Closed");
+                    group.setLastModifiedDate(Instant.now());
+                    GroupSavingsData saved = groupSavingsDataRepo.save(group);
+                    return success("Group savings group closed successfully.", toGroupDetail(saved));
+                })
+                .orElseGet(() -> error(404, "Group savings group not found."));
+    }
+
     public ApiResponseModel getContributionPayoutMonitoring(String period, LocalDate fromDate, LocalDate toDate, Long groupId) {
         PeriodBucket bucket = PeriodBucket.from(period);
         LocalDate end = toDate != null ? toDate : LocalDate.now(AFRICA_LAGOS);
@@ -200,6 +250,150 @@ public class GroupSavingsAdminService {
         response.setDescription(description);
         response.setData(data);
         return response;
+    }
+
+    private ApiResponseModel error(int statusCode, String description) {
+        ApiResponseModel response = new ApiResponseModel();
+        response.setStatusCode(statusCode);
+        response.setDescription(description);
+        return response;
+    }
+
+    private Map<String, Object> toGroupManagementRow(GroupSavingsData group) {
+        List<AddMembersModels> members = readMembers(group);
+        Map<String, Object> row = new LinkedHashMap<>();
+        row.put("groupId", group.getId());
+        row.put("groupName", group.getGroupSavingName());
+        row.put("inviteCode", group.getInviteCode());
+        row.put("transactionId", group.getTransactionId());
+        row.put("transactionIdLink", group.getTransactionIdLink());
+        row.put("ownerName", ownerName(members, group));
+        row.put("ownerEmailAddress", group.getEmailAddress());
+        row.put("ownerPhoneNumber", group.getPhoneNumber());
+        row.put("ownerWalletId", group.getWalletId());
+        row.put("members", members.size());
+        row.put("configuredMembers", group.getNumberOfMembers());
+        row.put("cycle", cycleLabel(group));
+        row.put("nextPayout", nextPayoutDate(group.getId()));
+        row.put("volume", group.getGroupSavingFinalAmount() != null ? group.getGroupSavingFinalAmount() : group.getGroupSavingAmount());
+        row.put("status", normalizedGroupStatus(group));
+        row.put("transactionStatus", group.getTransactionStatus());
+        row.put("transactionStatusDesc", group.getTransactionStatusDesc());
+        row.put("createdDate", group.getCreatedDate() != null ? group.getCreatedDate().toString() : null);
+        row.put("lastModifiedDate", group.getLastModifiedDate() != null ? group.getLastModifiedDate().toString() : null);
+        return row;
+    }
+
+    private Map<String, Object> toGroupDetail(GroupSavingsData group) {
+        Map<String, Object> detail = toGroupManagementRow(group);
+        detail.put("description", group.getGroupSavingDescription());
+        detail.put("allowPublicToJoin", group.getAllowPublicToJoin());
+        detail.put("adminPayOutSlot", group.getAdminPayOutSlot());
+        detail.put("availablePayOutSlot", group.getAvailablePayOutSlot());
+        detail.put("contributionDate", group.getContributionDate());
+        detail.put("contributionWindowEnd", group.getContributionWindowEnd());
+        detail.put("payoutDate", group.getPayoutDate());
+        detail.put("payoutPolicy", group.getPayoutPolicy() != null ? group.getPayoutPolicy().name() : null);
+        detail.put("contributionFrequency", group.getContributionFrequency() != null ? group.getContributionFrequency().name() : null);
+        detail.put("membersList", readMembers(group));
+        detail.put("cycles", groupSavingsCycleRepo.findAll().stream()
+                .filter(cycle -> Objects.equals(cycle.getGroupId(), group.getId()))
+                .sorted(Comparator.comparing(GroupSavingsCycle::getCycleNumber))
+                .map(this::toCycleRow)
+                .collect(Collectors.toList()));
+        return detail;
+    }
+
+    private Map<String, Object> toCycleRow(GroupSavingsCycle cycle) {
+        Map<String, Object> row = new LinkedHashMap<>();
+        row.put("cycleNumber", cycle.getCycleNumber());
+        row.put("contributionDate", cycle.getContributionDate() != null ? cycle.getContributionDate().toString() : null);
+        row.put("contributionWindowEnd", cycle.getContributionWindowEnd() != null ? cycle.getContributionWindowEnd().toString() : null);
+        row.put("payoutDate", cycle.getPayoutDate() != null ? cycle.getPayoutDate().toString() : null);
+        row.put("status", cycle.getStatus() != null ? cycle.getStatus().name() : null);
+        return row;
+    }
+
+    private boolean groupMatchesSearch(GroupSavingsData group, String normalizedSearch) {
+        String haystack = String.join(" ",
+                safe(group.getGroupSavingName()),
+                safe(group.getInviteCode()),
+                safe(group.getTransactionId()),
+                safe(group.getTransactionIdLink()),
+                safe(group.getEmailAddress()),
+                safe(group.getPhoneNumber()),
+                safe(group.getWalletId())
+        ).toLowerCase(Locale.ENGLISH);
+        return haystack.contains(normalizedSearch.toLowerCase(Locale.ENGLISH));
+    }
+
+    private String normalizedGroupStatus(GroupSavingsData group) {
+        if (group == null) {
+            return "UNKNOWN";
+        }
+        if ("1".equals(safe(group.getIsTrnsactionDeleted())) || "CLOSED".equalsIgnoreCase(safe(group.getIsTrnsactionDeletedDesc()))) {
+            return "CLOSED";
+        }
+        String desc = safe(group.getTransactionStatusDesc()).toUpperCase(Locale.ENGLISH);
+        if (desc.contains("PAUSE")) {
+            return "PAUSED";
+        }
+        if (desc.contains("COMPLETE")) {
+            return "COMPLETED";
+        }
+        String status = safe(group.getTransactionStatus());
+        switch (status) {
+            case "0":
+                return "INITIATED";
+            case "2":
+                return "CREATED";
+            case "3":
+                return "ACTIVE";
+            case "4":
+                return "IN_PROGRESS";
+            default:
+                return desc.isEmpty() ? "UNKNOWN" : desc;
+        }
+    }
+
+    private String ownerName(List<AddMembersModels> members, GroupSavingsData group) {
+        return members.stream()
+                .filter(member -> safe(member.getMemberEmailAddress()).equalsIgnoreCase(safe(group.getEmailAddress())))
+                .map(AddMembersModels::getMemberName)
+                .filter(name -> !safe(name).isEmpty())
+                .findFirst()
+                .orElse(safe(group.getEmailAddress()).isEmpty() ? null : group.getEmailAddress());
+    }
+
+    private String cycleLabel(GroupSavingsData group) {
+        if (group.getContributionFrequency() == null) {
+            return null;
+        }
+        String raw = group.getContributionFrequency().name().toLowerCase(Locale.ENGLISH).replace('_', ' ');
+        return raw.substring(0, 1).toUpperCase(Locale.ENGLISH) + raw.substring(1);
+    }
+
+    private String nextPayoutDate(Long groupId) {
+        LocalDate today = LocalDate.now(AFRICA_LAGOS);
+        return groupSavingsCycleRepo.findAll().stream()
+                .filter(cycle -> Objects.equals(cycle.getGroupId(), groupId))
+                .filter(cycle -> cycle.getPayoutDate() != null && !cycle.getPayoutDate().isBefore(today))
+                .sorted(Comparator.comparing(GroupSavingsCycle::getPayoutDate))
+                .map(cycle -> cycle.getPayoutDate().toString())
+                .findFirst()
+                .orElse(null);
+    }
+
+    private String normalizeFilter(String value) {
+        String safe = safe(value);
+        if (safe.isEmpty() || "ALL".equalsIgnoreCase(safe)) {
+            return null;
+        }
+        return safe.toUpperCase(Locale.ENGLISH);
+    }
+
+    private String safe(String value) {
+        return value == null ? "" : value.trim();
     }
 
     private List<GroupSavingsData> getGroups(Long groupId) {

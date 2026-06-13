@@ -554,7 +554,11 @@ public class WebhookKeyService {
 
                 CreateQuoteResLog pendingQuote = createQuoteResLogRepo.findByQuoteIdUpdate(quoteId);
                 pendingQuote.setLastModifiedDate(new Timestamp(System.currentTimeMillis()));
-                pendingQuote.setWebHookSuccResponse(rawBody);
+                pendingQuote.setWebHookSuccResponse(buildWebhookFailureAudit(rawBody, failureDescription));
+                if (isTerminalDepositPostingFailure(creditAcct)) {
+                    pendingQuote.setStatus("FAILED");
+                    pendingQuote.setCreateQuoteResponse("FAILED");
+                }
                 createQuoteResLogRepo.save(pendingQuote);
 
                 PaymentNotificationResponse resp = PaymentNotificationResponse.builder()
@@ -562,8 +566,8 @@ public class WebhookKeyService {
                         .paymentType(paymentType)
                         .currency(currency)
                         .email(email)
-                        .status("PENDING")
-                        .description("Transaction processing failed")
+                        .status(isTerminalDepositPostingFailure(creditAcct) ? "FAILED" : "PENDING")
+                        .description(failureDescription)
                         .success(false)
                         .build();
 
@@ -697,6 +701,37 @@ public class WebhookKeyService {
         // log.info("decryptData ::::: {} ", decryptData);
         return decryptData;
 
+    }
+
+    private boolean isTerminalDepositPostingFailure(BaseResponse response) {
+        if (response == null) {
+            return false;
+        }
+
+        int statusCode = response.getStatusCode();
+        if (statusCode < 400 || statusCode >= 500) {
+            return false;
+        }
+
+        String description = response.getDescription() == null
+                ? ""
+                : response.getDescription().trim().toLowerCase();
+
+        return description.contains("batch validation failed")
+                || description.contains("nothing was posted")
+                || description.contains("validation failed");
+    }
+
+    private String buildWebhookFailureAudit(String rawBody, String failureDescription) {
+        String body = rawBody == null ? "" : rawBody;
+        String failure = failureDescription == null ? "" : failureDescription;
+        if (body.isEmpty()) {
+            return failure;
+        }
+        if (failure.isEmpty()) {
+            return body;
+        }
+        return body + System.lineSeparator() + "POSTING_FAILURE: " + failure;
     }
 
     private static String asText(JsonNode node, String field) {

@@ -82,6 +82,11 @@ public class MessageCenterService {
 
                 un.setStatus("SENT");
                 un.setSentAt(new Date());
+            } catch (InvalidFcmTokenException badToken) {
+                badToken.printStackTrace();
+                deviceTokenRepo.delete(t);
+                un.setStatus("FAILED");
+                un.setLastError("INVALID_FCM_TOKEN");
             } catch (Exception ex) {
                 ex.printStackTrace();
                 un.setStatus("FAILED");

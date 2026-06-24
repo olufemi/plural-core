@@ -27,6 +27,15 @@ public class EmailTemplateService {
         if ("WALLET".equalsIgnoreCase(module) && "SUCCESSFUL_WALLET_DEPOSIT".equalsIgnoreCase(process)) {
             return "Wallet Deposit Successful";
         }
+        if ("WALLET".equalsIgnoreCase(module) && "SUCCESSFUL_WALLET_WITHDRAWAL".equalsIgnoreCase(process)) {
+            return "Wallet Withdrawal Successful";
+        }
+        if ("WALLET".equalsIgnoreCase(module) && "SUCCESSFUL_LOCAL_TRANSFER_SENT".equalsIgnoreCase(process)) {
+            return "Transfer Sent Successfully";
+        }
+        if ("WALLET".equalsIgnoreCase(module) && "SUCCESSFUL_LOCAL_TRANSFER_RECEIVED".equalsIgnoreCase(process)) {
+            return "Transfer Received Successfully";
+        }
         return "PluralApp Notification";
     }
 
@@ -47,8 +56,42 @@ public class EmailTemplateService {
             );
         }
 
+        if ("WALLET".equalsIgnoreCase(module) && "SUCCESSFUL_WALLET_WITHDRAWAL".equalsIgnoreCase(process)) {
+            return transactionTemplate(name,
+                    "Your wallet has been debited successfully.",
+                    str(data, "currency"),
+                    str(data, "amount"),
+                    str(data, "ref"));
+        }
+
+        if ("WALLET".equalsIgnoreCase(module) && "SUCCESSFUL_LOCAL_TRANSFER_SENT".equalsIgnoreCase(process)) {
+            return transactionTemplate(name,
+                    "Your transfer has been sent successfully.",
+                    str(data, "currency"),
+                    str(data, "amount"),
+                    str(data, "ref"));
+        }
+
+        if ("WALLET".equalsIgnoreCase(module) && "SUCCESSFUL_LOCAL_TRANSFER_RECEIVED".equalsIgnoreCase(process)) {
+            return transactionTemplate(name,
+                    "You have received a transfer.",
+                    str(data, "currency"),
+                    str(data, "amount"),
+                    str(data, "ref"));
+        }
+
         // default
         return wrap("<h3>Hi " + esc(name) + ",</h3><p>" + esc(str(data, "message")) + "</p>");
+    }
+
+    private String transactionTemplate(String name, String message, String currency, String amount, String ref) {
+        return wrap(
+                "<h3>Hi " + esc(name) + ",</h3>"
+                + "<p>" + esc(message) + "</p>"
+                + "<p><b>Amount:</b> " + esc(currency) + " " + esc(amount) + "<br/>"
+                + "<b>Reference:</b> " + esc(ref) + "</p>"
+                + "<p>Thanks,<br/>PluralApp Support</p>"
+        );
     }
 
     private String wrap(String body) {

@@ -172,8 +172,11 @@ public class ReversalAdminService {
 
     private Map<String, Object> toCaseRecord(String rootTransactionId, String overallStatus, List<SuccessDebitLog> logs) {
         Map<String, Object> item = new LinkedHashMap<>();
+        String serviceType = deriveServiceType(logs);
         item.put("transactionId", rootTransactionId);
         item.put("status", overallStatus);
+        item.put("serviceType", serviceType);
+        item.put("product", serviceType);
         item.put("requestedAt", logs.stream().map(SuccessDebitLog::getReversalRequestedAt).filter(Objects::nonNull).min(Instant::compareTo).orElse(null));
         item.put("completedAt", logs.stream().map(SuccessDebitLog::getReversalCompletedAt).filter(Objects::nonNull).max(Instant::compareTo).orElse(null));
         item.put("retryCount", logs.stream().mapToInt(SuccessDebitLog::getRetryCount).max().orElse(0));
@@ -186,12 +189,28 @@ public class ReversalAdminService {
         Map<String, Object> leg = new LinkedHashMap<>();
         leg.put("transactionId", log.getTransactionId());
         leg.put("payloadType", log.getPayloadType());
+        leg.put("narration", log.getNarration());
         leg.put("status", log.getReversalStatus());
         leg.put("retryCount", log.getRetryCount());
         leg.put("requestedAt", log.getReversalRequestedAt());
         leg.put("completedAt", log.getReversalCompletedAt());
         leg.put("lastError", log.getReversalLastError());
         return leg;
+    }
+
+    private String deriveServiceType(List<SuccessDebitLog> logs) {
+        if (logs == null || logs.isEmpty()) {
+            return "INTERBANK";
+        }
+        boolean hasLocalTransfer = logs.stream()
+                .map(SuccessDebitLog::getPayloadType)
+                .filter(Objects::nonNull)
+                .anyMatch(value -> value.toLowerCase().contains("localtransfer")
+                || value.toLowerCase().contains("local_transfer"));
+        if (hasLocalTransfer) {
+            return "LOCAL_TRANSFER";
+        }
+        return "INTERBANK";
     }
 
     private String deriveOverallStatus(List<SuccessDebitLog> logs) {

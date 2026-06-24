@@ -30,6 +30,7 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 import java.util.concurrent.TimeUnit;
 
@@ -53,6 +54,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
 import io.jsonwebtoken.JwtBuilder;
+import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
 
@@ -80,6 +82,8 @@ public class SessionManagerClientUserService {
     private static final String TOKEN = "idToken";
     private static final String ISSUER = "FELLOWPAY";
     private static final String SUBJECT = "Authentication";
+    private static final String TOKEN_TYPE_ACCESS = "ACCESS";
+    private static final String ISSUED_SESSION_KEY_PREFIX = "session-manager:issued-session:";
     private static final String LOGIN_SUCCESSFUL = "Login Successful";
     private static final int LOGIN_STATUS_CODE_1 = 200;
     private static final int LOGIN_STATUS_CODE_75 = 75;
@@ -104,6 +108,9 @@ public class SessionManagerClientUserService {
 
     @Value("${fin.wealth.redis.enable.jwt.black-list}")
     private boolean isJwtBlackListitingEnabled;
+
+    @Value("${fin.wealth.jwt.issued-session-validation:true}")
+    private boolean issuedSessionValidationEnabled;
 
     @Qualifier("withEureka")
     @Autowired
@@ -366,8 +373,9 @@ public class SessionManagerClientUserService {
 
     public ResponseEntity<BaseResponse> destroyJwt(String authorizationHeader) {
         BaseResponse baseResponse = new BaseResponse();
+        String jwt = authorizationHeader.substring(AUTHENTICATION_SCHEME.length()).trim();
+        revokeIssuedSession(jwt);
         if (isJwtBlackListitingEnabled) {
-            String jwt = authorizationHeader.substring(AUTHENTICATION_SCHEME.length()).trim();
             String token = (String) redisTemplate.opsForValue().get(jwt);
             if (token == null) {
                 DecodedToken tokenObject;
@@ -388,12 +396,15 @@ public class SessionManagerClientUserService {
 
     private String issueToken(String userId, String uuid, AuthApiResponse response, BaseResponse baseResponse) {
         Date expire = generateTokenExpiration();
+        String jti = UUID.randomUUID().toString();
+        String sid = UUID.randomUUID().toString();
         String token = createJWT(response.getUniqueIdentificationNo(), response.getEmailAddressVerification(),
                 userId.toLowerCase().trim(), ISSUER, SUBJECT, expire, response.getCustomerId(),
                 uuid, response.getCustomerAccountNo(), response.getBvn(), response.getFirstName(),
                 response.getLastName(), response.getEmailAddress(), response.getMobile(),
                 baseResponse.getData().get("pinCreated").toString(), response.getPhoneNumber(),
-                response.getReferralCode(), response.getReferralCodeLink());
+                response.getReferralCode(), response.getReferralCodeLink(), response.getUserDeviceId(), jti, sid);
+        persistIssuedSession(jti, sid, userId.toLowerCase().trim(), response, uuid, expire);
         return token;
     }
 
@@ -403,7 +414,7 @@ public class SessionManagerClientUserService {
             String accountNo, String bvn,
             String firstName, String lastName, String email,
             String mobile, String pinCreated, String phoneNumber,
-            String referralCode, String referralCodeLink) {
+            String referralCode, String referralCodeLink, String deviceId, String jti, String sid) {
 
         SignatureAlgorithm signatureAlgorithm = SignatureAlgorithm.HS256;
         long nowMillis = System.currentTimeMillis();
@@ -412,10 +423,14 @@ public class SessionManagerClientUserService {
         byte[] apiKeySecretBytes = DatatypeConverter.parseBase64Binary(secretKey);
         Key signingKey = new SecretKeySpec(apiKeySecretBytes, signatureAlgorithm.getJcaName());
         Map<String, Object> claims = new HashMap<String, Object>();
+        claims.put("jti", jti);
+        claims.put("sid", sid);
+        claims.put("token_type", TOKEN_TYPE_ACCESS);
         claims.put("userId", userId);
         claims.put("customerId", customerId);
         claims.put("accountNo", accountNo);
         claims.put("uuid", uuid);
+        claims.put("deviceId", deviceId);
         claims.put("bvn", bvn);
         claims.put("firstName", firstName);
         claims.put("lastName", lastName);
@@ -431,7 +446,7 @@ public class SessionManagerClientUserService {
 
         JwtBuilder builder = Jwts.builder()
                 .setClaims(claims)
-                .setId(userId)
+                .setId(jti)
                 .setIssuedAt(now)
                 .setSubject(subject)
                 .setIssuer(issuer)
@@ -440,6 +455,51 @@ public class SessionManagerClientUserService {
         builder.setExpiration(expire);
 
         return builder.compact();
+    }
+
+    private void persistIssuedSession(String jti, String sid, String userId, AuthApiResponse response, String uuid, Date expire) {
+        if (!issuedSessionValidationEnabled) {
+            return;
+        }
+
+        Map<String, Object> session = new HashMap<String, Object>();
+        session.put("jti", jti);
+        session.put("sid", sid);
+        session.put("status", "ACTIVE");
+        session.put("token_type", TOKEN_TYPE_ACCESS);
+        session.put("userId", userId);
+        session.put("customerId", response.getCustomerId());
+        session.put("deviceId", response.getUserDeviceId());
+        session.put("uuid", uuid);
+        session.put("issuedAt", System.currentTimeMillis());
+        session.put("expiresAt", expire.getTime());
+
+        long ttlSeconds = Math.max(1L, TimeUnit.MILLISECONDS.toSeconds(expire.getTime() - System.currentTimeMillis()));
+        redisTemplate.opsForValue().set(issuedSessionKey(jti), session);
+        redisTemplate.expire(issuedSessionKey(jti), ttlSeconds, TimeUnit.SECONDS);
+    }
+
+    private void revokeIssuedSession(String jwt) {
+        try {
+            Claims claims = Jwts.parser()
+                    .setSigningKey(DatatypeConverter.parseBase64Binary(secretKey))
+                    .parseClaimsJws(jwt)
+                    .getBody();
+            String jti = claims.getId();
+            if (jti == null) {
+                Object jtiClaim = claims.get("jti");
+                jti = jtiClaim == null ? null : jtiClaim.toString();
+            }
+            if (jti != null) {
+                redisTemplate.delete(issuedSessionKey(jti));
+            }
+        } catch (Exception ex) {
+            logger.warn("Unable to revoke issued session for token", ex);
+        }
+    }
+
+    private String issuedSessionKey(String jti) {
+        return ISSUED_SESSION_KEY_PREFIX + jti;
     }
 
     private Date generateTokenExpiration() {

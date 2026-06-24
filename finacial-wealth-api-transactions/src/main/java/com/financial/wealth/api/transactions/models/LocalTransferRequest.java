@@ -23,5 +23,8 @@ public class LocalTransferRequest {
     private String transactionType;
     private String fees;
     private String theNarration;
+    private String currencyCode;
+    private String sourceAccountNumber;
+    private String sourceWalletId;
 
 }

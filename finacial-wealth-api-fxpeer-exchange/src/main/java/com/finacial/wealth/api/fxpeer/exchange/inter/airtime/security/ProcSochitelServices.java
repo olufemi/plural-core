@@ -112,7 +112,7 @@ public class ProcSochitelServices {
     @Value("${sochitel.products.by.pass:true}")
     private boolean byPassSochitel;
 
-    @Value("${sochitel.products.check.transaction.status.enabled:false}")
+    @Value("${sochitel.products.check.transaction.status.enabled:true}")
     private boolean checkTransactionStatusenabled;
 
     @Value("${sochitel.products.check.enable.debit.account.roll.back:true}")
@@ -194,6 +194,8 @@ public class ProcSochitelServices {
 
     @PostConstruct
     public void verifyPemReadable() throws Exception {
+        validateProductionRollbackSafety();
+
         boolean shouldCheck = "1".equals(pullPemFileRaw) || Boolean.parseBoolean(pullPemFileRaw);
         if (!shouldCheck) {
             return;
@@ -213,6 +215,27 @@ public class ProcSochitelServices {
         }
 
         log.info("Sochitel PEM loaded from {} (bytes={}, sha256={})", safeDesc(pemFile), data.length, sha256(data));
+    }
+
+    private void validateProductionRollbackSafety() {
+        if (isProductionProfile() && (!checkTransactionStatusenabled || !checkEnableDebitAcctRollBack)) {
+            throw new IllegalStateException("Sochitel production safety requires transaction status check and debit rollback to be enabled");
+        }
+    }
+
+    private boolean isProductionProfile() {
+        if (environment == null) {
+            return false;
+        }
+
+        String[] profiles = environment.split(",");
+        for (String profile : profiles) {
+            String normalized = profile == null ? "" : profile.trim().toLowerCase(Locale.ROOT);
+            if ("prod".equals(normalized) || "production".equals(normalized)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private String safeDesc(Resource r) {

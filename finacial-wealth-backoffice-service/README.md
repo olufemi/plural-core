@@ -915,7 +915,7 @@ You may see the following event types in the detail response:
 
 ### 6. Reversal Exception Module
 
-Backoffice now exposes a unified reversal exception queue across `fxpeer` airtime reversals and `transactions` debit-reversal cases. Manual remediation is approval-gated and should only be used for cases already in `FAILED` or `PENDING`.
+Backoffice now exposes a unified reversal exception queue across product services. The FE should use this module as the single reversal screen for airtime, interbank, local wallet transfer, and future product reversal sources. Product-specific endpoints, such as interbank reversal endpoints, are compatibility wrappers and should not be used for new UI work. Manual remediation is approval-gated and should only be used for cases already in `FAILED` or `PENDING`.
 
 #### Reversal summary
 
@@ -924,7 +924,10 @@ Backoffice now exposes a unified reversal exception queue across `fxpeer` airtim
 This returns combined totals plus per-source totals for:
 
 - `FXPEER_AIRTIME`
-- `TRANSACTIONS`
+- `TRANSACTIONS_INTERBANK`
+- `TRANSACTIONS_LOCAL_TRANSFER`
+
+`TRANSACTIONS` is still accepted as an umbrella/legacy source filter for all transaction-service reversal cases.
 
 #### Reversal cases
 
@@ -932,7 +935,7 @@ This returns combined totals plus per-source totals for:
 
 Query params:
 
-- `source` optional: `FXPEER_AIRTIME` or `TRANSACTIONS`
+- `source` optional: `FXPEER_AIRTIME`, `TRANSACTIONS_INTERBANK`, `TRANSACTIONS_LOCAL_TRANSFER`, or legacy umbrella `TRANSACTIONS`
 - `status` optional: `PENDING`, `FAILED`, `SUCCESS`
 - `page`
 - `size`

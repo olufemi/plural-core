@@ -47,6 +47,10 @@ public interface CreateQuoteResLogRepo extends
             + "order by c.id desc")
     List<CreateQuoteResLog> findDebitPendingAndAccepted();
 
+    Page<CreateQuoteResLog> findByPaymentTypeIgnoreCaseAndStatusInOrderByLastModifiedDateAscCreatedDateAsc(
+            String paymentType, List<String> statuses, Pageable pageable
+    );
+
     // 1) Strict equality version (use when createQuoteResponse is a plain status field)
     @Query("select c "
             + "from CreateQuoteResLog c "

@@ -31,6 +31,7 @@ import com.financial.wealth.api.transactions.repo.DeviceDetailsRepo;
 import com.financial.wealth.api.transactions.repo.FinWealthPaymentTransactionRepo;
 import com.financial.wealth.api.transactions.repo.RegWalletInfoRepository;
 import com.financial.wealth.api.transactions.repo.SettlementFailureLogRepo;
+import com.financial.wealth.api.transactions.services.EmailEventPublisher;
 import com.financial.wealth.api.transactions.services.notify.FcmService;
 import static com.financial.wealth.api.transactions.services.LocalTransferService.pushNotifyDebitWalletForWalletTransferSender;
 import com.financial.wealth.api.transactions.services.TransactionHistoryClientLocalT;
@@ -81,6 +82,7 @@ public class WebhookKeyService {
     private final MessageCenterService messageCenterService;
     private static final String CCY = "CAD";
     private final TransactionHistoryClientLocalT transactionHistoryClientLocalT;
+    private final EmailEventPublisher emailEventPublisher;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -104,7 +106,8 @@ public class WebhookKeyService {
             DeviceDetailsRepo deviceDetailsRepo,
             FcmService fcmService,
             MessageCenterService messageCenterService,
-            TransactionHistoryClientLocalT transactionHistoryClientLocalT) {
+            TransactionHistoryClientLocalT transactionHistoryClientLocalT,
+            EmailEventPublisher emailEventPublisher) {
         // Example: pre-provision one key
         keys.put(transfaarClient, generateBase64Secret());
         this.createQuoteResLogRepo = createQuoteResLogRepo;
@@ -117,6 +120,7 @@ public class WebhookKeyService {
         this.fcmService = fcmService;
         this.messageCenterService = messageCenterService;
         this.transactionHistoryClientLocalT = transactionHistoryClientLocalT;
+        this.emailEventPublisher = emailEventPublisher;
     }
 
     /*@PostConstruct
@@ -410,7 +414,10 @@ public class WebhookKeyService {
                 return ResponseEntity.ok(resp);
             }
 
-            if (!getDee.get(0).getIsAccepted().equals("1")) {
+            CreateQuoteResLog quoteRow = getDee.get(0);
+            recordWebhookReceipt(quoteRow, rawBody, "WEBHOOK_RECEIVED");
+
+            if (!quoteRow.getIsAccepted().equals("1")) {
                 SettlementFailureLog conWall = new SettlementFailureLog("", "",
                         "Transaction was not accepted!");
                 settlementFailureLogRepo.save(conWall);
@@ -605,6 +612,12 @@ public class WebhookKeyService {
            // finWealthPaymentTransactionRepo.save(kTrans2b);
             
             transactionHistoryClientLocalT.publishFromTxn(kTrans2b);
+            emailEventPublisher.publishWalletDeposit(
+                    email,
+                    getReceiverName.get(0).getFullName(),
+                    amount,
+                    currency,
+                    quoteId);
 
             PushNotificationFireBase puFireSender = new PushNotificationFireBase();
             puFireSender.setBody(pushNotifyCreditWalletForWalletTransferDollar(new BigDecimal(amount),
@@ -701,6 +714,102 @@ public class WebhookKeyService {
         // log.info("decryptData ::::: {} ", decryptData);
         return decryptData;
 
+    }
+
+    public List<Map<String, Object>> getDepositRecoveryCandidates(String statusesCsv, int limit) {
+        List<String> statuses = parseStatuses(statusesCsv);
+        int size = Math.max(1, Math.min(limit, 200));
+
+        org.springframework.data.domain.Page<CreateQuoteResLog> page =
+                createQuoteResLogRepo.findByPaymentTypeIgnoreCaseAndStatusInOrderByLastModifiedDateAscCreatedDateAsc(
+                        "DEPOSIT", statuses, org.springframework.data.domain.PageRequest.of(0, size));
+
+        List<Map<String, Object>> candidates = new java.util.ArrayList<>();
+        for (CreateQuoteResLog row : page.getContent()) {
+            candidates.add(buildDepositRecoveryCandidate(row));
+        }
+        return candidates;
+    }
+
+    public ResponseEntity<?> replayDepositByQuoteId(String quoteId) {
+        List<CreateQuoteResLog> rows = createQuoteResLogRepo.findByQuoteId(quoteId);
+        if (rows == null || rows.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body("QuoteId not found");
+        }
+
+        CreateQuoteResLog row = rows.get(0);
+        if (row.getPaymentType() == null || !"DEPOSIT".equalsIgnoreCase(row.getPaymentType())) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("QuoteId is not a deposit flow");
+        }
+
+        try {
+            DepositWebhook req = new DepositWebhook();
+            req.setAmount(row.getAmount());
+            req.setQuoteId(row.getQuoteId());
+            req.setCurrency(row.getCurrencyCode());
+            req.setEmail(row.getEmail());
+            req.setPaymentType(row.getPaymentType());
+            req.setStatus(row.getStatus());
+            return processPayment(objectMapper.writeValueAsString(req));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Replay failed: " + e.getMessage());
+        }
+    }
+
+    private List<String> parseStatuses(String statusesCsv) {
+        List<String> statuses = new java.util.ArrayList<>();
+        String source = (statusesCsv == null || statusesCsv.trim().isEmpty()) ? "PENDING,FAILED" : statusesCsv;
+        for (String raw : source.split(",")) {
+            if (raw != null) {
+                String trimmed = raw.trim();
+                if (!trimmed.isEmpty()) {
+                    statuses.add(trimmed.toUpperCase());
+                }
+            }
+        }
+        if (statuses.isEmpty()) {
+            statuses.add("PENDING");
+            statuses.add("FAILED");
+        }
+        return statuses;
+    }
+
+    private Map<String, Object> buildDepositRecoveryCandidate(CreateQuoteResLog row) {
+        Map<String, Object> item = new HashMap<>();
+        item.put("quoteId", row.getQuoteId());
+        item.put("status", row.getStatus());
+        item.put("amount", row.getAmount());
+        item.put("currencyCode", row.getCurrencyCode());
+        item.put("email", row.getEmail());
+        item.put("paymentType", row.getPaymentType());
+        item.put("isAccepted", row.getIsAccepted());
+        item.put("createQuoteResponse", row.getCreateQuoteResponse());
+        item.put("acceptQuoteResponsePresent", row.getAcceptQuoteResponse() != null && !row.getAcceptQuoteResponse().trim().isEmpty());
+        item.put("webhookAuditPresent", row.getWebHookSuccResponse() != null && !row.getWebHookSuccResponse().trim().isEmpty());
+        item.put("createdDate", row.getCreatedDate());
+        item.put("lastModifiedDate", row.getLastModifiedDate());
+        return item;
+    }
+
+    private void recordWebhookReceipt(CreateQuoteResLog row, String rawBody, String note) {
+        row.setLastModifiedDate(new Timestamp(System.currentTimeMillis()));
+        row.setWebHookSuccResponse(appendWebhookAudit(row.getWebHookSuccResponse(), rawBody, note));
+        createQuoteResLogRepo.save(row);
+    }
+
+    private String appendWebhookAudit(String existing, String rawBody, String note) {
+        StringBuilder sb = new StringBuilder();
+        if (existing != null && !existing.trim().isEmpty()) {
+            sb.append(existing.trim()).append(System.lineSeparator()).append("----").append(System.lineSeparator());
+        }
+        sb.append("EVENT_TIME: ").append(Instant.now()).append(System.lineSeparator());
+        if (note != null && !note.trim().isEmpty()) {
+            sb.append("EVENT_NOTE: ").append(note.trim()).append(System.lineSeparator());
+        }
+        if (rawBody != null && !rawBody.trim().isEmpty()) {
+            sb.append(rawBody.trim());
+        }
+        return sb.toString();
     }
 
     private boolean isTerminalDepositPostingFailure(BaseResponse response) {

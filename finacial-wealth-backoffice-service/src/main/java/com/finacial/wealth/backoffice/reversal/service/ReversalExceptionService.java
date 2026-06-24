@@ -33,6 +33,19 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class ReversalExceptionService {
 
+    private static final String SOURCE_FXPEER_AIRTIME = "FXPEER_AIRTIME";
+    private static final String SOURCE_TRANSACTIONS = "TRANSACTIONS";
+    private static final String SOURCE_TRANSACTIONS_INTERBANK = "TRANSACTIONS_INTERBANK";
+    private static final String SOURCE_TRANSACTIONS_LOCAL_TRANSFER = "TRANSACTIONS_LOCAL_TRANSFER";
+    private static final List<String> TRANSACTION_SOURCE_ALIASES = List.of(
+            SOURCE_TRANSACTIONS,
+            SOURCE_TRANSACTIONS_INTERBANK,
+            SOURCE_TRANSACTIONS_LOCAL_TRANSFER,
+            "INTERBANK",
+            "LOCAL_TRANSFER",
+            "LOCAL"
+    );
+
     private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {
     };
 
@@ -47,6 +60,7 @@ public class ReversalExceptionService {
         String auth = request.getHeader("Authorization");
         Map<String, Object> fxSummary = fxPeerExchangeClient.getAirtimeReversalSummary(auth);
         Map<String, Object> txSummary = transactionsClient.getReversalSummary();
+        List<Map<String, Object>> transactionCases = fetchTransactionCases(null);
 
         Map<String, Object> fxData = extractMap(fxSummary.get("data"));
         Map<String, Object> txData = extractMap(txSummary.get("data"));
@@ -62,8 +76,15 @@ public class ReversalExceptionService {
         long txSuccess = longValue(txData.get("successfulCount"));
 
         Map<String, Object> sources = new LinkedHashMap<>();
-        sources.put("FXPEER_AIRTIME", normalizeSummary("FXPEER_AIRTIME", fxSummary, fxData));
-        sources.put("TRANSACTIONS", normalizeSummary("TRANSACTIONS", txSummary, txData));
+        sources.put(SOURCE_FXPEER_AIRTIME, normalizeSummary(SOURCE_FXPEER_AIRTIME, fxSummary, fxData));
+        Map<String, Object> transactionSources = summarizeCaseSources(transactionCases);
+        if (transactionSources.isEmpty()) {
+            Map<String, Object> transactionSummary = normalizeSummary(SOURCE_TRANSACTIONS_INTERBANK, txSummary, txData);
+            transactionSummary.put("sourceGroup", SOURCE_TRANSACTIONS);
+            transactionSummary.put("aliases", List.of(SOURCE_TRANSACTIONS, "INTERBANK"));
+            transactionSources.put(SOURCE_TRANSACTIONS_INTERBANK, transactionSummary);
+        }
+        sources.putAll(transactionSources);
 
         Map<String, Object> combined = new LinkedHashMap<>();
         combined.put("totalCount", fxTotal + txTotal);
@@ -84,8 +105,15 @@ public class ReversalExceptionService {
         if (source == null || source.isBlank() || source.equalsIgnoreCase("FXPEER_AIRTIME")) {
             items.addAll(fetchFxpeerCases(auth, status));
         }
-        if (source == null || source.isBlank() || source.equalsIgnoreCase("TRANSACTIONS")) {
-            items.addAll(fetchTransactionCases(status));
+        if (source == null || source.isBlank() || isTransactionSource(source)) {
+            List<Map<String, Object>> transactionCases = fetchTransactionCases(status);
+            String normalizedSource = normalizeSource(source);
+            if (normalizedSource != null && !SOURCE_TRANSACTIONS.equals(normalizedSource)) {
+                transactionCases = transactionCases.stream()
+                        .filter(item -> normalizedSource.equals(item.get("source")))
+                        .toList();
+            }
+            items.addAll(transactionCases);
         }
 
         items.sort(Comparator.comparing(this::requestedAtComparator, Comparator.nullsLast(Comparator.reverseOrder())));
@@ -113,7 +141,7 @@ public class ReversalExceptionService {
             throw new IllegalArgumentException("caseRef is required");
         }
 
-        String normalizedSource = source.trim().toUpperCase(Locale.ROOT);
+        String normalizedSource = normalizeSource(source);
         ApprovalEntityType entityType = resolveEntityType(normalizedSource);
         ApprovalSubModule subModule = resolveSubModule(normalizedSource);
         Map<String, Object> caseSnapshot = fetchCaseSnapshot(normalizedSource, caseRef.trim(), request.getHeader("Authorization"));
@@ -186,22 +214,23 @@ public class ReversalExceptionService {
         Map<String, Object> response = fxPeerExchangeClient.getAirtimeReversalCases(auth, status);
         Map<String, Object> data = extractMap(response.get("data"));
         List<Map<String, Object>> items = extractList(data.get("items"));
-        return items.stream().map(item -> normalizeCase("FXPEER_AIRTIME", item, "processId")).toList();
+        return items.stream().map(item -> normalizeCase(SOURCE_FXPEER_AIRTIME, item, "processId")).toList();
     }
 
     private List<Map<String, Object>> fetchTransactionCases(String status) {
         Map<String, Object> response = transactionsClient.getReversalCases(status);
         Map<String, Object> data = extractMap(response.get("data"));
         List<Map<String, Object>> items = extractList(data.get("items"));
-        return items.stream().map(item -> normalizeCase("TRANSACTIONS", item, "transactionId")).toList();
+        return items.stream().map(item -> normalizeCase(deriveTransactionSource(item), item, "transactionId")).toList();
     }
 
     private Map<String, Object> fetchCaseSnapshot(String source, String caseRef, String auth) {
-        List<Map<String, Object>> cases = "FXPEER_AIRTIME".equals(source)
+        List<Map<String, Object>> cases = SOURCE_FXPEER_AIRTIME.equals(source)
                 ? fetchFxpeerCases(auth, null)
                 : fetchTransactionCases(null);
         return cases.stream()
                 .filter(item -> caseRef.equals(stringValue(item.get("caseRef"))))
+                .filter(item -> sameSourceGroup(source, stringValue(item.get("source"))))
                 .findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("Reversal case not found"));
     }
@@ -210,6 +239,7 @@ public class ReversalExceptionService {
         Map<String, Object> item = new LinkedHashMap<>();
         String caseRef = stringValue(raw.get(refKey));
         item.put("source", source);
+        item.put("sourceGroup", ownerSource(source));
         item.put("caseRef", caseRef);
         item.put("status", stringValue(raw.get("status")));
         item.put("requestedAt", raw.get("requestedAt"));
@@ -235,7 +265,7 @@ public class ReversalExceptionService {
                 .filter(req -> req.getModule() == ApprovalModule.REVERSAL)
                 .filter(req -> {
                     Map<String, Object> payload = readJsonMap(req.getPayloadJson());
-                    return source.equals(stringValue(payload.get("source"))) && caseRef.equals(stringValue(payload.get("caseRef")));
+                    return sameSourceGroup(source, stringValue(payload.get("source"))) && caseRef.equals(stringValue(payload.get("caseRef")));
                 })
                 .map(req -> {
                     Map<String, Object> item = new LinkedHashMap<>();
@@ -250,19 +280,106 @@ public class ReversalExceptionService {
     }
 
     private ApprovalEntityType resolveEntityType(String source) {
-        return switch (source) {
-            case "FXPEER_AIRTIME" -> ApprovalEntityType.FXPEER_AIRTIME_REVERSAL;
-            case "TRANSACTIONS" -> ApprovalEntityType.TRANSACTIONS_REVERSAL;
+        return switch (ownerSource(source)) {
+            case SOURCE_FXPEER_AIRTIME -> ApprovalEntityType.FXPEER_AIRTIME_REVERSAL;
+            case SOURCE_TRANSACTIONS -> ApprovalEntityType.TRANSACTIONS_REVERSAL;
             default -> throw new IllegalArgumentException("Unsupported reversal source");
         };
     }
 
     private ApprovalSubModule resolveSubModule(String source) {
-        return switch (source) {
-            case "FXPEER_AIRTIME" -> ApprovalSubModule.AIRTIME_REVERSAL;
-            case "TRANSACTIONS" -> ApprovalSubModule.TRANSACTION_REVERSAL;
+        return switch (ownerSource(source)) {
+            case SOURCE_FXPEER_AIRTIME -> ApprovalSubModule.AIRTIME_REVERSAL;
+            case SOURCE_TRANSACTIONS -> ApprovalSubModule.TRANSACTION_REVERSAL;
             default -> throw new IllegalArgumentException("Unsupported reversal source");
         };
+    }
+
+    private Map<String, Object> summarizeCaseSources(List<Map<String, Object>> cases) {
+        Map<String, Object> summaries = new LinkedHashMap<>();
+        if (cases == null) {
+            return summaries;
+        }
+        Map<String, List<Map<String, Object>>> grouped = cases.stream()
+                .collect(java.util.stream.Collectors.groupingBy(
+                        item -> stringValue(item.get("source")),
+                        LinkedHashMap::new,
+                        java.util.stream.Collectors.toList()
+                ));
+        grouped.forEach((source, items) -> {
+            Map<String, Object> summary = new LinkedHashMap<>();
+            summary.put("source", source);
+            summary.put("sourceGroup", ownerSource(source));
+            summary.put("totalCount", items.size());
+            summary.put("pendingCount", countByStatus(items, "PENDING"));
+            summary.put("failedCount", countByStatus(items, "FAILED"));
+            summary.put("successfulCount", countByStatus(items, "SUCCESS"));
+            summary.put("reconRequiredCount", countByStatus(items, "RECON_REQUIRED"));
+            summaries.put(source, summary);
+        });
+        return summaries;
+    }
+
+    private long countByStatus(List<Map<String, Object>> items, String status) {
+        return items.stream()
+                .filter(item -> status.equalsIgnoreCase(stringValue(item.get("status"))))
+                .count();
+    }
+
+    private String deriveTransactionSource(Map<String, Object> raw) {
+        String text = (stringValue(raw.get("serviceType")) + " "
+                + stringValue(raw.get("product")) + " "
+                + stringValue(raw.get("source")) + " "
+                + extractLegPayloadTypes(raw)).toUpperCase(Locale.ROOT);
+        if (text.contains("LOCAL_TRANSFER") || text.contains("LOCALTRANSFER") || text.contains("WALLET_TO_WALLET")) {
+            return SOURCE_TRANSACTIONS_LOCAL_TRANSFER;
+        }
+        return SOURCE_TRANSACTIONS_INTERBANK;
+    }
+
+    private String extractLegPayloadTypes(Map<String, Object> raw) {
+        List<Map<String, Object>> legs = extractList(raw.get("legs"));
+        return legs.stream()
+                .map(leg -> stringValue(leg.get("payloadType")))
+                .filter(Objects::nonNull)
+                .reduce("", (left, right) -> left + " " + right);
+    }
+
+    private boolean isTransactionSource(String source) {
+        String normalized = normalizeSource(source);
+        return normalized != null && TRANSACTION_SOURCE_ALIASES.contains(normalized);
+    }
+
+    private String normalizeSource(String source) {
+        if (source == null || source.isBlank()) {
+            return null;
+        }
+        String normalized = source.trim().toUpperCase(Locale.ROOT).replace('-', '_');
+        return switch (normalized) {
+            case "FXPEER_AIRTIME", "AIRTIME" -> SOURCE_FXPEER_AIRTIME;
+            case "TRANSACTIONS", "TRANSACTION" -> SOURCE_TRANSACTIONS;
+            case "INTERBANK", "TRANSACTIONS_INTERBANK", "NIP", "BANK_TRANSFER" -> SOURCE_TRANSACTIONS_INTERBANK;
+            case "LOCAL", "LOCAL_TRANSFER", "LOCALTRANSFER", "WALLET_TO_WALLET", "TRANSACTIONS_LOCAL_TRANSFER" -> SOURCE_TRANSACTIONS_LOCAL_TRANSFER;
+            default -> normalized;
+        };
+    }
+
+    private String ownerSource(String source) {
+        String normalized = normalizeSource(source);
+        if (SOURCE_FXPEER_AIRTIME.equals(normalized)) {
+            return SOURCE_FXPEER_AIRTIME;
+        }
+        if (normalized != null && TRANSACTION_SOURCE_ALIASES.contains(normalized)) {
+            return SOURCE_TRANSACTIONS;
+        }
+        return normalized;
+    }
+
+    private boolean sameSourceGroup(String left, String right) {
+        String normalizedLeft = normalizeSource(left);
+        String normalizedRight = normalizeSource(right);
+        return Objects.equals(normalizedLeft, normalizedRight)
+                || Objects.equals(ownerSource(normalizedLeft), ownerSource(normalizedRight));
     }
 
     @SuppressWarnings("unchecked")

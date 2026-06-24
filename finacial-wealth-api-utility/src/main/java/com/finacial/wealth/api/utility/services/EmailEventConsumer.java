@@ -11,6 +11,7 @@ package com.finacial.wealth.api.utility.services;
 import com.finacial.wealth.api.utility.config.RabbitConfig;
 import com.finacial.wealth.api.utility.models.EmailEvent;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.amqp.AmqpRejectAndDontRequeueException;
 import org.springframework.amqp.core.Message;
@@ -58,17 +59,14 @@ public class EmailEventConsumer {
 
             emailSender.sendHtml(to, subject, html);
 
-        } catch (AmqpRejectAndDontRequeueException e) {
-            throw e; // keep DLQ behavior
-        } catch (Exception e) {
-            // Choose behavior:
-            // 1) DLQ immediately (common for bad JSON)
+        } catch (JsonProcessingException e) {
             throw new AmqpRejectAndDontRequeueException(
-                    "EmailEvent consume failed. payload=" + payload + ", err=" + e.getMessage(), e
+                    "Invalid EmailEvent payload. payload=" + payload + ", err=" + e.getMessage(), e
             );
-
-            // 2) OR if you want RETRY for transient SMTP issues, don't wrap - just throw e;
-            // throw new RuntimeException(e);
+        } catch (AmqpRejectAndDontRequeueException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new RuntimeException("EmailEvent consume failed. payload=" + payload + ", err=" + e.getMessage(), e);
         }
     }
 }

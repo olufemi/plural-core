@@ -4,6 +4,7 @@
  */
 package com.financial.wealth.api.transactions.breezepay.payin;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.financial.wealth.api.transactions.breezepay.payout.AddAccountDetails;
 import com.financial.wealth.api.transactions.domain.AppConfig;
@@ -20,6 +21,8 @@ import com.financial.wealth.api.transactions.repo.AppConfigRepo;
 import com.financial.wealth.api.transactions.repo.DeviceDetailsRepo;
 import com.financial.wealth.api.transactions.repo.FinWealthPaymentTransactionRepo;
 import com.financial.wealth.api.transactions.repo.RegWalletInfoRepository;
+import com.financial.wealth.api.transactions.repo.SettlementFailureLogRepo;
+import com.financial.wealth.api.transactions.services.EmailEventPublisher;
 import com.financial.wealth.api.transactions.services.TransactionHistoryClientLocalT;
 import com.financial.wealth.api.transactions.services.notify.MessageCenterService;
 
@@ -28,6 +31,7 @@ import com.financial.wealth.api.transactions.utils.StrongAES;
 import com.financial.wealth.api.transactions.utils.UttilityMethods;
 import com.google.gson.Gson;
 import java.math.BigDecimal;
+import java.net.MalformedURLException;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
 
@@ -58,10 +62,12 @@ public class BreezePayWebhookKeyService {
     private final MessageCenterService messageCenterService;
     private final AddAccountDetailsRepo addAccountDetailsRepo;
     private final AppConfigRepo appConfigRepo;
+    private final SettlementFailureLogRepo settlementFailureLogRepo;
     private static final String CCY = "NGN";
     @Value("${fin.wealth.otp.encrypt.key}")
     private String encryptionKey;
     private final TransactionHistoryClientLocalT transactionHistoryClientLocalT;
+    private final EmailEventPublisher emailEventPublisher;
 
     public BaseResponse processPayment(WebHookRequest rq, String auth) {
 
@@ -116,6 +122,15 @@ public class BreezePayWebhookKeyService {
 
             //BaseResponse creditAcct = genLedgerProxy.creditOneTime(rqq);
             if (creditAcct.getStatusCode() == 200) {
+                BaseResponse glCredit = creditNgnGl(rq);
+                if (glCredit.getStatusCode() != 200) {
+                    String glFailure = "Breezepay NGN deposit customer credit succeeded but NGN_GL credit failed for processId "
+                            + rq.getProcessId() + ": " + glCredit.getDescription();
+                    settlementFailureLogRepo.save(new SettlementFailureLog(rq.getProcessId(), rqC.getPhoneNumber(), glFailure));
+                    responseModel.setDescription(glFailure);
+                    responseModel.setStatusCode(statusCode);
+                    return responseModel;
+                }
 
                 FinWealthPaymentTransaction kTrans2b = new FinWealthPaymentTransaction();
                 kTrans2b.setAmmount(new BigDecimal(rq.getAmount()));
@@ -140,6 +155,12 @@ public class BreezePayWebhookKeyService {
                 //finWealthPaymentTransactionRepo.save(kTrans2b);
                 
                 transactionHistoryClientLocalT.publishFromTxn(kTrans2b);
+                emailEventPublisher.publishWalletDeposit(
+                        regWalletInfo.get(0).getEmail(),
+                        regWalletInfo.get(0).getFullName(),
+                        rq.getAmount(),
+                        CCY,
+                        rq.getProcessId());
 
                 PushNotificationFireBase puFireSender = new PushNotificationFireBase();
                 puFireSender.setBody(pushNotifyCreditWalletForWalletTransfer(new BigDecimal(rq.getAmount()),
@@ -166,19 +187,14 @@ public class BreezePayWebhookKeyService {
                     }
                 }
 
+            } else {
+                String customerCreditFailure = "Breezepay NGN deposit customer credit failed for processId "
+                        + rq.getProcessId() + ": " + creditAcct.getDescription();
+                settlementFailureLogRepo.save(new SettlementFailureLog(rq.getProcessId(), rqC.getPhoneNumber(), customerCreditFailure));
+                responseModel.setDescription(creditAcct.getDescription());
+                responseModel.setStatusCode(statusCode);
+                return responseModel;
             }
-
-            // Credit BAAS NGN_GL
-            CreditWalletCaller ngnGLCredit = new CreditWalletCaller();
-            ngnGLCredit.setAuth("Receiver");
-            ngnGLCredit.setFees("0.00");
-            ngnGLCredit.setFinalCHarges(rq.getAmount());
-            ngnGLCredit.setNarration("NGN_Deposit");
-            ngnGLCredit.setPhoneNumber(decryptData(utilMeth.getSETTING_KEY_WALLET_SYSTEM_SYSTEM_GG_NIG()));
-            ngnGLCredit.setTransAmount(rq.getAmount());
-            ngnGLCredit.setTransactionId(rq.getProcessId()+"-NGN_GL");
-
-            utilMeth.creditCustomerWithType(ngnGLCredit, "NGN_GL");
 
             responseModel.setDescription("Success");
             responseModel.setStatusCode(200);
@@ -191,6 +207,22 @@ public class BreezePayWebhookKeyService {
         }
 
         return responseModel;
+    }
+
+    private BaseResponse creditNgnGl(WebHookRequest rq) throws JsonProcessingException, MalformedURLException, NoSuchAlgorithmException, NoSuchPaddingException,
+            InvalidKeyException, IllegalBlockSizeException, BadPaddingException {
+        CreditWalletCaller ngnGLCredit = new CreditWalletCaller();
+        ngnGLCredit.setAuth("Receiver");
+        ngnGLCredit.setFees("0.00");
+        ngnGLCredit.setFinalCHarges(rq.getAmount());
+        ngnGLCredit.setNarration("NGN_Deposit");
+        ngnGLCredit.setPhoneNumber(decryptData(utilMeth.getSETTING_KEY_WALLET_SYSTEM_SYSTEM_GG_NIG()));
+        ngnGLCredit.setTransAmount(rq.getAmount());
+        ngnGLCredit.setTransactionId(rq.getProcessId() + "-NGN_GL");
+
+        BaseResponse glCredit = utilMeth.creditCustomerWithType(ngnGLCredit, "NGN_GL");
+        System.out.println("Credit Response from core NGN_GL ::::::::::::::::  %S  " + new Gson().toJson(glCredit));
+        return glCredit;
     }
 
     private String decryptData(String data) throws NoSuchAlgorithmException, NoSuchPaddingException, InvalidKeyException, IllegalBlockSizeException, BadPaddingException {

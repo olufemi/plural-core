@@ -5,6 +5,8 @@
 package com.finacial.wealth.api.fxpeer.exchange.investment.record;
 
 import java.math.BigDecimal;
+import java.time.Instant;
+import java.time.LocalTime;
 import lombok.Data;
 
 /**
@@ -53,10 +55,32 @@ public class InvestmentProductRecord {
 
     private String partnerProductCode;   // identifier known by partner
 
+    private String prospectusUrl;
+
+    private String metaJson;
+
     private BigDecimal percentageCurrValue;
+
+    private String scheduleMode;
+
+    private String interestAccrueType;
+
+    private String interestCapitalization;
+
+    private Long settlementDelayMinutes;
 
     private Long tenorMinutes = 30L * 24L * 60L; // default 30 days in minutes (editable)
 
     private Boolean maturityAtEndOfDay = true; // optional behavior
+
+    private Instant settlementAt;
+
+    private Instant maturityAt;
+
+    private LocalTime subscriptionCutOffTime;
+
+    private Instant createdAt;
+
+    private Instant updatedAt;
 
 }

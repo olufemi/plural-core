@@ -1,0 +1,3269 @@
+{\rtf1\ansi\ansicpg1252\cocoartf2870
+\cocoatextscaling0\cocoaplatform0{\fonttbl\f0\fswiss\fcharset0 Helvetica;}
+{\colortbl;\red255\green255\blue255;}
+{\*\expandedcolortbl;;}
+\margl1440\margr1440\vieww7700\viewh6120\viewkind0
+\pard\tx720\tx1440\tx2160\tx2880\tx3600\tx4320\tx5040\tx5760\tx6480\tx7200\tx7920\tx8640\pardirnatural\partightenfactor0
+
+\f0\fs24 \cf0 Signup \
+\
+<!DOCTYPE html>\
+<html lang="en">\
+<head>\
+  <meta charset="UTF-8" />\
+  <meta name="viewport" content="width=device-width,initial-scale=1" />\
+  <title>Welcome to Plural</title>\
+  <style>\
+    /* Base styles */\
+    body \{\
+      margin: 0;\
+      padding: 0;\
+      background-color: #f5f6fa;\
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;\
+    \}\
+    .wrapper \{\
+      width: 100%;\
+      background-color: #f5f6fa;\
+      padding: 24px 0;\
+    \}\
+    .container \{\
+      width: 100%;\
+      max-width: 600px;\
+      margin: 0 auto;\
+      background-color: #ffffff;\
+      border-radius: 8px;\
+      overflow: hidden;\
+    \}\
+    .header \{\
+      padding: 20px 24px;\
+      background-color: #050814;\
+      text-align: left;\
+    \}\
+    .logo \{\
+      max-width: 140px;\
+      height: auto;\
+      display: block;\
+    \}\
+    .content \{\
+      padding: 24px 20px 28px;\
+      color: #222222;\
+      font-size: 15px;\
+      line-height: 1.6;\
+    \}\
+    .content p \{\
+      margin: 0 0 12px;\
+    \}\
+    .content ul \{\
+      padding-left: 20px;\
+      margin: 4px 0 16px;\
+    \}\
+    .content li \{\
+      margin-bottom: 4px;\
+    \}\
+    .footer \{\
+      padding: 18px 20px 22px;\
+      font-size: 12px;\
+      color: #777777;\
+      text-align: left;\
+      background-color: #f5f6fa;\
+    \}\
+    .footer a \{\
+      color: #777777;\
+      text-decoration: underline;\
+    \}\
+\
+    /* Mobile tweaks */\
+    @media only screen and (max-width: 480px) \{\
+      .wrapper \{\
+        padding: 12px 0;\
+      \}\
+      .container \{\
+        border-radius: 0;\
+      \}\
+      .header \{\
+        text-align: center;\
+      \}\
+      .content \{\
+        padding: 20px 16px 24px;\
+        font-size: 14px;\
+      \}\
+      .footer \{\
+        padding: 16px;\
+        font-size: 11px;\
+      \}\
+      .logo \{\
+        margin: 0 auto;\
+        max-width: 120px;\
+      \}\
+    \}\
+\
+    /* Dark mode */\
+    @media (prefers-color-scheme: dark) \{\
+      body \{\
+        background-color: #02030a;\
+      \}\
+      .wrapper \{\
+        background-color: #02030a;\
+      \}\
+      .container \{\
+        background-color: #050814;\
+      \}\
+      .header \{\
+        background-color: #050814;\
+      \}\
+      .content \{\
+        color: #f4f6ff;\
+      \}\
+      .footer \{\
+        background-color: #02030a;\
+        color: #9ca3c7;\
+      \}\
+      .footer a \{\
+        color: #c3c8e6;\
+      \}\
+    \}\
+  </style>\
+</head>\
+<body>\
+  <table class="wrapper" width="100%" cellpadding="0" cellspacing="0" border="0">\
+    <tr>\
+      <td align="center">\
+        <table class="container" width="100%" cellpadding="0" cellspacing="0" border="0">\
+          <!-- Header with logo -->\
+          <tr>\
+            <td class="header">\
+              <img\
+                src="data:image/jpeg;base64,REPLACE_WITH_BASE64_LOGO"\
+                alt="Plural"\
+                class="logo"\
+              />\
+            </td>\
+          </tr>\
+\
+          <!-- Content -->\
+          <tr>\
+            <td class="content">\
+              <p>Hi \{\{first_name\}\},</p>\
+\
+              <p>\
+                Welcome to <strong>Plural</strong> \'97 your one-stop financial platform for CAD/NGN wallets, FX trading, group savings, and investments.\
+              </p>\
+\
+              <p>Your account is now active and verified.</p>\
+\
+              <p><strong>Here's what you can do right away:</strong></p>\
+\
+              <ul>\
+                <li>Fund your wallet to get started.</li>\
+                <li>Trade FX between CAD and NGN.</li>\
+                <li>Join or create a Group Savings plan.</li>\
+                <li>Start earning with our Investment options.</li>\
+              </ul>\
+\
+              <p>\
+                If you have any questions, our support team is always here.\
+              </p>\
+\
+              <p style="margin-top:24px;">The Plural Team</p>\
+            </td>\
+          </tr>\
+\
+          <!-- Footer -->\
+          <tr>\
+            <td class="footer">\
+              Registered with Fintrac<br />\
+              \'a9 Plural Financial Inc. \'b7 Registered with Fintrac \'b7\
+              <a href="#">Unsubscribe</a>\
+            </td>\
+          </tr>\
+\
+        </table>\
+      </td>\
+    </tr>\
+  </table>\
+</body>\
+</html>\
+\
+\
+Login Alert\
+\
+<!DOCTYPE html>\
+<html lang="en">\
+<head>\
+  <meta charset="UTF-8" />\
+  <meta name="viewport" content="width=device-width,initial-scale=1" />\
+  <title>New Login to Your Plural Account</title>\
+\
+  <style>\
+    body \{\
+      margin: 0;\
+      padding: 0;\
+      background-color: #f5f6fa;\
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;\
+    \}\
+    .wrapper \{\
+      width: 100%;\
+      background-color: #f5f6fa;\
+      padding: 24px 0;\
+    \}\
+    .container \{\
+      width: 100%;\
+      max-width: 600px;\
+      margin: 0 auto;\
+      background-color: #ffffff;\
+      border-radius: 8px;\
+      overflow: hidden;\
+    \}\
+    .header \{\
+      padding: 20px 24px;\
+      background-color: #050814;\
+      text-align: left;\
+    \}\
+    .logo \{\
+      max-width: 140px;\
+      height: auto;\
+      display: block;\
+    \}\
+    .content \{\
+      padding: 24px 20px 28px;\
+      color: #222222;\
+      font-size: 15px;\
+      line-height: 1.6;\
+    \}\
+    .content p \{\
+      margin: 0 0 12px;\
+    \}\
+    .footer \{\
+      padding: 18px 20px 22px;\
+      font-size: 12px;\
+      color: #777777;\
+      background-color: #f5f6fa;\
+      text-align: left;\
+    \}\
+    .footer a \{\
+      color: #777777;\
+      text-decoration: underline;\
+    \}\
+\
+    /* Mobile */\
+    @media only screen and (max-width: 480px) \{\
+      .wrapper \{\
+        padding: 12px 0;\
+      \}\
+      .container \{\
+        border-radius: 0;\
+      \}\
+      .header \{\
+        text-align: center;\
+      \}\
+      .logo \{\
+        margin: 0 auto;\
+        max-width: 120px;\
+      \}\
+      .content \{\
+        padding: 20px 16px 24px;\
+        font-size: 14px;\
+      \}\
+      .footer \{\
+        padding: 16px;\
+        font-size: 11px;\
+      \}\
+    \}\
+\
+    /* Dark Mode */\
+    @media (prefers-color-scheme: dark) \{\
+      body \{\
+        background-color: #02030a;\
+      \}\
+      .wrapper \{\
+        background-color: #02030a;\
+      \}\
+      .container \{\
+        background-color: #050814;\
+      \}\
+      .header \{\
+        background-color: #050814;\
+      \}\
+      .content \{\
+        color: #f4f6ff;\
+      \}\
+      .footer \{\
+        background-color: #02030a;\
+        color: #9ca3c7;\
+      \}\
+      .footer a \{\
+        color: #c3c8e6;\
+      \}\
+    \}\
+  </style>\
+</head>\
+\
+<body>\
+  <table class="wrapper" width="100%" cellpadding="0" cellspacing="0" border="0">\
+    <tr>\
+      <td align="center">\
+\
+        <table class="container" width="100%" cellpadding="0" cellspacing="0" border="0">\
+\
+          <!-- Header -->\
+          <tr>\
+            <td class="header">\
+              <img\
+                src="data:image/jpeg;base64,REPLACE_WITH_BASE64_LOGO"\
+                alt="Plural"\
+                class="logo"\
+              />\
+            </td>\
+          </tr>\
+\
+          <!-- Content -->\
+          <tr>\
+            <td class="content">\
+              <p>Hi \{\{first_name\}\},</p>\
+\
+              <p>We noticed a new login to your Plural account.</p>\
+\
+              <p><strong>Date & Time:</strong> \{\{datetime\}\}<br>\
+                 <strong>Device:</strong> \{\{device\}\}<br>\
+                 <strong>Location:</strong> \{\{location\}\}\
+              </p>\
+\
+              <p>If this was you, no action is needed.</p>\
+\
+              <p>\
+                If you don't recognise this login, please secure your account immediately by resetting your password or contacting our support team.\
+              </p>\
+\
+              <p style="margin-top:24px;">Stay safe,<br>The Plural Team</p>\
+            </td>\
+          </tr>\
+\
+          <!-- Footer -->\
+          <tr>\
+            <td class="footer">\
+              \'a9 Plural Financial Inc. \'b7 Registered with Fintrac \'b7\
+              <a href="#">Unsubscribe</a>\
+            </td>\
+          </tr>\
+\
+        </table>\
+\
+      </td>\
+    </tr>\
+  </table>\
+</body>\
+</html>\
+\
+\
+New Group Created\
+\
+<!DOCTYPE html>\
+<html lang="en">\
+<head>\
+  <meta charset="UTF-8" />\
+  <meta name="viewport" content="width=device-width,initial-scale=1" />\
+  <title>Your Group Savings Plan Is Live</title>\
+\
+  <style>\
+    body \{\
+      margin: 0;\
+      padding: 0;\
+      background-color: #f5f6fa;\
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;\
+    \}\
+    .wrapper \{\
+      width: 100%;\
+      background-color: #f5f6fa;\
+      padding: 24px 0;\
+    \}\
+    .container \{\
+      width: 100%;\
+      max-width: 600px;\
+      margin: 0 auto;\
+      background-color: #ffffff;\
+      border-radius: 8px;\
+      overflow: hidden;\
+    \}\
+    .header \{\
+      padding: 20px 24px;\
+      background-color: #050814;\
+      text-align: left;\
+    \}\
+    .logo \{\
+      max-width: 140px;\
+      height: auto;\
+      display: block;\
+    \}\
+    .content \{\
+      padding: 24px 20px 28px;\
+      color: #222222;\
+      font-size: 15px;\
+      line-height: 1.6;\
+    \}\
+    .content p \{\
+      margin: 0 0 12px;\
+    \}\
+    .content ul \{\
+      padding-left: 20px;\
+      margin: 4px 0 16px;\
+    \}\
+    .footer \{\
+      padding: 18px 20px 22px;\
+      font-size: 12px;\
+      color: #777777;\
+      background-color: #f5f6fa;\
+      text-align: left;\
+    \}\
+    .footer a \{\
+      color: #777777;\
+      text-decoration: underline;\
+    \}\
+\
+    /* Mobile */\
+    @media only screen and (max-width: 480px) \{\
+      .wrapper \{\
+        padding: 12px 0;\
+      \}\
+      .container \{\
+        border-radius: 0;\
+      \}\
+      .header \{\
+        text-align: center;\
+      \}\
+      .logo \{\
+        margin: 0 auto;\
+        max-width: 120px;\
+      \}\
+      .content \{\
+        padding: 20px 16px 24px;\
+        font-size: 14px;\
+      \}\
+      .footer \{\
+        padding: 16px;\
+        font-size: 11px;\
+      \}\
+    \}\
+\
+    /* Dark Mode */\
+    @media (prefers-color-scheme: dark) \{\
+      body \{\
+        background-color: #02030a;\
+      \}\
+      .wrapper \{\
+        background-color: #02030a;\
+      \}\
+      .container \{\
+        background-color: #050814;\
+      \}\
+      .header \{\
+        background-color: #050814;\
+      \}\
+      .content \{\
+        color: #f4f6ff;\
+      \}\
+      .footer \{\
+        background-color: #02030a;\
+        color: #9ca3c7;\
+      \}\
+      .footer a \{\
+        color: #c3c8e6;\
+      \}\
+    \}\
+  </style>\
+</head>\
+\
+<body>\
+  <table class="wrapper" width="100%" cellpadding="0" cellspacing="0" border="0">\
+    <tr>\
+      <td align="center">\
+\
+        <table class="container" width="100%" cellpadding="0" cellspacing="0" border="0">\
+\
+          <!-- Header -->\
+          <tr>\
+            <td class="header">\
+              <img\
+                src="data:image/jpeg;base64,REPLACE_WITH_BASE64_LOGO"\
+                alt="Plural"\
+                class="logo"\
+              />\
+            </td>\
+          </tr>\
+\
+          <!-- Content -->\
+          <tr>\
+            <td class="content">\
+              <p>Hi \{\{first_name\}\},</p>\
+\
+              <p>Your Group Savings plan "<strong>\{\{group_name\}\}</strong>" has been created successfully.</p>\
+\
+              <p><strong>Group Details:</strong></p>\
+\
+              <p>\
+                <strong>Name:</strong> \{\{group_name\}\}<br>\
+                <strong>Contribution:</strong> \{\{currency\}\} \{\{amount\}\} / \{\{frequency\}\}<br>\
+                <strong>Members:</strong> \{\{member_count\}\} slots<br>\
+                <strong>Start Date:</strong> \{\{start_date\}\}\
+              </p>\
+\
+              <p>\
+                Share your group link to invite members:<br>\
+                <a href="\{\{invite_link\}\}" style="color:#0066ff; text-decoration:underline;">\
+                  \{\{invite_link\}\}\
+                </a>\
+              </p>\
+\
+              <p style="margin-top:24px;">The Plural Team</p>\
+            </td>\
+          </tr>\
+\
+          <!-- Footer -->\
+          <tr>\
+            <td class="footer">\
+              \'a9 Plural Financial Inc. \'b7 Registered with Fintrac \'b7\
+              <a href="#">Unsubscribe</a>\
+            </td>\
+          </tr>\
+\
+        </table>\
+\
+      </td>\
+    </tr>\
+  </table>\
+</body>\
+</html>\
+\
+\
+New Member Joined Group\
+\
+<!DOCTYPE html>\
+<html lang="en">\
+<head>\
+  <meta charset="UTF-8" />\
+  <meta name="viewport" content="width=device-width,initial-scale=1" />\
+  <title>New Member Joined</title>\
+\
+  <style>\
+    body \{\
+      margin: 0;\
+      padding: 0;\
+      background-color: #f5f6fa;\
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;\
+    \}\
+    .wrapper \{\
+      width: 100%;\
+      background-color: #f5f6fa;\
+      padding: 24px 0;\
+    \}\
+    .container \{\
+      width: 100%;\
+      max-width: 600px;\
+      margin: 0 auto;\
+      background-color: #ffffff;\
+      border-radius: 8px;\
+      overflow: hidden;\
+    \}\
+    .header \{\
+      padding: 20px 24px;\
+      background-color: #050814;\
+      text-align: left;\
+    \}\
+    .logo \{\
+      max-width: 140px;\
+      height: auto;\
+      display: block;\
+    \}\
+    .content \{\
+      padding: 24px 20px 28px;\
+      color: #222222;\
+      font-size: 15px;\
+      line-height: 1.6;\
+    \}\
+    .content p \{\
+      margin: 0 0 12px;\
+    \}\
+    .footer \{\
+      padding: 18px 20px 22px;\
+      font-size: 12px;\
+      color: #777777;\
+      background-color: #f5f6fa;\
+      text-align: left;\
+    \}\
+    .footer a \{\
+      color: #777777;\
+      text-decoration: underline;\
+    \}\
+\
+    /* Mobile */\
+    @media only screen and (max-width: 480px) \{\
+      .wrapper \{\
+        padding: 12px 0;\
+      \}\
+      .container \{\
+        border-radius: 0;\
+      \}\
+      .header \{\
+        text-align: center;\
+      \}\
+      .logo \{\
+        margin: 0 auto;\
+        max-width: 120px;\
+      \}\
+      .content \{\
+        padding: 20px 16px 24px;\
+        font-size: 14px;\
+      \}\
+      .footer \{\
+        padding: 16px;\
+        font-size: 11px;\
+      \}\
+    \}\
+\
+    /* Dark Mode */\
+    @media (prefers-color-scheme: dark) \{\
+      body \{\
+        background-color: #02030a;\
+      \}\
+      .wrapper \{\
+        background-color: #02030a;\
+      \}\
+      .container \{\
+        background-color: #050814;\
+      \}\
+      .header \{\
+        background-color: #050814;\
+      \}\
+      .content \{\
+        color: #f4f6ff;\
+      \}\
+      .footer \{\
+        background-color: #02030a;\
+        color: #9ca3c7;\
+      \}\
+      .footer a \{\
+        color: #c3c8e6;\
+      \}\
+    \}\
+  </style>\
+</head>\
+\
+<body>\
+  <table class="wrapper" width="100%" cellpadding="0" cellspacing="0" border="0">\
+    <tr>\
+      <td align="center">\
+\
+        <table class="container" width="100%" cellpadding="0" cellspacing="0" border="0">\
+\
+          <!-- Header -->\
+          <tr>\
+            <td class="header">\
+              <img\
+                src="data:image/jpeg;base64,REPLACE_WITH_BASE64_LOGO"\
+                alt="Plural"\
+                class="logo"\
+              />\
+            </td>\
+          </tr>\
+\
+          <!-- Content -->\
+          <tr>\
+            <td class="content">\
+              <p>Hi \{\{first_name\}\},</p>\
+\
+              <p>\
+                Great news \'97 <strong>\{\{member_name\}\}</strong> has joined your Group Savings plan\
+                "<strong>\{\{group_name\}\}</strong>".\
+              </p>\
+\
+              <p>\
+                <strong>Updated member count:</strong> \{\{current_count\}\} / \{\{total_slots\}\}\
+              </p>\
+\
+              <p>\
+                <strong>\{\{slots_remaining\}\}</strong> slot(s) remaining. Keep sharing your invite link.\
+              </p>\
+\
+              <p style="margin-top:24px;">The Plural Team</p>\
+            </td>\
+          </tr>\
+\
+          <!-- Footer -->\
+          <tr>\
+            <td class="footer">\
+              \'a9 Plural Financial Inc. \'b7 Registered with Fintrac \'b7\
+              <a href="#">Unsubscribe</a>\
+            </td>\
+          </tr>\
+\
+        </table>\
+\
+      </td>\
+    </tr>\
+  </table>\
+</body>\
+</html>\
+\
+\
+Member Swap\
+\
+<!DOCTYPE html>\
+<html lang="en">\
+<head>\
+  <meta charset="UTF-8" />\
+  <meta name="viewport" content="width=device-width,initial-scale=1" />\
+  <title>Member Update</title>\
+\
+  <style>\
+    body \{\
+      margin: 0;\
+      padding: 0;\
+      background-color: #f5f6fa;\
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;\
+    \}\
+    .wrapper \{\
+      width: 100%;\
+      background-color: #f5f6fa;\
+      padding: 24px 0;\
+    \}\
+    .container \{\
+      width: 100%;\
+      max-width: 600px;\
+      margin: 0 auto;\
+      background-color: #ffffff;\
+      border-radius: 8px;\
+      overflow: hidden;\
+    \}\
+    .header \{\
+      padding: 20px 24px;\
+      background-color: #050814;\
+      text-align: left;\
+    \}\
+    .logo \{\
+      max-width: 140px;\
+      height: auto;\
+      display: block;\
+    \}\
+    .content \{\
+      padding: 24px 20px 28px;\
+      color: #222222;\
+      font-size: 15px;\
+      line-height: 1.6;\
+    \}\
+    .content p \{\
+      margin: 0 0 12px;\
+    \}\
+    .footer \{\
+      padding: 18px 20px 22px;\
+      font-size: 12px;\
+      color: #777777;\
+      background-color: #f5f6fa;\
+      text-align: left;\
+    \}\
+    .footer a \{\
+      color: #777777;\
+      text-decoration: underline;\
+    \}\
+\
+    /* Mobile */\
+    @media only screen and (max-width: 480px) \{\
+      .wrapper \{\
+        padding: 12px 0;\
+      \}\
+      .container \{\
+        border-radius: 0;\
+      \}\
+      .header \{\
+        text-align: center;\
+      \}\
+      .logo \{\
+        margin: 0 auto;\
+        max-width: 120px;\
+      \}\
+      .content \{\
+        padding: 20px 16px 24px;\
+        font-size: 14px;\
+      \}\
+      .footer \{\
+        padding: 16px;\
+        font-size: 11px;\
+      \}\
+    \}\
+\
+    /* Dark Mode */\
+    @media (prefers-color-scheme: dark) \{\
+      body \{\
+        background-color: #02030a;\
+      \}\
+      .wrapper \{\
+        background-color: #02030a;\
+      \}\
+      .container \{\
+        background-color: #050814;\
+      \}\
+      .header \{\
+        background-color: #050814;\
+      \}\
+      .content \{\
+        color: #f4f6ff;\
+      \}\
+      .footer \{\
+        background-color: #02030a;\
+        color: #9ca3c7;\
+      \}\
+      .footer a \{\
+        color: #c3c8e6;\
+      \}\
+    \}\
+  </style>\
+</head>\
+\
+<body>\
+  <table class="wrapper" width="100%" cellpadding="0" cellspacing="0" border="0">\
+    <tr>\
+      <td align="center">\
+\
+        <table class="container" width="100%" cellpadding="0" cellspacing="0" border="0">\
+\
+          <!-- Header -->\
+          <tr>\
+            <td class="header">\
+              <img\
+                src="data:image/jpeg;base64,REPLACE_WITH_BASE64_LOGO"\
+                alt="Plural"\
+                class="logo"\
+              />\
+            </td>\
+          </tr>\
+\
+          <!-- Content -->\
+          <tr>\
+            <td class="content">\
+              <p>Hi \{\{first_name\}\},</p>\
+\
+              <p>\
+                There has been a member update in your Group Savings plan\
+                "<strong>\{\{group_name\}\}</strong>".\
+              </p>\
+\
+              <p>\
+                <strong>\{\{old_member\}\}</strong> has been replaced by\
+                <strong>\{\{new_member\}\}</strong> in position <strong>\{\{position\}\}</strong>.\
+              </p>\
+\
+              <p>\
+                This change does not affect your savings schedule or contributions.\
+              </p>\
+\
+              <p style="margin-top:24px;">Questions? Contact our support team.</p>\
+\
+              <p style="margin-top:24px;">The Plural Team</p>\
+            </td>\
+          </tr>\
+\
+          <!-- Footer -->\
+          <tr>\
+            <td class="footer">\
+              \'a9 Plural Financial Inc. \'b7 Registered with Fintrac \'b7\
+              <a href="#">Unsubscribe</a>\
+            </td>\
+          </tr>\
+\
+        </table>\
+\
+      </td>\
+    </tr>\
+  </table>\
+</body>\
+</html>\
+\
+\
+Successful Group Savings Remittance\
+\
+<!DOCTYPE html>\
+<html lang="en">\
+<head>\
+  <meta charset="UTF-8" />\
+  <meta name="viewport" content="width=device-width,initial-scale=1" />\
+  <title>Remittance Successful</title>\
+\
+  <style>\
+    body \{\
+      margin: 0;\
+      padding: 0;\
+      background-color: #f5f6fa;\
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;\
+    \}\
+    .wrapper \{\
+      width: 100%;\
+      background-color: #f5f6fa;\
+      padding: 24px 0;\
+    \}\
+    .container \{\
+      width: 100%;\
+      max-width: 600px;\
+      margin: 0 auto;\
+      background-color: #ffffff;\
+      border-radius: 8px;\
+      overflow: hidden;\
+    \}\
+    .header \{\
+      padding: 20px 24px;\
+      background-color: #050814;\
+      text-align: left;\
+    \}\
+    .logo \{\
+      max-width: 140px;\
+      height: auto;\
+      display: block;\
+    \}\
+    .content \{\
+      padding: 24px 20px 28px;\
+      color: #222222;\
+      font-size: 15px;\
+      line-height: 1.6;\
+    \}\
+    .content p \{\
+      margin: 0 0 12px;\
+    \}\
+    .footer \{\
+      padding: 18px 20px 22px;\
+      font-size: 12px;\
+      color: #777777;\
+      background-color: #f5f6fa;\
+      text-align: left;\
+    \}\
+    .footer a \{\
+      color: #777777;\
+      text-decoration: underline;\
+    \}\
+\
+    /* Mobile */\
+    @media only screen and (max-width: 480px) \{\
+      .wrapper \{\
+        padding: 12px 0;\
+      \}\
+      .container \{\
+        border-radius: 0;\
+      \}\
+      .header \{\
+        text-align: center;\
+      \}\
+      .logo \{\
+        margin: 0 auto;\
+        max-width: 120px;\
+      \}\
+      .content \{\
+        padding: 20px 16px 24px;\
+        font-size: 14px;\
+      \}\
+      .footer \{\
+        padding: 16px;\
+        font-size: 11px;\
+      \}\
+    \}\
+\
+    /* Dark Mode */\
+    @media (prefers-color-scheme: dark) \{\
+      body \{\
+        background-color: #02030a;\
+      \}\
+      .wrapper \{\
+        background-color: #02030a;\
+      \}\
+      .container \{\
+        background-color: #050814;\
+      \}\
+      .header \{\
+        background-color: #050814;\
+      \}\
+      .content \{\
+        color: #f4f6ff;\
+      \}\
+      .footer \{\
+        background-color: #02030a;\
+        color: #9ca3c7;\
+      \}\
+      .footer a \{\
+        color: #c3c8e6;\
+      \}\
+    \}\
+  </style>\
+</head>\
+\
+<body>\
+  <table class="wrapper" width="100%" cellpadding="0" cellspacing="0" border="0">\
+    <tr>\
+      <td align="center">\
+\
+        <table class="container" width="100%" cellpadding="0" cellspacing="0" border="0">\
+\
+          <!-- Header -->\
+          <tr>\
+            <td class="header">\
+              <img\
+                src="data:image/jpeg;base64,REPLACE_WITH_BASE64_LOGO"\
+                alt="Plural"\
+                class="logo"\
+              />\
+            </td>\
+          </tr>\
+\
+          <!-- Content -->\
+          <tr>\
+            <td class="content">\
+              <p>Hi \{\{first_name\}\},</p>\
+\
+              <p>Your Group Savings remittance has been processed.</p>\
+\
+              <p><strong>Transaction Details:</strong></p>\
+\
+              <p>\
+                <strong>Group:</strong> \{\{group_name\}\}<br>\
+                <strong>Amount:</strong> \{\{currency\}\} \{\{amount\}\}<br>\
+                <strong>Recipient:</strong> \{\{recipient_name\}\}<br>\
+                <strong>Date:</strong> \{\{datetime\}\}<br>\
+                <strong>Reference:</strong> \{\{ref_number\}\}\
+              </p>\
+\
+              <p>Keep saving consistently to build toward your goal.</p>\
+\
+              <p style="margin-top:24px;">The Plural Team</p>\
+            </td>\
+          </tr>\
+\
+          <!-- Footer -->\
+          <tr>\
+            <td class="footer">\
+              \'a9 Plural Financial Inc. \'b7 Registered with Fintrac \'b7\
+              <a href="#">Unsubscribe</a>\
+            </td>\
+          </tr>\
+\
+        </table>\
+\
+      </td>\
+    </tr>\
+  </table>\
+</body>\
+</html>\
+\
+\
+Successful Wallet Creation\
+\
+<!DOCTYPE html>\
+<html lang="en">\
+<head>\
+  <meta charset="UTF-8" />\
+  <meta name="viewport" content="width=device-width,initial-scale=1" />\
+  <title>Wallet Created</title>\
+\
+  <style>\
+    body \{\
+      margin: 0;\
+      padding: 0;\
+      background-color: #f5f6fa;\
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;\
+    \}\
+    .wrapper \{\
+      width: 100%;\
+      background-color: #f5f6fa;\
+      padding: 24px 0;\
+    \}\
+    .container \{\
+      width: 100%;\
+      max-width: 600px;\
+      margin: 0 auto;\
+      background-color: #ffffff;\
+      border-radius: 8px;\
+      overflow: hidden;\
+    \}\
+    .header \{\
+      padding: 20px 24px;\
+      background-color: #050814;\
+      text-align: left;\
+    \}\
+    .logo \{\
+      max-width: 140px;\
+      height: auto;\
+      display: block;\
+    \}\
+    .content \{\
+      padding: 24px 20px 28px;\
+      color: #222222;\
+      font-size: 15px;\
+      line-height: 1.6;\
+    \}\
+    .content p \{\
+      margin: 0 0 12px;\
+    \}\
+    .footer \{\
+      padding: 18px 20px 22px;\
+      font-size: 12px;\
+      color: #777777;\
+      background-color: #f5f6fa;\
+      text-align: left;\
+    \}\
+    .footer a \{\
+      color: #777777;\
+      text-decoration: underline;\
+    \}\
+\
+    /* Mobile */\
+    @media only screen and (max-width: 480px) \{\
+      .wrapper \{\
+        padding: 12px 0;\
+      \}\
+      .container \{\
+        border-radius: 0;\
+      \}\
+      .header \{\
+        text-align: center;\
+      \}\
+      .logo \{\
+        margin: 0 auto;\
+        max-width: 120px;\
+      \}\
+      .content \{\
+        padding: 20px 16px 24px;\
+        font-size: 14px;\
+      \}\
+      .footer \{\
+        padding: 16px;\
+        font-size: 11px;\
+      \}\
+    \}\
+\
+    /* Dark Mode */\
+    @media (prefers-color-scheme: dark) \{\
+      body \{\
+        background-color: #02030a;\
+      \}\
+      .wrapper \{\
+        background-color: #02030a;\
+      \}\
+      .container \{\
+        background-color: #050814;\
+      \}\
+      .header \{\
+        background-color: #050814;\
+      \}\
+      .content \{\
+        color: #f4f6ff;\
+      \}\
+      .footer \{\
+        background-color: #02030a;\
+        color: #9ca3c7;\
+      \}\
+      .footer a \{\
+        color: #c3c8e6;\
+      \}\
+    \}\
+  </style>\
+</head>\
+\
+<body>\
+  <table class="wrapper" width="100%" cellpadding="0" cellspacing="0" border="0">\
+    <tr>\
+      <td align="center">\
+\
+        <table class="container" width="100%" cellpadding="0" cellspacing="0" border="0">\
+\
+          <!-- Header -->\
+          <tr>\
+            <td class="header">\
+              <img\
+                src="data:image/jpeg;base64,REPLACE_WITH_BASE64_LOGO"\
+                alt="Plural"\
+                class="logo"\
+              />\
+            </td>\
+          </tr>\
+\
+          <!-- Content -->\
+          <tr>\
+            <td class="content">\
+              <p>Hi \{\{first_name\}\},</p>\
+\
+              <p>Your \{\{currency\}\} wallet has been created and is ready to use.</p>\
+\
+              <p><strong>Wallet Details:</strong></p>\
+\
+              <p>\
+                <strong>Currency:</strong> \{\{currency\}\}<br>\
+                <strong>Account Number:</strong> \{\{account_number\}\}<br>\
+                <strong>Bank:</strong> \{\{bank_name\}\}\
+              </p>\
+\
+              <p>You can now fund your wallet, send money, and more.</p>\
+\
+              <p style="margin-top:24px;">The Plural Team</p>\
+            </td>\
+          </tr>\
+\
+          <!-- Footer -->\
+          <tr>\
+            <td class="footer">\
+              \'a9 Plural Financial Inc. \'b7 Registered with Fintrac \'b7\
+              <a href="#">Unsubscribe</a>\
+            </td>\
+          </tr>\
+\
+        </table>\
+\
+      </td>\
+    </tr>\
+  </table>\
+</body>\
+</html>\
+\
+\
+Virtual Account Created\
+\
+<!DOCTYPE html>\
+<html lang="en">\
+<head>\
+  <meta charset="UTF-8" />\
+  <meta name="viewport" content="width=device-width,initial-scale=1" />\
+  <title>Virtual Account Created</title>\
+\
+  <style>\
+    body \{\
+      margin: 0;\
+      padding: 0;\
+      background-color: #f5f6fa;\
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;\
+    \}\
+    .wrapper \{\
+      width: 100%;\
+      background-color: #f5f6fa;\
+      padding: 24px 0;\
+    \}\
+    .container \{\
+      width: 100%;\
+      max-width: 600px;\
+      margin: 0 auto;\
+      background-color: #ffffff;\
+      border-radius: 8px;\
+      overflow: hidden;\
+    \}\
+    .header \{\
+      padding: 20px 24px;\
+      background-color: #050814;\
+      text-align: left;\
+    \}\
+    .logo \{\
+      max-width: 140px;\
+      height: auto;\
+      display: block;\
+    \}\
+    .content \{\
+      padding: 24px 20px 28px;\
+      color: #222222;\
+      font-size: 15px;\
+      line-height: 1.6;\
+    \}\
+    .content p \{\
+      margin: 0 0 12px;\
+    \}\
+    .footer \{\
+      padding: 18px 20px 22px;\
+      font-size: 12px;\
+      color: #777777;\
+      background-color: #f5f6fa;\
+      text-align: left;\
+    \}\
+    .footer a \{\
+      color: #777777;\
+      text-decoration: underline;\
+    \}\
+\
+    /* Mobile */\
+    @media only screen and (max-width: 480px) \{\
+      .wrapper \{\
+        padding: 12px 0;\
+      \}\
+      .container \{\
+        border-radius: 0;\
+      \}\
+      .header \{\
+        text-align: center;\
+      \}\
+      .logo \{\
+        margin: 0 auto;\
+        max-width: 120px;\
+      \}\
+      .content \{\
+        padding: 20px 16px 24px;\
+        font-size: 14px;\
+      \}\
+      .footer \{\
+        padding: 16px;\
+        font-size: 11px;\
+      \}\
+    \}\
+\
+    /* Dark Mode */\
+    @media (prefers-color-scheme: dark) \{\
+      body \{\
+        background-color: #02030a;\
+      \}\
+      .wrapper \{\
+        background-color: #02030a;\
+      \}\
+      .container \{\
+        background-color: #050814;\
+      \}\
+      .header \{\
+        background-color: #050814;\
+      \}\
+      .content \{\
+        color: #f4f6ff;\
+      \}\
+      .footer \{\
+        background-color: #02030a;\
+        color: #9ca3c7;\
+      \}\
+      .footer a \{\
+        color: #c3c8e6;\
+      \}\
+    \}\
+  </style>\
+</head>\
+\
+<body>\
+  <table class="wrapper" width="100%" cellpadding="0" cellspacing="0" border="0">\
+    <tr>\
+      <td align="center">\
+\
+        <table class="container" width="100%" cellpadding="0" cellspacing="0" border="0">\
+\
+          <!-- Header -->\
+          <tr>\
+            <td class="header">\
+              <img\
+                src="data:image/jpeg;base64,REPLACE_WITH_BASE64_LOGO"\
+                alt="Plural"\
+                class="logo"\
+              />\
+            </td>\
+          </tr>\
+\
+          <!-- Content -->\
+          <tr>\
+            <td class="content">\
+              <p>Hi \{\{first_name\}\},</p>\
+\
+              <p>Your virtual account has been created for easy deposits.</p>\
+\
+              <p><strong>Account Details:</strong></p>\
+\
+              <p>\
+                <strong>Account Name:</strong> \{\{account_name\}\}<br>\
+                <strong>Account Number:</strong> \{\{account_number\}\}<br>\
+                <strong>Bank:</strong> \{\{bank_name\}\}\
+              </p>\
+\
+              <p>\
+                Use these details to receive bank transfers directly into your Plural wallet.\
+              </p>\
+\
+              <p style="margin-top:24px;">The Plural Team</p>\
+            </td>\
+          </tr>\
+\
+          <!-- Footer -->\
+          <tr>\
+            <td class="footer">\
+              \'a9 Plural Financial Inc. \'b7 Registered with Fintrac \'b7\
+              <a href="#">Unsubscribe</a>\
+            </td>\
+          </tr>\
+\
+        </table>\
+\
+      </td>\
+    </tr>\
+  </table>\
+</body>\
+</html>\
+\
+\
+Successful Wallet Deposit\
+\
+<!DOCTYPE html>\
+<html lang="en">\
+<head>\
+  <meta charset="UTF-8" />\
+  <meta name="viewport" content="width=device-width,initial-scale=1" />\
+  <title>Deposit Successful</title>\
+\
+  <style>\
+    body \{\
+      margin: 0;\
+      padding: 0;\
+      background-color: #f5f6fa;\
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;\
+    \}\
+    .wrapper \{\
+      width: 100%;\
+      background-color: #f5f6fa;\
+      padding: 24px 0;\
+    \}\
+    .container \{\
+      width: 100%;\
+      max-width: 600px;\
+      margin: 0 auto;\
+      background-color: #ffffff;\
+      border-radius: 8px;\
+      overflow: hidden;\
+    \}\
+    .header \{\
+      padding: 20px 24px;\
+      background-color: #050814;\
+      text-align: left;\
+    \}\
+    .logo \{\
+      max-width: 140px;\
+      height: auto;\
+      display: block;\
+    \}\
+    .content \{\
+      padding: 24px 20px 28px;\
+      color: #222222;\
+      font-size: 15px;\
+      line-height: 1.6;\
+    \}\
+    .content p \{\
+      margin: 0 0 12px;\
+    \}\
+    .footer \{\
+      padding: 18px 20px 22px;\
+      font-size: 12px;\
+      color: #777777;\
+      background-color: #f5f6fa;\
+      text-align: left;\
+    \}\
+    .footer a \{\
+      color: #777777;\
+      text-decoration: underline;\
+    \}\
+\
+    /* Mobile */\
+    @media only screen and (max-width: 480px) \{\
+      .wrapper \{\
+        padding: 12px 0;\
+      \}\
+      .container \{\
+        border-radius: 0;\
+      \}\
+      .header \{\
+        text-align: center;\
+      \}\
+      .logo \{\
+        margin: 0 auto;\
+        max-width: 120px;\
+      \}\
+      .content \{\
+        padding: 20px 16px 24px;\
+        font-size: 14px;\
+      \}\
+      .footer \{\
+        padding: 16px;\
+        font-size: 11px;\
+      \}\
+    \}\
+\
+    /* Dark Mode */\
+    @media (prefers-color-scheme: dark) \{\
+      body \{\
+        background-color: #02030a;\
+      \}\
+      .wrapper \{\
+        background-color: #02030a;\
+      \}\
+      .container \{\
+        background-color: #050814;\
+      \}\
+      .header \{\
+        background-color: #050814;\
+      \}\
+      .content \{\
+        color: #f4f6ff;\
+      \}\
+      .footer \{\
+        background-color: #02030a;\
+        color: #9ca3c7;\
+      \}\
+      .footer a \{\
+        color: #c3c8e6;\
+      \}\
+    \}\
+  </style>\
+</head>\
+\
+<body>\
+  <table class="wrapper" width="100%" cellpadding="0" cellspacing="0" border="0">\
+    <tr>\
+      <td align="center">\
+\
+        <table class="container" width="100%" cellpadding="0" cellspacing="0" border="0">\
+\
+          <!-- Header -->\
+          <tr>\
+            <td class="header">\
+              <img\
+                src="data:image/jpeg;base64,REPLACE_WITH_BASE64_LOGO"\
+                alt="Plural"\
+                class="logo"\
+              />\
+            </td>\
+          </tr>\
+\
+          <!-- Content -->\
+          <tr>\
+            <td class="content">\
+              <p>Hi \{\{first_name\}\},</p>\
+\
+              <p>We have received your deposit.</p>\
+\
+              <p><strong>Transaction Details:</strong></p>\
+\
+              <p>\
+                <strong>Amount:</strong> \{\{currency\}\} \{\{amount\}\}<br>\
+                <strong>Wallet:</strong> \{\{wallet_type\}\}<br>\
+                <strong>New Balance:</strong> \{\{currency\}\} \{\{new_balance\}\}<br>\
+                <strong>Date:</strong> \{\{datetime\}\}<br>\
+                <strong>Reference:</strong> \{\{ref_number\}\}\
+              </p>\
+\
+              <p>Your funds are available immediately.</p>\
+\
+              <p style="margin-top:24px;">The Plural Team</p>\
+            </td>\
+          </tr>\
+\
+          <!-- Footer -->\
+          <tr>\
+            <td class="footer">\
+              \'a9 Plural Financial Inc. \'b7 Registered with Fintrac \'b7\
+              <a href="#">Unsubscribe</a>\
+            </td>\
+          </tr>\
+\
+        </table>\
+\
+      </td>\
+    </tr>\
+  </table>\
+</body>\
+</html>\
+\
+\
+Successful Wallet Withdrawal\
+\
+<!DOCTYPE html>\
+<html lang="en">\
+<head>\
+  <meta charset="UTF-8" />\
+  <meta name="viewport" content="width=device-width,initial-scale=1" />\
+  <title>Withdrawal Successful</title>\
+\
+  <style>\
+    body \{\
+      margin: 0;\
+      padding: 0;\
+      background-color: #f5f6fa;\
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;\
+    \}\
+    .wrapper \{\
+      width: 100%;\
+      background-color: #f5f6fa;\
+      padding: 24px 0;\
+    \}\
+    .container \{\
+      width: 100%;\
+      max-width: 600px;\
+      margin: 0 auto;\
+      background-color: #ffffff;\
+      border-radius: 8px;\
+      overflow: hidden;\
+    \}\
+    .header \{\
+      padding: 20px 24px;\
+      background-color: #050814;\
+      text-align: left;\
+    \}\
+    .logo \{\
+      max-width: 140px;\
+      height: auto;\
+      display: block;\
+    \}\
+    .content \{\
+      padding: 24px 20px 28px;\
+      color: #222222;\
+      font-size: 15px;\
+      line-height: 1.6;\
+    \}\
+    .content p \{\
+      margin: 0 0 12px;\
+    \}\
+    .footer \{\
+      padding: 18px 20px 22px;\
+      font-size: 12px;\
+      color: #777777;\
+      background-color: #f5f6fa;\
+      text-align: left;\
+    \}\
+    .footer a \{\
+      color: #777777;\
+      text-decoration: underline;\
+    \}\
+\
+    /* Mobile */\
+    @media only screen and (max-width: 480px) \{\
+      .wrapper \{\
+        padding: 12px 0;\
+      \}\
+      .container \{\
+        border-radius: 0;\
+      \}\
+      .header \{\
+        text-align: center;\
+      \}\
+      .logo \{\
+        margin: 0 auto;\
+        max-width: 120px;\
+      \}\
+      .content \{\
+        padding: 20px 16px 24px;\
+        font-size: 14px;\
+      \}\
+      .footer \{\
+        padding: 16px;\
+        font-size: 11px;\
+      \}\
+    \}\
+\
+    /* Dark Mode */\
+    @media (prefers-color-scheme: dark) \{\
+      body \{\
+        background-color: #02030a;\
+      \}\
+      .wrapper \{\
+        background-color: #02030a;\
+      \}\
+      .container \{\
+        background-color: #050814;\
+      \}\
+      .header \{\
+        background-color: #050814;\
+      \}\
+      .content \{\
+        color: #f4f6ff;\
+      \}\
+      .footer \{\
+        background-color: #02030a;\
+        color: #9ca3c7;\
+      \}\
+      .footer a \{\
+        color: #c3c8e6;\
+      \}\
+    \}\
+  </style>\
+</head>\
+\
+<body>\
+  <table class="wrapper" width="100%" cellpadding="0" cellspacing="0" border="0">\
+    <tr>\
+      <td align="center">\
+\
+        <table class="container" width="100%" cellpadding="0" cellspacing="0" border="0">\
+\
+          <!-- Header -->\
+          <tr>\
+            <td class="header">\
+              <img\
+                src="data:image/jpeg;base64,REPLACE_WITH_BASE64_LOGO"\
+                alt="Plural"\
+                class="logo"\
+              />\
+            </td>\
+          </tr>\
+\
+          <!-- Content -->\
+          <tr>\
+            <td class="content">\
+              <p>Hi \{\{first_name\}\},</p>\
+\
+              <p>Your withdrawal has been processed successfully.</p>\
+\
+              <p><strong>Transaction Details:</strong></p>\
+\
+              <p>\
+                <strong>Amount:</strong> \{\{currency\}\} \{\{amount\}\}<br>\
+                <strong>Destination:</strong> \{\{destination\}\}<br>\
+                <strong>Remaining Balance:</strong> \{\{currency\}\} \{\{new_balance\}\}<br>\
+                <strong>Date:</strong> \{\{datetime\}\}<br>\
+                <strong>Reference:</strong> \{\{ref_number\}\}\
+              </p>\
+\
+              <p>\
+                If you did not authorise this transaction, contact support immediately.\
+              </p>\
+\
+              <p style="margin-top:24px;">The Plural Team</p>\
+            </td>\
+          </tr>\
+\
+          <!-- Footer -->\
+          <tr>\
+            <td class="footer">\
+              \'a9 Plural Financial Inc. \'b7 Registered with Fintrac \'b7\
+              <a href="#">Unsubscribe</a>\
+            </td>\
+          </tr>\
+\
+        </table>\
+\
+      </td>\
+    </tr>\
+  </table>\
+</body>\
+</html>\
+\
+\
+Successful Funds Transfer\
+\
+<!DOCTYPE html>\
+<html lang="en">\
+<head>\
+  <meta charset="UTF-8" />\
+  <meta name="viewport" content="width=device-width,initial-scale=1" />\
+  <title>EFT Transfer</title>\
+\
+  <style>\
+    body \{\
+      margin: 0;\
+      padding: 0;\
+      background-color: #f5f6fa;\
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;\
+    \}\
+    .wrapper \{\
+      width: 100%;\
+      background-color: #f5f6fa;\
+      padding: 24px 0;\
+    \}\
+    .container \{\
+      width: 100%;\
+      max-width: 600px;\
+      margin: 0 auto;\
+      background-color: #ffffff;\
+      border-radius: 8px;\
+      overflow: hidden;\
+    \}\
+    .header \{\
+      padding: 20px 24px;\
+      background-color: #050814;\
+      text-align: left;\
+    \}\
+    .logo \{\
+      max-width: 140px;\
+      height: auto;\
+      display: block;\
+    \}\
+    .content \{\
+      padding: 24px 20px 28px;\
+      color: #222222;\
+      font-size: 15px;\
+      line-height: 1.6;\
+    \}\
+    .content p \{\
+      margin: 0 0 12px;\
+    \}\
+    .footer \{\
+      padding: 18px 20px 22px;\
+      font-size: 12px;\
+      color: #777777;\
+      background-color: #f5f6fa;\
+      text-align: left;\
+    \}\
+    .footer a \{\
+      color: #777777;\
+      text-decoration: underline;\
+    \}\
+\
+    /* Mobile */\
+    @media only screen and (max-width: 480px) \{\
+      .wrapper \{\
+        padding: 12px 0;\
+      \}\
+      .container \{\
+        border-radius: 0;\
+      \}\
+      .header \{\
+        text-align: center;\
+      \}\
+      .logo \{\
+        margin: 0 auto;\
+        max-width: 120px;\
+      \}\
+      .content \{\
+        padding: 20px 16px 24px;\
+        font-size: 14px;\
+      \}\
+      .footer \{\
+        padding: 16px;\
+        font-size: 11px;\
+      \}\
+    \}\
+\
+    /* Dark Mode */\
+    @media (prefers-color-scheme: dark) \{\
+      body \{\
+        background-color: #02030a;\
+      \}\
+      .wrapper \{\
+        background-color: #02030a;\
+      \}\
+      .container \{\
+        background-color: #050814;\
+      \}\
+      .header \{\
+        background-color: #050814;\
+      \}\
+      .content \{\
+        color: #f4f6ff;\
+      \}\
+      .footer \{\
+        background-color: #02030a;\
+        color: #9ca3c7;\
+      \}\
+      .footer a \{\
+        color: #c3c8e6;\
+      \}\
+    \}\
+  </style>\
+</head>\
+\
+<body>\
+  <table class="wrapper" width="100%" cellpadding="0" cellspacing="0" border="0">\
+    <tr>\
+      <td align="center">\
+\
+        <table class="container" width="100%" cellpadding="0" cellspacing="0" border="0">\
+\
+          <!-- Header -->\
+          <tr>\
+            <td class="header">\
+              <img\
+                src="data:image/jpeg;base64,REPLACE_WITH_BASE64_LOGO"\
+                alt="Plural"\
+                class="logo"\
+              />\
+            </td>\
+          </tr>\
+\
+          <!-- Content -->\
+          <tr>\
+            <td class="content">\
+              <p>Hi \{\{first_name\}\},</p>\
+\
+              <p>Your EFT transfer has been processed.</p>\
+\
+              <p><strong>Transaction Details:</strong></p>\
+\
+              <p>\
+                <strong>Type:</strong> Electronic Funds Transfer (EFT)<br>\
+                <strong>Amount:</strong> \{\{currency\}\} \{\{amount\}\}<br>\
+                <strong>Direction:</strong> \{\{direction\}\}<br>\
+                <strong>Counterparty:</strong> \{\{counterparty\}\}<br>\
+                <strong>Date:</strong> \{\{datetime\}\}<br>\
+                <strong>Reference:</strong> \{\{ref_number\}\}<br>\
+                <strong>New Balance:</strong> \{\{currency\}\} \{\{new_balance\}\}\
+              </p>\
+\
+              <p style="margin-top:24px;">The Plural Team</p>\
+            </td>\
+          </tr>\
+\
+          <!-- Footer -->\
+          <tr>\
+            <td class="footer">\
+              \'a9 Plural Financial Inc. \'b7 Registered with Fintrac \'b7\
+              <a href="#">Unsubscribe</a>\
+            </td>\
+          </tr>\
+\
+        </table>\
+\
+      </td>\
+    </tr>\
+  </table>\
+</body>\
+</html>\
+\
+\
+Successful Local Transfer\
+\
+<!DOCTYPE html>\
+<html lang="en">\
+<head>\
+  <meta charset="UTF-8" />\
+  <meta name="viewport" content="width=device-width,initial-scale=1" />\
+  <title>Local Transfer Successful</title>\
+\
+  <style>\
+    body \{\
+      margin: 0;\
+      padding: 0;\
+      background-color: #f5f6fa;\
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;\
+    \}\
+    .wrapper \{\
+      width: 100%;\
+      background-color: #f5f6fa;\
+      padding: 24px 0;\
+    \}\
+    .container \{\
+      width: 100%;\
+      max-width: 600px;\
+      margin: 0 auto;\
+      background-color: #ffffff;\
+      border-radius: 8px;\
+      overflow: hidden;\
+    \}\
+    .header \{\
+      padding: 20px 24px;\
+      background-color: #050814;\
+      text-align: left;\
+    \}\
+    .logo \{\
+      max-width: 140px;\
+      height: auto;\
+      display: block;\
+    \}\
+    .content \{\
+      padding: 24px 20px 28px;\
+      color: #222222;\
+      font-size: 15px;\
+      line-height: 1.6;\
+    \}\
+    .content p \{\
+      margin: 0 0 12px;\
+    \}\
+    .footer \{\
+      padding: 18px 20px 22px;\
+      font-size: 12px;\
+      color: #777777;\
+      background-color: #f5f6fa;\
+      text-align: left;\
+    \}\
+    .footer a \{\
+      color: #777777;\
+      text-decoration: underline;\
+    \}\
+\
+    /* Mobile */\
+    @media only screen and (max-width: 480px) \{\
+      .wrapper \{\
+        padding: 12px 0;\
+      \}\
+      .container \{\
+        border-radius: 0;\
+      \}\
+      .header \{\
+        text-align: center;\
+      \}\
+      .logo \{\
+        margin: 0 auto;\
+        max-width: 120px;\
+      \}\
+      .content \{\
+        padding: 20px 16px 24px;\
+        font-size: 14px;\
+      \}\
+      .footer \{\
+        padding: 16px;\
+        font-size: 11px;\
+      \}\
+    \}\
+\
+    /* Dark Mode */\
+    @media (prefers-color-scheme: dark) \{\
+      body \{\
+        background-color: #02030a;\
+      \}\
+      .wrapper \{\
+        background-color: #02030a;\
+      \}\
+      .container \{\
+        background-color: #050814;\
+      \}\
+      .header \{\
+        background-color: #050814;\
+      \}\
+      .content \{\
+        color: #f4f6ff;\
+      \}\
+      .footer \{\
+        background-color: #02030a;\
+        color: #9ca3c7;\
+      \}\
+      .footer a \{\
+        color: #c3c8e6;\
+      \}\
+    \}\
+  </style>\
+</head>\
+\
+<body>\
+  <table class="wrapper" width="100%" cellpadding="0" cellspacing="0" border="0">\
+    <tr>\
+      <td align="center">\
+\
+        <table class="container" width="100%" cellpadding="0" cellspacing="0" border="0">\
+\
+          <!-- Header -->\
+          <tr>\
+            <td class="header">\
+              <img\
+                src="data:image/jpeg;base64,REPLACE_WITH_BASE64_LOGO"\
+                alt="Plural"\
+                class="logo"\
+              />\
+            </td>\
+          </tr>\
+\
+          <!-- Content -->\
+          <tr>\
+            <td class="content">\
+              <p>Hi \{\{first_name\}\},</p>\
+\
+              <p>Your local transfer has been completed.</p>\
+\
+              <p><strong>Transaction Details:</strong></p>\
+\
+              <p>\
+                <strong>Amount:</strong> \{\{currency\}\} \{\{amount\}\}<br>\
+                <strong>Recipient:</strong> \{\{recipient_name\}\}<br>\
+                <strong>Account:</strong> \{\{recipient_account\}\}<br>\
+                <strong>Bank:</strong> \{\{recipient_bank\}\}<br>\
+                <strong>Date:</strong> \{\{datetime\}\}<br>\
+                <strong>Reference:</strong> \{\{ref_number\}\}<br>\
+                <strong>Remaining Balance:</strong> \{\{currency\}\} \{\{new_balance\}\}\
+              </p>\
+\
+              <p style="margin-top:24px;">The Plural Team</p>\
+            </td>\
+          </tr>\
+\
+          <!-- Footer -->\
+          <tr>\
+            <td class="footer">\
+              \'a9 Plural Financial Inc. \'b7 Registered with Fintrac \'b7\
+              <a href="#">Unsubscribe</a>\
+            </td>\
+          </tr>\
+\
+        </table>\
+\
+      </td>\
+    </tr>\
+  </table>\
+</body>\
+</html>\
+\
+\
+Successful Airtime/Gift Card\
+\
+<!DOCTYPE html>\
+<html lang="en">\
+<head>\
+  <meta charset="UTF-8" />\
+  <meta name="viewport" content="width=device-width,initial-scale=1" />\
+  <title>Purchase Successful</title>\
+\
+  <style>\
+    body \{\
+      margin: 0;\
+      padding: 0;\
+      background-color: #f5f6fa;\
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;\
+    \}\
+    .wrapper \{\
+      width: 100%;\
+      background-color: #f5f6fa;\
+      padding: 24px 0;\
+    \}\
+    .container \{\
+      width: 100%;\
+      max-width: 600px;\
+      margin: 0 auto;\
+      background-color: #ffffff;\
+      border-radius: 8px;\
+      overflow: hidden;\
+    \}\
+    .header \{\
+      padding: 20px 24px;\
+      background-color: #050814;\
+      text-align: left;\
+    \}\
+    .logo \{\
+      max-width: 140px;\
+      height: auto;\
+      display: block;\
+    \}\
+    .content \{\
+      padding: 24px 20px 28px;\
+      color: #222222;\
+      font-size: 15px;\
+      line-height: 1.6;\
+    \}\
+    .content p \{\
+      margin: 0 0 12px;\
+    \}\
+    .footer \{\
+      padding: 18px 20px 22px;\
+      font-size: 12px;\
+      color: #777777;\
+      background-color: #f5f6fa;\
+      text-align: left;\
+    \}\
+    .footer a \{\
+      color: #777777;\
+      text-decoration: underline;\
+    \}\
+\
+    /* Mobile */\
+    @media only screen and (max-width: 480px) \{\
+      .wrapper \{\
+        padding: 12px 0;\
+      \}\
+      .container \{\
+        border-radius: 0;\
+      \}\
+      .header \{\
+        text-align: center;\
+      \}\
+      .logo \{\
+        margin: 0 auto;\
+        max-width: 120px;\
+      \}\
+      .content \{\
+        padding: 20px 16px 24px;\
+        font-size: 14px;\
+      \}\
+      .footer \{\
+        padding: 16px;\
+        font-size: 11px;\
+      \}\
+    \}\
+\
+    /* Dark Mode */\
+    @media (prefers-color-scheme: dark) \{\
+      body \{\
+        background-color: #02030a;\
+      \}\
+      .wrapper \{\
+        background-color: #02030a;\
+      \}\
+      .container \{\
+        background-color: #050814;\
+      \}\
+      .header \{\
+        background-color: #050814;\
+      \}\
+      .content \{\
+        color: #f4f6ff;\
+      \}\
+      .footer \{\
+        background-color: #02030a;\
+        color: #9ca3c7;\
+      \}\
+      .footer a \{\
+        color: #c3c8e6;\
+      \}\
+    \}\
+  </style>\
+</head>\
+\
+<body>\
+  <table class="wrapper" width="100%" cellpadding="0" cellspacing="0" border="0">\
+    <tr>\
+      <td align="center">\
+\
+        <table class="container" width="100%" cellpadding="0" cellspacing="0" border="0">\
+\
+          <!-- Header -->\
+          <tr>\
+            <td class="header">\
+              <img\
+                src="data:image/jpeg;base64,REPLACE_WITH_BASE64_LOGO"\
+                alt="Plural"\
+                class="logo"\
+              />\
+            </td>\
+          </tr>\
+\
+          <!-- Content -->\
+          <tr>\
+            <td class="content">\
+              <p>Hi \{\{first_name\}\},</p>\
+\
+              <p>Your purchase was successful!</p>\
+\
+              <p><strong>Purchase Details:</strong></p>\
+\
+              <p>\
+                <strong>Product:</strong> \{\{product_name\}\}<br>\
+                <strong>Amount:</strong> \{\{currency\}\} \{\{amount\}\}<br>\
+                <strong>Recipient:</strong> \{\{phone_or_email\}\}<br>\
+                <strong>Date:</strong> \{\{datetime\}\}<br>\
+                <strong>Reference:</strong> \{\{ref_number\}\}\
+              </p>\
+\
+              <p>The value has been delivered to the recipient.</p>\
+\
+              <p style="margin-top:24px;">The Plural Team</p>\
+            </td>\
+          </tr>\
+\
+          <!-- Footer -->\
+          <tr>\
+            <td class="footer">\
+              \'a9 Plural Financial Inc. \'b7 Registered with Fintrac \'b7\
+              <a href="#">Unsubscribe</a>\
+            </td>\
+          </tr>\
+\
+        </table>\
+\
+      </td>\
+    </tr>\
+  </table>\
+</body>\
+</html>\
+\
+\
+Airtime/Gift Card\
+\
+<!DOCTYPE html>\
+<html lang="en">\
+<head>\
+  <meta charset="UTF-8" />\
+  <meta name="viewport" content="width=device-width,initial-scale=1" />\
+  <title>Purchase Failed</title>\
+\
+  <style>\
+    body \{\
+      margin: 0;\
+      padding: 0;\
+      background-color: #f5f6fa;\
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;\
+    \}\
+    .wrapper \{\
+      width: 100%;\
+      background-color: #f5f6fa;\
+      padding: 24px 0;\
+    \}\
+    .container \{\
+      width: 100%;\
+      max-width: 600px;\
+      margin: 0 auto;\
+      background-color: #ffffff;\
+      border-radius: 8px;\
+      overflow: hidden;\
+    \}\
+    .header \{\
+      padding: 20px 24px;\
+      background-color: #050814;\
+      text-align: left;\
+    \}\
+    .logo \{\
+      max-width: 140px;\
+      height: auto;\
+      display: block;\
+    \}\
+    .content \{\
+      padding: 24px 20px 28px;\
+      color: #222222;\
+      font-size: 15px;\
+      line-height: 1.6;\
+    \}\
+    .content p \{\
+      margin: 0 0 12px;\
+    \}\
+    .footer \{\
+      padding: 18px 20px 22px;\
+      font-size: 12px;\
+      color: #777777;\
+      background-color: #f5f6fa;\
+      text-align: left;\
+    \}\
+    .footer a \{\
+      color: #777777;\
+      text-decoration: underline;\
+    \}\
+\
+    /* Mobile */\
+    @media only screen and (max-width: 480px) \{\
+      .wrapper \{\
+        padding: 12px 0;\
+      \}\
+      .container \{\
+        border-radius: 0;\
+      \}\
+      .header \{\
+        text-align: center;\
+      \}\
+      .logo \{\
+        margin: 0 auto;\
+        max-width: 120px;\
+      \}\
+      .content \{\
+        padding: 20px 16px 24px;\
+        font-size: 14px;\
+      \}\
+      .footer \{\
+        padding: 16px;\
+        font-size: 11px;\
+      \}\
+    \}\
+\
+    /* Dark Mode */\
+    @media (prefers-color-scheme: dark) \{\
+      body \{\
+        background-color: #02030a;\
+      \}\
+      .wrapper \{\
+        background-color: #02030a;\
+      \}\
+      .container \{\
+        background-color: #050814;\
+      \}\
+      .header \{\
+        background-color: #050814;\
+      \}\
+      .content \{\
+        color: #f4f6ff;\
+      \}\
+      .footer \{\
+        background-color: #02030a;\
+        color: #9ca3c7;\
+      \}\
+      .footer a \{\
+        color: #c3c8e6;\
+      \}\
+    \}\
+  </style>\
+</head>\
+\
+<body>\
+  <table class="wrapper" width="100%" cellpadding="0" cellspacing="0" border="0">\
+    <tr>\
+      <td align="center">\
+\
+        <table class="container" width="100%" cellpadding="0" cellspacing="0" border="0">\
+\
+          <!-- Header -->\
+          <tr>\
+            <td class="header">\
+              <img\
+                src="data:image/jpeg;base64,REPLACE_WITH_BASE64_LOGO"\
+                alt="Plural"\
+                class="logo"\
+              />\
+            </td>\
+          </tr>\
+\
+          <!-- Content -->\
+          <tr>\
+            <td class="content">\
+              <p>Hi \{\{first_name\}\},</p>\
+\
+              <p>Unfortunately, your purchase could not be completed.</p>\
+\
+              <p><strong>Attempted Purchase:</strong></p>\
+\
+              <p>\
+                <strong>Product:</strong> \{\{product_name\}\}<br>\
+                <strong>Amount:</strong> \{\{currency\}\} \{\{amount\}\}<br>\
+                <strong>Recipient:</strong> \{\{phone_or_email\}\}<br>\
+                <strong>Date:</strong> \{\{datetime\}\}<br>\
+                <strong>Reason:</strong> \{\{failure_reason\}\}\
+              </p>\
+\
+              <p>Your wallet has not been charged. Please try again or contact support if the issue persists.</p>\
+\
+              <p style="margin-top:24px;">The Plural Team</p>\
+            </td>\
+          </tr>\
+\
+          <!-- Footer -->\
+          <tr>\
+            <td class="footer">\
+              \'a9 Plural Financial Inc. \'b7 Registered with Fintrac \'b7\
+              <a href="#">Unsubscribe</a>\
+            </td>\
+          </tr>\
+\
+        </table>\
+\
+      </td>\
+    </tr>\
+  </table>\
+</body>\
+</html>\
+\
+Investment Notification\
+\
+<!DOCTYPE html>\
+<html lang="en">\
+<head>\
+  <meta charset="UTF-8" />\
+  <meta name="viewport" content="width=device-width,initial-scale=1" />\
+  <title>Investment Update</title>\
+\
+  <style>\
+    body \{\
+      margin: 0;\
+      padding: 0;\
+      background-color: #f5f6fa;\
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;\
+    \}\
+    .wrapper \{\
+      width: 100%;\
+      background-color: #f5f6fa;\
+      padding: 24px 0;\
+    \}\
+    .container \{\
+      width: 100%;\
+      max-width: 600px;\
+      margin: 0 auto;\
+      background-color: #ffffff;\
+      border-radius: 8px;\
+      overflow: hidden;\
+    \}\
+    .header \{\
+      padding: 20px 24px;\
+      background-color: #050814;\
+      text-align: left;\
+    \}\
+    .logo \{\
+      max-width: 140px;\
+      height: auto;\
+      display: block;\
+    \}\
+    .content \{\
+      padding: 24px 20px 28px;\
+      color: #222222;\
+      font-size: 15px;\
+      line-height: 1.6;\
+    \}\
+    .content p \{\
+      margin: 0 0 12px;\
+    \}\
+    .footer \{\
+      padding: 18px 20px 22px;\
+      font-size: 12px;\
+      color: #777777;\
+      background-color: #f5f6fa;\
+      text-align: left;\
+    \}\
+    .footer a \{\
+      color: #777777;\
+      text-decoration: underline;\
+    \}\
+\
+    /* Mobile */\
+    @media only screen and (max-width: 480px) \{\
+      .wrapper \{\
+        padding: 12px 0;\
+      \}\
+      .container \{\
+        border-radius: 0;\
+      \}\
+      .header \{\
+        text-align: center;\
+      \}\
+      .logo \{\
+        margin: 0 auto;\
+        max-width: 120px;\
+      \}\
+      .content \{\
+        padding: 20px 16px 24px;\
+        font-size: 14px;\
+      \}\
+      .footer \{\
+        padding: 16px;\
+        font-size: 11px;\
+      \}\
+    \}\
+\
+    /* Dark Mode */\
+    @media (prefers-color-scheme: dark) \{\
+      body \{\
+        background-color: #02030a;\
+      \}\
+      .wrapper \{\
+        background-color: #02030a;\
+      \}\
+      .container \{\
+        background-color: #050814;\
+      \}\
+      .header \{\
+        background-color: #050814;\
+      \}\
+      .content \{\
+        color: #f4f6ff;\
+      \}\
+      .footer \{\
+        background-color: #02030a;\
+        color: #9ca3c7;\
+      \}\
+      .footer a \{\
+        color: #c3c8e6;\
+      \}\
+    \}\
+  </style>\
+</head>\
+\
+<body>\
+  <table class="wrapper" width="100%" cellpadding="0" cellspacing="0" border="0">\
+    <tr>\
+      <td align="center">\
+\
+        <table class="container" width="100%" cellpadding="0" cellspacing="0" border="0">\
+\
+          <!-- Header -->\
+          <tr>\
+            <td class="header">\
+              <img\
+                src="data:image/jpeg;base64,REPLACE_WITH_BASE64_LOGO"\
+                alt="Plural"\
+                class="logo"\
+              />\
+            </td>\
+          </tr>\
+\
+          <!-- Content -->\
+          <tr>\
+            <td class="content">\
+              <p>Hi \{\{first_name\}\},</p>\
+\
+              <p>Here is an update on your investment plan.</p>\
+\
+              <p><strong>Investment Details:</strong></p>\
+\
+              <p>\
+                <strong>Plan:</strong> \{\{plan_name\}\}<br>\
+                <strong>Amount Invested:</strong> \{\{currency\}\} \{\{amount\}\}<br>\
+                <strong>Current Value:</strong> \{\{currency\}\} \{\{current_value\}\}<br>\
+                <strong>Return:</strong> \{\{return_percent\}\}% (\{\{currency\}\} \{\{return_amount\}\})<br>\
+                <strong>Maturity Date:</strong> \{\{maturity_date\}\}\
+              </p>\
+\
+              <p>Keep growing your wealth with Plural Investments.</p>\
+\
+              <p style="margin-top:24px;">The Plural Team</p>\
+            </td>\
+          </tr>\
+\
+          <!-- Footer -->\
+          <tr>\
+            <td class="footer">\
+              \'a9 Plural Financial Inc. \'b7 Registered with Fintrac \'b7\
+              <a href="#">Unsubscribe</a>\
+            </td>\
+          </tr>\
+\
+        </table>\
+\
+      </td>\
+    </tr>\
+  </table>\
+</body>\
+</html>\
+\
+Liquidation Request Confirmation\
+<!DOCTYPE html>\
+<html lang="en">\
+<head>\
+  <meta charset="UTF-8" />\
+  <meta name="viewport" content="width=device-width,initial-scale=1" />\
+  <title>Liquidation Request Received</title>\
+\
+  <style>\
+    body \{\
+      margin: 0;\
+      padding: 0;\
+      background-color: #f5f6fa;\
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;\
+    \}\
+    .wrapper \{\
+      width: 100%;\
+      background-color: #f5f6fa;\
+      padding: 24px 0;\
+    \}\
+    .container \{\
+      width: 100%;\
+      max-width: 600px;\
+      margin: 0 auto;\
+      background-color: #ffffff;\
+      border-radius: 8px;\
+      overflow: hidden;\
+    \}\
+    .header \{\
+      padding: 20px 24px;\
+      background-color: #050814;\
+      text-align: left;\
+    \}\
+    .logo \{\
+      max-width: 140px;\
+      height: auto;\
+      display: block;\
+    \}\
+    .content \{\
+      padding: 24px 20px 28px;\
+      color: #222222;\
+      font-size: 15px;\
+      line-height: 1.6;\
+    \}\
+    .content p \{\
+      margin: 0 0 12px;\
+    \}\
+    .footer \{\
+      padding: 18px 20px 22px;\
+      font-size: 12px;\
+      color: #777777;\
+      background-color: #f5f6fa;\
+      text-align: left;\
+    \}\
+    .footer a \{\
+      color: #777777;\
+      text-decoration: underline;\
+    \}\
+\
+    /* Mobile */\
+    @media only screen and (max-width: 480px) \{\
+      .wrapper \{\
+        padding: 12px 0;\
+      \}\
+      .container \{\
+        border-radius: 0;\
+      \}\
+      .header \{\
+        text-align: center;\
+      \}\
+      .logo \{\
+        margin: 0 auto;\
+        max-width: 120px;\
+      \}\
+      .content \{\
+        padding: 20px 16px 24px;\
+        font-size: 14px;\
+      \}\
+      .footer \{\
+        padding: 16px;\
+        font-size: 11px;\
+      \}\
+    \}\
+\
+    /* Dark Mode */\
+    @media (prefers-color-scheme: dark) \{\
+      body \{\
+        background-color: #02030a;\
+      \}\
+      .wrapper \{\
+        background-color: #02030a;\
+      \}\
+      .container \{\
+        background-color: #050814;\
+      \}\
+      .header \{\
+        background-color: #050814;\
+      \}\
+      .content \{\
+        color: #f4f6ff;\
+      \}\
+      .footer \{\
+        background-color: #02030a;\
+        color: #9ca3c7;\
+      \}\
+      .footer a \{\
+        color: #c3c8e6;\
+      \}\
+    \}\
+  </style>\
+</head>\
+\
+<body>\
+  <table class="wrapper" width="100%" cellpadding="0" cellspacing="0" border="0">\
+    <tr>\
+      <td align="center">\
+\
+        <table class="container" width="100%" cellpadding="0" cellspacing="0" border="0">\
+\
+          <!-- Header -->\
+          <tr>\
+            <td class="header">\
+              <img\
+                src="data:image/jpeg;base64,REPLACE_WITH_BASE64_LOGO"\
+                alt="Plural"\
+                class="logo"\
+              />\
+            </td>\
+          </tr>\
+\
+          <!-- Content -->\
+          <tr>\
+            <td class="content">\
+              <p>Hi \{\{first_name\}\},</p>\
+\
+              <p>We have received your request to liquidate your investment.</p>\
+\
+              <p><strong>Liquidation Details:</strong></p>\
+\
+              <p>\
+                <strong>Plan:</strong> \{\{plan_name\}\}<br>\
+                <strong>Amount Requested:</strong> \{\{currency\}\} \{\{amount\}\}<br>\
+                <strong>Estimated Payout:</strong> \{\{currency\}\} \{\{payout_amount\}\}<br>\
+                <strong>Processing Time:</strong> \{\{processing_days\}\} business day(s)<br>\
+                <strong>Request Date:</strong> \{\{datetime\}\}\
+              </p>\
+\
+              <p>Funds will be credited to your Plural wallet upon completion.</p>\
+\
+              <p style="margin-top:24px;">The Plural Team</p>\
+            </td>\
+          </tr>\
+\
+          <!-- Footer -->\
+          <tr>\
+            <td class="footer">\
+              \'a9 Plural Financial Inc. \'b7 Registered with Fintrac \'b7\
+              <a href="#">Unsubscribe</a>\
+            </td>\
+          </tr>\
+\
+        </table>\
+\
+      </td>\
+    </tr>\
+  </table>\
+</body>\
+</html>\
+\
+Successful Liquidation\
+\
+<!DOCTYPE html>\
+<html lang="en">\
+<head>\
+  <meta charset="UTF-8" />\
+  <meta name="viewport" content="width=device-width,initial-scale=1" />\
+  <title>Liquidation Complete</title>\
+\
+  <style>\
+    body \{\
+      margin: 0;\
+      padding: 0;\
+      background-color: #f5f6fa;\
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;\
+    \}\
+    .wrapper \{\
+      width: 100%;\
+      background-color: #f5f6fa;\
+      padding: 24px 0;\
+    \}\
+    .container \{\
+      width: 100%;\
+      max-width: 600px;\
+      margin: 0 auto;\
+      background-color: #ffffff;\
+      border-radius: 8px;\
+      overflow: hidden;\
+    \}\
+    .header \{\
+      padding: 20px 24px;\
+      background-color: #050814;\
+      text-align: left;\
+    \}\
+    .logo \{\
+      max-width: 140px;\
+      height: auto;\
+      display: block;\
+    \}\
+    .content \{\
+      padding: 24px 20px 28px;\
+      color: #222222;\
+      font-size: 15px;\
+      line-height: 1.6;\
+    \}\
+    .content p \{\
+      margin: 0 0 12px;\
+    \}\
+    .footer \{\
+      padding: 18px 20px 22px;\
+      font-size: 12px;\
+      color: #777777;\
+      background-color: #f5f6fa;\
+      text-align: left;\
+    \}\
+    .footer a \{\
+      color: #777777;\
+      text-decoration: underline;\
+    \}\
+\
+    /* Mobile */\
+    @media only screen and (max-width: 480px) \{\
+      .wrapper \{\
+        padding: 12px 0;\
+      \}\
+      .container \{\
+        border-radius: 0;\
+      \}\
+      .header \{\
+        text-align: center;\
+      \}\
+      .logo \{\
+        margin: 0 auto;\
+        max-width: 120px;\
+      \}\
+      .content \{\
+        padding: 20px 16px 24px;\
+        font-size: 14px;\
+      \}\
+      .footer \{\
+        padding: 16px;\
+        font-size: 11px;\
+      \}\
+    \}\
+\
+    /* Dark Mode */\
+    @media (prefers-color-scheme: dark) \{\
+      body \{\
+        background-color: #02030a;\
+      \}\
+      .wrapper \{\
+        background-color: #02030a;\
+      \}\
+      .container \{\
+        background-color: #050814;\
+      \}\
+      .header \{\
+        background-color: #050814;\
+      \}\
+      .content \{\
+        color: #f4f6ff;\
+      \}\
+      .footer \{\
+        background-color: #02030a;\
+        color: #9ca3c7;\
+      \}\
+      .footer a \{\
+        color: #c3c8e6;\
+      \}\
+    \}\
+  </style>\
+</head>\
+\
+<body>\
+  <table class="wrapper" width="100%" cellpadding="0" cellspacing="0" border="0">\
+    <tr>\
+      <td align="center">\
+\
+        <table class="container" width="100%" cellpadding="0" cellspacing="0" border="0">\
+\
+          <!-- Header -->\
+          <tr>\
+            <td class="header">\
+              <img\
+                src="data:image/jpeg;base64,REPLACE_WITH_BASE64_LOGO"\
+                alt="Plural"\
+                class="logo"\
+              />\
+            </td>\
+          </tr>\
+\
+          <!-- Content -->\
+          <tr>\
+            <td class="content">\
+              <p>Hi \{\{first_name\}\},</p>\
+\
+              <p>Your investment has been liquidated successfully.</p>\
+\
+              <p><strong>Liquidation Summary:</strong></p>\
+\
+              <p>\
+                <strong>Plan:</strong> \{\{plan_name\}\}<br>\
+                <strong>Principal:</strong> \{\{currency\}\} \{\{principal\}\}<br>\
+                <strong>Interest Earned:</strong> \{\{currency\}\} \{\{interest\}\}<br>\
+                <strong>Total Credited:</strong> \{\{currency\}\} \{\{total\}\}<br>\
+                <strong>Date:</strong> \{\{datetime\}\}<br>\
+                <strong>Reference:</strong> \{\{ref_number\}\}\
+              </p>\
+\
+              <p>Funds have been added to your Plural wallet.</p>\
+\
+              <p style="margin-top:24px;">The Plural Team</p>\
+            </td>\
+          </tr>\
+\
+          <!-- Footer -->\
+          <tr>\
+            <td class="footer">\
+              \'a9 Plural Financial Inc. \'b7 Registered with Fintrac \'b7\
+              <a href="#">Unsubscribe</a>\
+            </td>\
+          </tr>\
+\
+        </table>\
+\
+      </td>\
+    </tr>\
+  </table>\
+</body>\
+</html>\
+\
+Successful FX Listing\
+\
+<!DOCTYPE html>\
+<html lang="en">\
+<head>\
+  <meta charset="UTF-8" />\
+  <meta name="viewport" content="width=device-width,initial-scale=1" />\
+  <title>FX Listing Live</title>\
+\
+  <style>\
+    body \{\
+      margin: 0;\
+      padding: 0;\
+      background-color: #f5f6fa;\
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;\
+    \}\
+    .wrapper \{\
+      width: 100%;\
+      background-color: #f5f6fa;\
+      padding: 24px 0;\
+    \}\
+    .container \{\
+      width: 100%;\
+      max-width: 600px;\
+      margin: 0 auto;\
+      background-color: #ffffff;\
+      border-radius: 8px;\
+      overflow: hidden;\
+    \}\
+    .header \{\
+      padding: 20px 24px;\
+      background-color: #050814;\
+      text-align: left;\
+    \}\
+    .logo \{\
+      max-width: 140px;\
+      height: auto;\
+      display: block;\
+    \}\
+    .content \{\
+      padding: 24px 20px 28px;\
+      color: #222222;\
+      font-size: 15px;\
+      line-height: 1.6;\
+    \}\
+    .content p \{\
+      margin: 0 0 12px;\
+    \}\
+    .footer \{\
+      padding: 18px 20px 22px;\
+      font-size: 12px;\
+      color: #777777;\
+      background-color: #f5f6fa;\
+      text-align: left;\
+    \}\
+    .footer a \{\
+      color: #777777;\
+      text-decoration: underline;\
+    \}\
+\
+    /* Mobile */\
+    @media only screen and (max-width: 480px) \{\
+      .wrapper \{\
+        padding: 12px 0;\
+      \}\
+      .container \{\
+        border-radius: 0;\
+      \}\
+      .header \{\
+        text-align: center;\
+      \}\
+      .logo \{\
+        margin: 0 auto;\
+        max-width: 120px;\
+      \}\
+      .content \{\
+        padding: 20px 16px 24px;\
+        font-size: 14px;\
+      \}\
+      .footer \{\
+        padding: 16px;\
+        font-size: 11px;\
+      \}\
+    \}\
+\
+    /* Dark Mode */\
+    @media (prefers-color-scheme: dark) \{\
+      body \{\
+        background-color: #02030a;\
+      \}\
+      .wrapper \{\
+        background-color: #02030a;\
+      \}\
+      .container \{\
+        background-color: #050814;\
+      \}\
+      .header \{\
+        background-color: #050814;\
+      \}\
+      .content \{\
+        color: #f4f6ff;\
+      \}\
+      .footer \{\
+        background-color: #02030a;\
+        color: #9ca3c7;\
+      \}\
+      .footer a \{\
+        color: #c3c8e6;\
+      \}\
+    \}\
+  </style>\
+</head>\
+\
+<body>\
+  <table class="wrapper" width="100%" cellpadding="0" cellspacing="0" border="0">\
+    <tr>\
+      <td align="center">\
+\
+        <table class="container" width="100%" cellpadding="0" cellspacing="0" border="0">\
+\
+          <!-- Header -->\
+          <tr>\
+            <td class="header">\
+              <img\
+                src="data:image/jpeg;base64,REPLACE_WITH_BASE64_LOGO"\
+                alt="Plural"\
+                class="logo"\
+              />\
+            </td>\
+          </tr>\
+\
+          <!-- Content -->\
+          <tr>\
+            <td class="content">\
+              <p>Hi \{\{first_name\}\},</p>\
+\
+              <p>Your FX listing is now live on the Plural marketplace.</p>\
+\
+              <p><strong>Listing Details:</strong></p>\
+\
+              <p>\
+                <strong>Selling:</strong> \{\{sell_currency\}\} \{\{amount\}\}<br>\
+                <strong>Buying:</strong> \{\{buy_currency\}\}<br>\
+                <strong>Rate:</strong> \{\{rate\}\}<br>\
+                <strong>Listed At:</strong> \{\{datetime\}\}<br>\
+                <strong>Listing ID:</strong> \{\{listing_id\}\}\
+              </p>\
+\
+              <p>You will be notified as soon as someone purchases your listing.</p>\
+\
+              <p style="margin-top:24px;">The Plural Team</p>\
+            </td>\
+          </tr>\
+\
+          <!-- Footer -->\
+          <tr>\
+            <td class="footer">\
+              \'a9 Plural Financial Inc. \'b7 Registered with Fintrac \'b7\
+              <a href="#">Unsubscribe</a>\
+            </td>\
+          </tr>\
+\
+        </table>\
+\
+      </td>\
+    </tr>\
+  </table>\
+</body>\
+</html>\
+\
+\
+Successful FX Deposit\
+\
+<!DOCTYPE html>\
+<html lang="en">\
+<head>\
+  <meta charset="UTF-8" />\
+  <meta name="viewport" content="width=device-width,initial-scale=1" />\
+  <title>FX Transaction Complete</title>\
+\
+  <style>\
+    body \{\
+      margin: 0;\
+      padding: 0;\
+      background-color: #f5f6fa;\
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;\
+    \}\
+    .wrapper \{\
+      width: 100%;\
+      background-color: #f5f6fa;\
+      padding: 24px 0;\
+    \}\
+    .container \{\
+      width: 100%;\
+      max-width: 600px;\
+      margin: 0 auto;\
+      background-color: #ffffff;\
+      border-radius: 8px;\
+      overflow: hidden;\
+    \}\
+    .header \{\
+      padding: 20px 24px;\
+      background-color: #050814;\
+      text-align: left;\
+    \}\
+    .logo \{\
+      max-width: 140px;\
+      height: auto;\
+      display: block;\
+    \}\
+    .content \{\
+      padding: 24px 20px 28px;\
+      color: #222222;\
+      font-size: 15px;\
+      line-height: 1.6;\
+    \}\
+    .content p \{\
+      margin: 0 0 12px;\
+    \}\
+    .footer \{\
+      padding: 18px 20px 22px;\
+      font-size: 12px;\
+      color: #777777;\
+      background-color: #f5f6fa;\
+      text-align: left;\
+    \}\
+    .footer a \{\
+      color: #777777;\
+      text-decoration: underline;\
+    \}\
+\
+    /* Mobile */\
+    @media only screen and (max-width: 480px) \{\
+      .wrapper \{\
+        padding: 12px 0;\
+      \}\
+      .container \{\
+        border-radius: 0;\
+      \}\
+      .header \{\
+        text-align: center;\
+      \}\
+      .logo \{\
+        margin: 0 auto;\
+        max-width: 120px;\
+      \}\
+      .content \{\
+        padding: 20px 16px 24px;\
+        font-size: 14px;\
+      \}\
+      .footer \{\
+        padding: 16px;\
+        font-size: 11px;\
+      \}\
+    \}\
+\
+    /* Dark Mode */\
+    @media (prefers-color-scheme: dark) \{\
+      body \{\
+        background-color: #02030a;\
+      \}\
+      .wrapper \{\
+        background-color: #02030a;\
+      \}\
+      .container \{\
+        background-color: #050814;\
+      \}\
+      .header \{\
+        background-color: #050814;\
+      \}\
+      .content \{\
+        color: #f4f6ff;\
+      \}\
+      .footer \{\
+        background-color: #02030a;\
+        color: #9ca3c7;\
+      \}\
+      .footer a \{\
+        color: #c3c8e6;\
+      \}\
+    \}\
+  </style>\
+</head>\
+\
+<body>\
+  <table class="wrapper" width="100%" cellpadding="0" cellspacing="0" border="0">\
+    <tr>\
+      <td align="center">\
+\
+        <table class="container" width="100%" cellpadding="0" cellspacing="0" border="0">\
+\
+          <!-- Header -->\
+          <tr>\
+            <td class="header">\
+              <img\
+                src="data:image/jpeg;base64,REPLACE_WITH_BASE64_LOGO"\
+                alt="Plural"\
+                class="logo"\
+              />\
+            </td>\
+          </tr>\
+\
+          <!-- Content -->\
+          <tr>\
+            <td class="content">\
+              <p>Hi \{\{first_name\}\},</p>\
+\
+              <p>Your FX transaction has been completed.</p>\
+\
+              <p><strong>FX Transaction Summary:</strong></p>\
+\
+              <p>\
+                <strong>You Sold:</strong> \{\{sell_currency\}\} \{\{sell_amount\}\}<br>\
+                <strong>You Received:</strong> \{\{buy_currency\}\} \{\{buy_amount\}\}<br>\
+                <strong>Rate:</strong> \{\{rate\}\}<br>\
+                <strong>Date:</strong> \{\{datetime\}\}<br>\
+                <strong>Reference:</strong> \{\{ref_number\}\}\
+              </p>\
+\
+              <p>Funds have been credited to your \{\{buy_currency\}\} wallet.</p>\
+\
+              <p style="margin-top:24px;">The Plural Team</p>\
+            </td>\
+          </tr>\
+\
+          <!-- Footer -->\
+          <tr>\
+            <td class="footer">\
+              \'a9 Plural Financial Inc. \'b7 Registered with Fintrac \'b7\
+              <a href="#">Unsubscribe</a>\
+            </td>\
+          </tr>\
+\
+        </table>\
+\
+      </td>\
+    </tr>\
+  </table>\
+</body>\
+</html>\
+\
+}

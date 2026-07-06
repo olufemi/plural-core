@@ -18,6 +18,9 @@ import com.finacial.wealth.api.profiling.domain.GenerateVirtAcctNumb;
 import com.finacial.wealth.api.profiling.domain.PinActFailedTransLog;
 import com.finacial.wealth.api.profiling.domain.RegWalletInfo;
 import com.finacial.wealth.api.profiling.domain.VerifyReqIdDetailsAuth;
+import com.finacial.wealth.api.profiling.identity.IdentityFaceCompareRequest;
+import com.finacial.wealth.api.profiling.identity.IdentityFaceCompareResponse;
+import com.finacial.wealth.api.profiling.identity.IdentityFaceProxy;
 import com.finacial.wealth.api.profiling.models.AddNewUserToLimit;
 import com.finacial.wealth.api.profiling.models.accounts.AddAccountObj;
 import com.finacial.wealth.api.profiling.models.accounts.ValidationResponse;
@@ -32,8 +35,10 @@ import com.finacial.wealth.api.profiling.repo.VerifyReqIdDetailsAuthRepo;
 import com.finacial.wealth.api.profiling.response.BaseResponse;
 import com.finacial.wealth.api.profiling.utilities.models.OtpValidateRequest;
 import com.finacial.wealth.api.profiling.utils.DecodedJWTToken;
+import com.finacial.wealth.api.profiling.utils.GlobalMethods;
 import com.finacial.wealth.api.profiling.utils.UttilityMethods;
 import com.google.gson.Gson;
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.List;
@@ -67,11 +72,13 @@ public class AddAccountService {
     private final UttilityMethods uttilityMethods;
     private final VerifyReqIdDetailsAuthRepo verifyReqIdDetailsAuthRepo;
     private final UtilitiesProxy utilitiesProxy;
+    private final IdentityFaceProxy identityFaceProxy;
     @Autowired
     private MarketProfileSyncService marketProfileSyncService;
 
     private static final int STATUS_CODE_NIGERIA_ONBOARDING_FLOW_CODE = 58;
-    private static final String STATUS_CODE_NIGERIA_ONBOARDING_FLOW_DESCRIPTION = "Please validate bvn";
+    private static final String STATUS_CODE_NIGERIA_ONBOARDING_FLOW_DESCRIPTION = "Please validate BVN with OTP";
+    private static final String BVN_FACE_PURPOSE = "NG_BVN_ACCOUNT_OPENING";
     private final BvnLookupRepository repo;
 
     //${fin.wealth.breeze.pay.base.url}
@@ -93,6 +100,10 @@ public class AddAccountService {
     private String environment;
     @Value("${fin.wealth.goto.breeze}")
     private String gotoBreezeapay;
+    @Value("${fin.wealth.identity.bvn.verification-mode:OTP_OR_FACE}")
+    private String bvnVerificationMode;
+    @Value("${fin.wealth.identity.face.minimum-score:0.85}")
+    private BigDecimal faceMinimumScore;
 
     public AddAccountService(AddFailedTransLoggRepo addFailedTransLoggRepo,
             CountryService countryService,
@@ -104,7 +115,8 @@ public class AddAccountService {
             RegWalletInfoRepository regWalletInfoRepository,
             GenerateVirtAcctNumbRepo generateVirtAcctNumbRepo, UttilityMethods uttilityMethods,
             VerifyReqIdDetailsAuthRepo verifyReqIdDetailsAuthRepo,
-            UtilitiesProxy utilitiesProxy, BvnLookupRepository repo) {
+            UtilitiesProxy utilitiesProxy, BvnLookupRepository repo,
+            IdentityFaceProxy identityFaceProxy) {
         this.addFailedTransLoggRepo = addFailedTransLoggRepo;
         this.countryService = countryService;
         this.countriesRepository = countriesRepository;
@@ -118,6 +130,7 @@ public class AddAccountService {
         this.verifyReqIdDetailsAuthRepo = verifyReqIdDetailsAuthRepo;
         this.utilitiesProxy = utilitiesProxy;
         this.repo = repo;
+        this.identityFaceProxy = identityFaceProxy;
     }
 
     public BaseResponse addNigeriaAccountCallThirdPartyApi(CreatNigeriaAccount rq) {
@@ -267,52 +280,73 @@ public class AddAccountService {
 
             }
 
-            String processId = rq.getRequestId() == null ? "0" : rq.getRequestId();
-            logger.info("addAccount  {}  ::::::::::::::::::::: ", processId);
+            String processId = hasText(rq.getRequestId()) ? rq.getRequestId() : "0";
+            logger.info("addAccount processId={} verificationMode={}", processId, bvnVerificationMode);
 
-            List<VerifyReqIdDetailsAuth> getInitAcPin = verifyReqIdDetailsAuthRepo.findByProcIdList(processId);
-
-            if (getInitAcPin.size() <= 0) {
-                AddFailedTransLog pinActTransFailed = new AddFailedTransLog("add-account",
-                        "Invalid process Id!", "", "", emailAddress);
-                addFailedTransLoggRepo.save(pinActTransFailed);
-
-                logger.info("  {}  ::::::::::::::::::::: ", "Invalid process Id");
-
-                responseModel.setDescription(STATUS_CODE_NIGERIA_ONBOARDING_FLOW_DESCRIPTION);
-                responseModel.setStatusCode(STATUS_CODE_NIGERIA_ONBOARDING_FLOW_CODE);
-                return responseModel;
+            BvnVerificationMode verificationMode = resolveVerificationMode();
+            VerificationRequirements requirements = resolveVerificationRequirements(verificationMode, rq);
+            if (!requirements.otpRequired && !requirements.faceRequired) {
+                return failAddAccount(responseModel, "Please validate BVN with OTP", STATUS_CODE_NIGERIA_ONBOARDING_FLOW_CODE, emailAddress);
             }
 
-            if (getInitAcPin.get(0).getProcessIdUsed().equals("1")) {
-                AddFailedTransLog pinActTransFailed = new AddFailedTransLog("add-account",
-                        "Transaction is already completed!", "", "", emailAddress);
-                addFailedTransLoggRepo.save(pinActTransFailed);
+            VerifyReqIdDetailsAuth updateVeri = null;
+            BaseResponse otpFailureResponse = null;
+            if (requirements.otpRequired || requirements.allowEither) {
+                List<VerifyReqIdDetailsAuth> getInitAcPin = verifyReqIdDetailsAuthRepo.findByProcIdList(processId);
 
-                responseModel.setDescription("Transaction is already completed!");
-                responseModel.setStatusCode(statusCode);
-                return responseModel;
+                if (getInitAcPin.size() <= 0) {
+                    logger.info("Invalid process Id");
+                    if (!requirements.allowEither) {
+                        return failAddAccount(responseModel, STATUS_CODE_NIGERIA_ONBOARDING_FLOW_DESCRIPTION,
+                                STATUS_CODE_NIGERIA_ONBOARDING_FLOW_CODE, emailAddress);
+                    }
+                    otpFailureResponse = new BaseResponse(STATUS_CODE_NIGERIA_ONBOARDING_FLOW_CODE,
+                            STATUS_CODE_NIGERIA_ONBOARDING_FLOW_DESCRIPTION);
+                } else if ("1".equals(getInitAcPin.get(0).getProcessIdUsed())) {
+                    if (!requirements.allowEither) {
+                        return failAddAccount(responseModel, "Transaction is already completed!", statusCode, emailAddress);
+                    }
+                    otpFailureResponse = new BaseResponse(statusCode, "Transaction is already completed!");
+                } else {
+                    OtpValidateRequest request1 = new OtpValidateRequest();
+                    request1.setOtp(rq.getOtp());
+                    request1.setRequestId(rq.getRequestId());
+
+                    BaseResponse bRes = utilitiesProxy.validateOtp(request1);
+
+                    if (bRes.getStatusCode() != 200) {
+                        if (!requirements.allowEither) {
+                            responseModel.setDescription(bRes.getDescription());
+                            responseModel.setStatusCode(bRes.getStatusCode());
+                            return responseModel;
+                        }
+                        otpFailureResponse = bRes;
+                    } else {
+                        updateVeri = getInitAcPin.get(0);
+                    }
+                }
             }
 
-            OtpValidateRequest request1 = new OtpValidateRequest();
-            request1.setOtp(rq.getOtp());
-            request1.setRequestId(rq.getRequestId());
-
-            BaseResponse bRes = utilitiesProxy.validateOtp(request1);
-
-            if (bRes.getStatusCode() != 200) {
-
-                responseModel.setDescription(bRes.getDescription());
-                responseModel.setStatusCode(bRes.getStatusCode());
-                return responseModel;
+            Map<String, Object> faceVerificationData = null;
+            boolean shouldTryFace = requirements.faceRequired || (requirements.allowEither && updateVeri == null);
+            if (shouldTryFace) {
+                BaseResponse faceResponse = verifyBvnFace(rq, getBvnDe, processId);
+                if (faceResponse.getStatusCode() != 200) {
+                    if (requirements.allowEither && otpFailureResponse != null) {
+                        faceResponse.setDescription("BVN ownership verification failed");
+                    }
+                    return faceResponse;
+                }
+                faceVerificationData = faceResponse.getData();
             }
 
-            VerifyReqIdDetailsAuth updateVeri = getInitAcPin.get(0);
-            updateVeri.setProcessIdUsed("1");
-            updateVeri.setLastModifiedDate(Instant.now());
-            updateVeri.setProcessId(processId);
-            //updateVeri.setRequestId(otpReqId);
-            verifyReqIdDetailsAuthRepo.save(updateVeri);
+            if (updateVeri != null) {
+                updateVeri.setProcessIdUsed("1");
+                updateVeri.setLastModifiedDate(Instant.now());
+                updateVeri.setProcessId(processId);
+                //updateVeri.setRequestId(otpReqId);
+                verifyReqIdDetailsAuthRepo.save(updateVeri);
+            }
 
             CreatNigeriaAccount cAcc = new CreatNigeriaAccount();
             cAcc.setBvn(rq.getBvn());
@@ -398,6 +432,9 @@ public class AddAccountService {
             added.put("accountNumber", addDe.getAccountNumber());
             added.put("countryCode", addDe.getCountryCode());
             added.put("countryName", addDe.getCountryName());
+            if (faceVerificationData != null) {
+                added.put("faceVerification", faceVerificationData);
+            }
 
             responseModel.setDescription("Account added successfully.");
             responseModel.setData(added);
@@ -415,6 +452,154 @@ public class AddAccountService {
         }
 
         return responseModel;
+    }
+
+    private BaseResponse verifyBvnFace(AddAccountObj rq, BvnLookup bvnLookup, String processId) {
+        BaseResponse responseModel = new BaseResponse();
+        if (!hasText(rq.getLiveFaceBase64())) {
+            responseModel.setDescription("Please complete face verification");
+            responseModel.setStatusCode(400);
+            return responseModel;
+        }
+        if (!hasText(bvnLookup.getBase64Image())) {
+            responseModel.setDescription("BVN image not available for face verification");
+            responseModel.setStatusCode(400);
+            return responseModel;
+        }
+
+        try {
+            IdentityFaceCompareRequest request = new IdentityFaceCompareRequest();
+            request.setRequestReference("NG-BVN-FACE-" + faceReference(processId));
+            request.setImageABase64(rq.getLiveFaceBase64());
+            request.setImageBBase64(bvnLookup.getBase64Image());
+            request.setPurpose(BVN_FACE_PURPOSE);
+            request.setLivenessSessionReference(rq.getLivenessSessionReference());
+
+            IdentityFaceCompareResponse response = identityFaceProxy.compare(request);
+            Map<String, Object> metadata = faceMetadata(response);
+            if (isApprovedFaceMatch(response)) {
+                responseModel.setDescription("Face verification successful");
+                responseModel.setStatusCode(200);
+                responseModel.setData(metadata);
+                return responseModel;
+            }
+
+            responseModel.setDescription("Face verification failed");
+            responseModel.setStatusCode(400);
+            responseModel.setData(metadata);
+            return responseModel;
+        } catch (Exception ex) {
+            logger.warn("Face verification failed for BVN account request {}", faceReference(processId), ex);
+            responseModel.setDescription("Face verification failed");
+            responseModel.setStatusCode(400);
+            return responseModel;
+        }
+    }
+
+    private boolean isApprovedFaceMatch(IdentityFaceCompareResponse response) {
+        if (response == null || !response.isSuccess() || response.getData() == null) {
+            return false;
+        }
+        IdentityFaceCompareResponse.IdentityFaceCompareData data = response.getData();
+        boolean approved = "APPROVED".equalsIgnoreCase(data.getDecision());
+        boolean matched = "MATCH".equalsIgnoreCase(data.getMatchOutcome());
+        BigDecimal similarityScore = data.getSimilarityScore();
+        boolean scorePassed = similarityScore != null && similarityScore.compareTo(faceMinimumScore) >= 0;
+        return approved && matched && scorePassed;
+    }
+
+    private Map<String, Object> faceMetadata(IdentityFaceCompareResponse response) {
+        Map<String, Object> metadata = new HashMap<>();
+        if (response == null) {
+            return metadata;
+        }
+        metadata.put("code", response.getCode());
+        metadata.put("message", response.getMessage());
+        metadata.put("correlationId", response.getCorrelationId());
+        if (response.getData() != null) {
+            IdentityFaceCompareResponse.IdentityFaceCompareData data = response.getData();
+            metadata.put("verificationId", data.getVerificationId());
+            metadata.put("similarityScore", data.getSimilarityScore());
+            metadata.put("confidenceScore", data.getConfidenceScore());
+            metadata.put("decision", data.getDecision());
+            metadata.put("matchOutcome", data.getMatchOutcome());
+            metadata.put("provider", data.getProvider());
+            metadata.put("providerReference", data.getProviderReference());
+        }
+        return metadata;
+    }
+
+    private BaseResponse failAddAccount(BaseResponse responseModel, String message, int statusCode, String emailAddress) {
+        AddFailedTransLog pinActTransFailed = new AddFailedTransLog("add-account", message, "", "", emailAddress);
+        addFailedTransLoggRepo.save(pinActTransFailed);
+        responseModel.setDescription(message);
+        responseModel.setStatusCode(statusCode);
+        return responseModel;
+    }
+
+    private VerificationRequirements resolveVerificationRequirements(BvnVerificationMode mode, AddAccountObj rq) {
+        VerificationRequirements requirements = new VerificationRequirements();
+        switch (mode) {
+            case OTP_ONLY:
+                requirements.otpRequired = true;
+                break;
+            case FACE_ONLY:
+                requirements.faceRequired = true;
+                break;
+            case OTP_AND_FACE:
+                requirements.otpRequired = true;
+                requirements.faceRequired = true;
+                break;
+            case OTP_OR_FACE:
+            default:
+                if ("FACE".equalsIgnoreCase(rq.getVerificationMethod())) {
+                    requirements.faceRequired = true;
+                } else if ("OTP".equalsIgnoreCase(rq.getVerificationMethod())) {
+                    requirements.otpRequired = true;
+                } else if (hasOtpDetails(rq) && hasText(rq.getLiveFaceBase64())) {
+                    requirements.allowEither = true;
+                } else if (hasText(rq.getLiveFaceBase64())) {
+                    requirements.faceRequired = true;
+                } else {
+                    requirements.otpRequired = true;
+                }
+                break;
+        }
+        return requirements;
+    }
+
+    private BvnVerificationMode resolveVerificationMode() {
+        try {
+            return BvnVerificationMode.valueOf(bvnVerificationMode.trim().toUpperCase());
+        } catch (Exception ex) {
+            logger.warn("Invalid BVN verification mode '{}', falling back to OTP_OR_FACE", bvnVerificationMode);
+            return BvnVerificationMode.OTP_OR_FACE;
+        }
+    }
+
+    private String faceReference(String processId) {
+        return hasText(processId) && !"0".equals(processId) ? processId : String.valueOf(GlobalMethods.generateTransactionId());
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.trim().isEmpty();
+    }
+
+    private boolean hasOtpDetails(AddAccountObj rq) {
+        return hasText(rq.getRequestId()) && rq.getOtp() > 0;
+    }
+
+    private enum BvnVerificationMode {
+        OTP_ONLY,
+        FACE_ONLY,
+        OTP_AND_FACE,
+        OTP_OR_FACE
+    }
+
+    private static class VerificationRequirements {
+        private boolean otpRequired;
+        private boolean faceRequired;
+        private boolean allowEither;
     }
 
 }

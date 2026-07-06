@@ -119,7 +119,27 @@ public class InvestmentProduct {
     @Column(name = "subscription_cutoff_time", nullable = false)
     private LocalTime subscriptionCutOffTime; // e.g. 16:30
 
+    @Column(updatable = false)
+    private Instant createdAt;
+
+    @Column
+    private Instant updatedAt;
+
     public ValuationMethod resolvedValuationMethod() {
         return valuationMethod == null ? ValuationMethod.RATE : valuationMethod;
+    }
+
+    @PrePersist
+    void onCreate() {
+        Instant now = Instant.now();
+        if (createdAt == null) {
+            createdAt = now;
+        }
+        updatedAt = now;
+    }
+
+    @PreUpdate
+    void onUpdate() {
+        updatedAt = Instant.now();
     }
 }

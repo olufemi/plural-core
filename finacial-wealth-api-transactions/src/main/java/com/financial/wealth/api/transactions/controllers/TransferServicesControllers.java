@@ -20,10 +20,7 @@ import com.financial.wealth.api.transactions.models.local.trans.NameLookUp;
 import com.financial.wealth.api.transactions.security.consent.ConsentVerificationCoordinator;
 import com.financial.wealth.api.transactions.security.consent.hasher.AcceptQuotePayloadHasher;
 import com.financial.wealth.api.transactions.security.consent.hasher.BreezePayInterbankPaymentPayloadHasher;
-import com.financial.wealth.api.transactions.security.consent.hasher.LocalTransferPayloadHasher;
 import com.financial.wealth.api.transactions.security.consent.hasher.raw.DefaultRawConsentPayloadHasher;
-import com.financial.wealth.api.transactions.services.HashDebugUtil;
-import com.financial.wealth.api.transactions.services.LocalTransferCanon;
 import com.financial.wealth.api.transactions.services.LocalTransferService;
 import com.financial.wealth.api.transactions.utils.UttilityMethods;
 import javax.servlet.http.HttpServletRequest;
@@ -52,12 +49,9 @@ public class TransferServicesControllers {
     private final LocalTransferService localTransferService;
     private final NipBankService nipService;
     private final BreezePayWebhookKeyService breezePayWebhookKeyService;
-    private final LocalTransferCanon localTransferCanon;
     private final UttilityMethods uttilityMethods;
 
     private final ConsentVerificationCoordinator consentVerificationCoordinator;
-
-    private final LocalTransferPayloadHasher localTransferPayloadHasher;
     private final BreezePayInterbankPaymentPayloadHasher interbankPaymentPayloadHasher;
     private final AcceptQuotePayloadHasher acceptQuotePayloadHasher;
     private final DefaultRawConsentPayloadHasher defaultRawConsentPayloadHasher;
@@ -126,13 +120,12 @@ public class TransferServicesControllers {
             @RequestBody @Valid LocalTransferRequest rq, HttpServletRequest http) {
 
         String userId = uttilityMethods.getClaimFromJwt(auth, "emailAddress");
-        BaseResponse consentRes = consentVerificationCoordinator.requireConsent(
+        BaseResponse consentRes = consentVerificationCoordinator.requireConsentUsingRawBody(
                 http,
                 "POST",
                 rq.getProcessId(),
                 userId,
-                rq,
-                localTransferPayloadHasher
+                defaultRawConsentPayloadHasher
         );
 
         if (consentRes.getStatusCode() != 200) {
@@ -149,20 +142,12 @@ public class TransferServicesControllers {
             @RequestBody @Valid LocalTransferRequest rq, HttpServletRequest http) {
 
         String userId = uttilityMethods.getClaimFromJwt(auth, "emailAddress");
-        String transferCanonical = LocalTransferCanon.canonicalPayloadV1(rq);
-        String transferHashB64 = HashDebugUtil.sha256B64(transferCanonical);
-
-        log.info("[CONSENT] transferCanonical='{}'", transferCanonical);
-        log.info("[CONSENT] transferCanonical.length={}", transferCanonical.length());
-        log.info("[CONSENT] transferCanonical.hashB64={}", transferHashB64);
-
-        BaseResponse consentRes = consentVerificationCoordinator.requireConsent(
+        BaseResponse consentRes = consentVerificationCoordinator.requireConsentUsingRawBody(
                 http,
                 "POST",
                 rq.getProcessId(),
                 userId,
-                rq,
-                localTransferPayloadHasher
+                defaultRawConsentPayloadHasher
         );
 
         if (consentRes.getStatusCode() != 200) {

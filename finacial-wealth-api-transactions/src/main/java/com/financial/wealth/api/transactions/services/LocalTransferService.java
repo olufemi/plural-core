@@ -127,6 +127,7 @@ public class LocalTransferService {
     private static final String CCY = CAD_CCY;
     private final TransactionHistoryClientLocalT transactionHistoryClientLocalT;
     private final AddAccountDetailsRepo addAccountDetailsRepo;
+    private final EmailEventPublisher emailEventPublisher;
 
     private final ReceiptSigningFacade receiptSigningFacade;
 
@@ -158,6 +159,7 @@ public class LocalTransferService {
             MessageCenterService messageCenterService,
             TransactionHistoryClientLocalT transactionHistoryClientLocalT,
             AddAccountDetailsRepo addAccountDetailsRepo,
+            EmailEventPublisher emailEventPublisher,
             ReceiptSigningFacade receiptSigningFacade) {
 
         this.localTransFailedTransInfoRepo = localTransFailedTransInfoRepo;
@@ -180,6 +182,7 @@ public class LocalTransferService {
         this.messageCenterService = messageCenterService;
         this.transactionHistoryClientLocalT = transactionHistoryClientLocalT;
         this.addAccountDetailsRepo = addAccountDetailsRepo;
+        this.emailEventPublisher = emailEventPublisher;
         this.receiptSigningFacade = receiptSigningFacade;
     }
 
@@ -305,19 +308,38 @@ public class LocalTransferService {
         return firstCurrencyAccount(addAccountDetailsRepo.findByAccountNumberList(safeString(accountNumber).trim()), NGN_CCY);
     }
 
+    private AddAccountDetails findNgnAccountByIdentifier(String identifier) {
+        String requestedIdentifier = safeString(identifier).trim();
+        AddAccountDetails account = firstCurrencyAccount(addAccountDetailsRepo.findByAccountNumberList(requestedIdentifier), NGN_CCY);
+        if (account != null) {
+            return account;
+        }
+        account = firstCurrencyAccount(addAccountDetailsRepo.findByWalletId(requestedIdentifier), NGN_CCY);
+        if (account != null) {
+            return account;
+        }
+        return firstCurrencyAccount(addAccountDetailsRepo.findByVirtualAccountNumberList(requestedIdentifier), NGN_CCY);
+    }
+
     private AddAccountDetails findNgnAccountByEmail(String emailAddress) {
         return firstCurrencyAccount(addAccountDetailsRepo.findByEmailAddress(safeString(emailAddress).trim()), NGN_CCY);
     }
 
     private AddAccountDetails resolveSenderNgnAccount(String emailAddress, String requestedAccountNumber) {
-        if (requestedAccountNumber != null && !requestedAccountNumber.trim().isEmpty()) {
-            AddAccountDetails requestedAccount = findNgnAccountByAccountNumber(requestedAccountNumber);
-            if (requestedAccount != null && safeString(requestedAccount.getEmailAddress()).equalsIgnoreCase(safeString(emailAddress))) {
-                return requestedAccount;
-            }
-            return null;
+        List<AddAccountDetails> userAccounts = addAccountDetailsRepo.findByEmailAddress(safeString(emailAddress).trim());
+        if (requestedAccountNumber == null || requestedAccountNumber.trim().isEmpty()) {
+            return firstCurrencyAccount(userAccounts, NGN_CCY);
         }
-        return findNgnAccountByEmail(emailAddress);
+
+        String requestedSender = safeString(requestedAccountNumber).trim();
+        if (userAccounts != null) {
+            for (AddAccountDetails account : userAccounts) {
+                if (isCurrencyAccount(account, NGN_CCY) && isRequestedSenderForAccount(account, null, requestedSender)) {
+                    return account;
+                }
+            }
+        }
+        return null;
     }
 
     private RegWalletInfo findWalletByEmail(String emailAddress) {
@@ -326,6 +348,63 @@ public class LocalTransferService {
             return null;
         }
         return wallets.get(0);
+    }
+
+    private boolean isRequestedSenderForAccount(AddAccountDetails senderAccount, RegWalletInfo senderWallet, String requestedSender) {
+        String normalizedSender = safeString(requestedSender).trim();
+        if (normalizedSender.isEmpty()) {
+            return true;
+        }
+        if (safeString(senderAccount.getAccountNumber()).equals(normalizedSender)) {
+            return true;
+        }
+        if (safeString(senderAccount.getWalletId()).equals(normalizedSender)) {
+            return true;
+        }
+        if (safeString(senderAccount.getVirtualAccountNumber()).equals(normalizedSender)) {
+            return true;
+        }
+        return senderWallet != null && safeString(senderWallet.getWalletId()).equals(normalizedSender);
+    }
+
+    private void publishLocalTransferEmailEvents(RegWalletInfo senderWallet, RegWalletInfo receiverWallet,
+            String amount, String currencyCode, String reference, String narration) {
+        try {
+            if (senderWallet != null) {
+                emailEventPublisher.publishLocalTransferSent(
+                        senderWallet.getEmail(),
+                        fullName(senderWallet),
+                        amount,
+                        currencyCode,
+                        reference,
+                        fullName(receiverWallet),
+                        narration);
+            }
+            if (receiverWallet != null) {
+                emailEventPublisher.publishLocalTransferReceived(
+                        receiverWallet.getEmail(),
+                        fullName(receiverWallet),
+                        amount,
+                        currencyCode,
+                        reference,
+                        fullName(senderWallet),
+                        narration);
+            }
+        } catch (Exception ex) {
+            log.warn("Unable to publish local transfer email event for reference {}", reference, ex);
+        }
+    }
+
+    private String fullName(RegWalletInfo walletInfo) {
+        if (walletInfo == null) {
+            return "";
+        }
+        if (walletInfo.getFullName() != null && !walletInfo.getFullName().trim().isEmpty()) {
+            return walletInfo.getFullName();
+        }
+        String first = walletInfo.getFirstName() == null ? "" : walletInfo.getFirstName();
+        String last = walletInfo.getLastName() == null ? "" : walletInfo.getLastName();
+        return (first + " " + last).trim();
     }
 
     private BigDecimal responseBalance(BaseResponse balanceResponse) {
@@ -987,6 +1066,7 @@ public class LocalTransferService {
         try {
             statusCode = 400;
             DecodedJWTToken getDecoded = DecodedJWTToken.getDecoded(auth);
+            String currencyCode = resolveLocalTransferCurrency(rq.getCurrencyCode());
 
             /*List<WToWaletTransfer> getExistRec = wToWaletTransferRepo.findBySenderAndReceiver(getDecoded.phoneNumber, rq.getBeneficiaryNo());
             if (getExistRec.size() > 0) {*/
@@ -1018,7 +1098,15 @@ public class LocalTransferService {
                 sBen.setCreatedDate(Instant.now());
                 sBen.setWalletNo(getDecoded.phoneNumber);
                 sBen.setRequestSource("Wallet-To-Wallet-Transfer");
+                sBen.setCurrencyCode(currencyCode);
                 localBeneficiariesRepo.save(sBen);
+            } else if (currencyCode != null) {
+                LocalBeneficiaries getSavedBenUp = localBeneficiariesRepo.findByWalletNoByBeneficiaryActiveUpdate(getDecoded.phoneNumber, rq.getBeneficiaryNo(), "1");
+                if (getSavedBenUp != null) {
+                    getSavedBenUp.setCurrencyCode(currencyCode);
+                    getSavedBenUp.setLastModifiedDate(Instant.now());
+                    localBeneficiariesRepo.save(getSavedBenUp);
+                }
             }
             responseModel.setDescription("Beneficiary saved successfully");
             responseModel.setStatusCode(200);
@@ -1084,6 +1172,7 @@ public class LocalTransferService {
 
                     lData.setBeneficiaryName(gConfig.getBeneficiaryName());
                     lData.setBeneficiaryNo(gConfig.getBeneficiaryNo());
+                    lData.setCurrencyCode(gConfig.getCurrencyCode());
                     mapAll.add(lData);
 
                 }
@@ -1478,12 +1567,12 @@ public class LocalTransferService {
             String amount = safeString(rq.getAmount()).replaceAll(",", "");
             rq.setAmount(amount);
 
-            AddAccountDetails senderAccount = resolveSenderNgnAccount(getDecoded.emailAddress, rq.getSourceAccountNumber());
+            AddAccountDetails senderAccount = resolveSenderNgnAccount(getDecoded.emailAddress, firstNonBlank(rq.getSourceAccountNumber(), rq.getSourceWalletId(), rq.getSender()));
             if (senderAccount == null) {
                 return localTransferFailure("Wallet to Wallet transfer, Sender Naira account does not exists!", statusCode, channel);
             }
 
-            AddAccountDetails receiverAccount = findNgnAccountByAccountNumber(rq.getReceiver());
+            AddAccountDetails receiverAccount = findNgnAccountByIdentifier(rq.getReceiver());
             if (receiverAccount == null) {
                 return localTransferFailure("Wallet to Wallet transfer, Receiver Naira account does not exists!", statusCode, channel);
             }
@@ -2205,6 +2294,7 @@ public class LocalTransferService {
                     getSavedBenUp.setTransactionCount(getSavedBen.get(0).getTransactionCount() + 1);
                     getSavedBenUp.setLastModifiedDate(Instant.now());
                     getSavedBenUp.setRequestSource("Wallet-To-Wallet-Transfer");
+                    getSavedBenUp.setCurrencyCode(resolveLocalTransferCurrency(rq.getCurrencyCode()));
                     localBeneficiariesRepo.save(getSavedBenUp);
                 }
                 LocalBeneficiariesIndividual logBene = new LocalBeneficiariesIndividual();
@@ -2215,10 +2305,18 @@ public class LocalTransferService {
                 logBene.setCreatedDate(Instant.now());
                 logBene.setWalletNo(getDecoded.phoneNumber);
                 logBene.setRequestSource("Wallet-To-Wallet-Transfer");
+                logBene.setCurrencyCode(resolveLocalTransferCurrency(rq.getCurrencyCode()));
                 localBeneficiariesIndividualRepo.save(logBene);
 
                 List<RegWalletInfo> getReceiverName = regWalletInfoRepository.findByPhoneNumberData(rq.getReceiver());
                 List<RegWalletInfo> getSenderName = regWalletInfoRepository.findByPhoneNumberData(getDecoded.phoneNumber);
+                publishLocalTransferEmailEvents(
+                        getSenderName.get(0),
+                        getReceiverName.get(0),
+                        rq.getAmount(),
+                        resolveLocalTransferCurrency(rq.getCurrencyCode()),
+                        rq.getProcessId(),
+                        narration);
 
                 PushNotificationFireBase puFire = new PushNotificationFireBase();
                 puFire.setBody(pushNotifyDebitWalletForWalletTransfer(new BigDecimal(rq.getAmount()),
@@ -2340,13 +2438,16 @@ public class LocalTransferService {
                 return localTransferFailure("Wallet to Wallet transfer, Receiver Naira account does not exists!", statusCode, channel);
             }
 
+            RegWalletInfo senderWallet = findWalletByEmail(senderAccount.getEmailAddress());
+            RegWalletInfo receiverWallet = findWalletByEmail(receiverAccount.getEmailAddress());
+
             String requestedSender = firstNonBlank(rq.getSourceAccountNumber(), rq.getSender(), senderAccount.getAccountNumber());
-            if (!safeString(senderAccount.getAccountNumber()).equals(safeString(requestedSender))) {
+            if (!isRequestedSenderForAccount(senderAccount, senderWallet, requestedSender)) {
                 return localTransferFailure("Wallet to Wallet transfer, invalid sender!", statusCode, channel);
             }
 
             String requestedReceiver = firstNonBlank(rq.getReceiver(), receiverAccount.getAccountNumber());
-            if (!safeString(receiverAccount.getAccountNumber()).equals(safeString(requestedReceiver))) {
+            if (!isRequestedSenderForAccount(receiverAccount, receiverWallet, requestedReceiver)) {
                 return localTransferFailure("Wallet to Wallet transfer, invalid Receiver!", statusCode, channel);
             }
 
@@ -2378,8 +2479,6 @@ public class LocalTransferService {
                 return localTransferFailure("Wallet to Wallet transfer - Sorry, your account balance is insufficient. Your account balance is " + accountBal.toString(), statusCode, channel);
             }
 
-            RegWalletInfo senderWallet = findWalletByEmail(senderAccount.getEmailAddress());
-            RegWalletInfo receiverWallet = findWalletByEmail(receiverAccount.getEmailAddress());
             String senderName = senderWallet == null ? senderAccount.getVirtualAccountName()
                     : firstNonBlank(senderWallet.getFullName(), senderWallet.getFirstName() + " " + senderWallet.getLastName());
             String receiverName = firstNonBlank(session.getLTransSessReceiverName(),
@@ -2521,7 +2620,16 @@ public class LocalTransferService {
             logBene.setCreatedDate(Instant.now());
             logBene.setWalletNo(senderAccount.getAccountNumber());
             logBene.setRequestSource("Wallet-To-Wallet-Transfer");
+            logBene.setCurrencyCode(resolveLocalTransferCurrency(rq.getCurrencyCode()));
             localBeneficiariesIndividualRepo.save(logBene);
+
+            publishLocalTransferEmailEvents(
+                    senderWallet,
+                    receiverWallet,
+                    rq.getAmount(),
+                    resolveLocalTransferCurrency(rq.getCurrencyCode()),
+                    rq.getProcessId(),
+                    rq.getTheNarration());
 
             if (receiverWallet != null) {
                 PushNotificationFireBase puFire = new PushNotificationFireBase();

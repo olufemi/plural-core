@@ -16,12 +16,16 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.amqp.AmqpRejectAndDontRequeueException;
 import org.springframework.amqp.core.Message;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.nio.charset.StandardCharsets;
 
 @Component
 public class EmailEventConsumer {
+
+    private static final Logger log = LoggerFactory.getLogger(EmailEventConsumer.class);
 
     private final EmailSender emailSender;
     private final EmailTemplateService templateService;
@@ -66,7 +70,8 @@ public class EmailEventConsumer {
         } catch (AmqpRejectAndDontRequeueException e) {
             throw e;
         } catch (Exception e) {
-            throw new RuntimeException("EmailEvent consume failed. payload=" + payload + ", err=" + e.getMessage(), e);
+            log.error("EmailEvent send failed; event acknowledged to avoid retry loop. payload={}, err={}",
+                    payload, e.getMessage(), e);
         }
     }
 }

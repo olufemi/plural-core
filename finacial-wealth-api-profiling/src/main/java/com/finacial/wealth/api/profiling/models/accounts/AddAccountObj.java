@@ -21,5 +21,8 @@ public class AddAccountObj {
    // private String phoneNumber;
     private String requestId;
     private int otp;
+    private String verificationMethod;
+    private String liveFaceBase64;
+    private String livenessSessionReference;
 
 }

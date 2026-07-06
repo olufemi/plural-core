@@ -60,6 +60,9 @@ public class LocalBeneficiaries implements Serializable {
     private Integer transactionCount;
     private String requestSource;
 
+    @Column(name = "CURRENCY_CODE", length = 10)
+    private String currencyCode;
+
     @CreatedDate
     @Column(name = "CREATED_DATE", nullable = false, updatable = false, columnDefinition = "TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
     @JsonIgnore

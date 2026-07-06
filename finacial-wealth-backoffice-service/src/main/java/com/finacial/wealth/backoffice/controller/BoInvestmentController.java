@@ -66,7 +66,7 @@ public class BoInvestmentController {
         Map<String, Object> data = fxPeerClient.getInvestmentProducts(auth);
 
         return extractItems(data).stream()
-                .filter(item -> productCode.equalsIgnoreCase(String.valueOf(item.get("productCode"))))
+                .filter(item -> matchesProductCode(item, productCode))
                 .findFirst()
                 .map(this::toSingleProductResponse)
                 .map(ResponseEntity::ok)
@@ -126,8 +126,8 @@ public class BoInvestmentController {
             @ApiResponse(responseCode = "401", description = "Missing or invalid JWT"),
             @ApiResponse(responseCode = "403", description = "Caller lacks backoffice role")
     })
-    public Map<String, Object> createProduct(@Valid @RequestBody InvestmentProductUpsertRequest req) {
-        return fxPeerClient.createInvestmentProduct(req);
+    public ResponseEntity<Map<String, Object>> createProduct(@Valid @RequestBody InvestmentProductUpsertRequest req) {
+        return toStatusResponse(fxPeerClient.createInvestmentProduct(req));
     }
 
     @PostMapping("/approve-liquidation-request")
@@ -311,12 +311,12 @@ public class BoInvestmentController {
             description = "Updates an investment product. The product code in the path takes precedence over any body value.",
             security = @SecurityRequirement(name = "bearerAuth")
     )
-    public Map<String, Object> updateProduct(
+    public ResponseEntity<Map<String, Object>> updateProduct(
             @PathVariable String productCode,
             @Valid @RequestBody InvestmentProductUpsertRequest req
     ) {
         req.setProductCode(productCode); // path wins
-        return fxPeerClient.updateInvestmentProduct(productCode, req);
+        return toStatusResponse(fxPeerClient.updateInvestmentProduct(productCode, req));
     }
 
     @GetMapping(value = "/products/export.csv", produces = "text/csv")
@@ -360,7 +360,13 @@ public class BoInvestmentController {
 
     @SuppressWarnings("unchecked")
     private List<Map<String, Object>> extractItems(Map<String, Object> data) {
+        if (data == null) {
+            return Collections.emptyList();
+        }
         Object d = data.get("data");
+        if (d instanceof List<?> rootDataList) {
+            return (List<Map<String, Object>>) rootDataList;
+        }
         if (d instanceof Map<?, ?> m) {
             Object items = m.get("items");
             if (items instanceof List<?> l) {
@@ -370,12 +376,38 @@ public class BoInvestmentController {
             if (items2 instanceof List<?> l2) {
                 return (List<Map<String, Object>>) l2;
             }
+            Object products = m.get("products");
+            if (products instanceof List<?> l3) {
+                return (List<Map<String, Object>>) l3;
+            }
+            Object content = m.get("content");
+            if (content instanceof List<?> l4) {
+                return (List<Map<String, Object>>) l4;
+            }
         }
-        Object items3 = data.get("items");
-        if (items3 instanceof List<?> l3) {
-            return (List<Map<String, Object>>) l3;
+        Object items = data.get("items");
+        if (items instanceof List<?> l5) {
+            return (List<Map<String, Object>>) l5;
+        }
+        Object products = data.get("products");
+        if (products instanceof List<?> l6) {
+            return (List<Map<String, Object>>) l6;
+        }
+        Object content = data.get("content");
+        if (content instanceof List<?> l7) {
+            return (List<Map<String, Object>>) l7;
         }
         return Collections.emptyList();
+    }
+
+    private boolean matchesProductCode(Map<String, Object> item, String productCode) {
+        if (item == null || productCode == null) {
+            return false;
+        }
+        return productCode.equalsIgnoreCase(safe(item.get("productCode")))
+                || productCode.equalsIgnoreCase(safe(item.get("code")))
+                || productCode.equalsIgnoreCase(safe(item.get("productId")))
+                || productCode.equalsIgnoreCase(safe(item.get("id")));
     }
 
     private String safe(Object o) {
@@ -388,6 +420,30 @@ public class BoInvestmentController {
         response.put("description", "Investment product fetched successfully");
         response.put("data", product);
         return response;
+    }
+
+    private ResponseEntity<Map<String, Object>> toStatusResponse(Map<String, Object> response) {
+        return ResponseEntity.status(resolveStatus(response)).body(response);
+    }
+
+    private HttpStatus resolveStatus(Map<String, Object> response) {
+        Object statusCode = response == null ? null : response.get("statusCode");
+        if (statusCode instanceof Number number) {
+            return httpStatusOrOk(number.intValue());
+        }
+        if (statusCode instanceof String value) {
+            try {
+                return httpStatusOrOk(Integer.parseInt(value));
+            } catch (NumberFormatException ignored) {
+                return HttpStatus.OK;
+            }
+        }
+        return HttpStatus.OK;
+    }
+
+    private HttpStatus httpStatusOrOk(int statusCode) {
+        HttpStatus status = HttpStatus.resolve(statusCode);
+        return status == null ? HttpStatus.OK : status;
     }
 
     private Map<String, Object> notFoundProductResponse(String productCode) {

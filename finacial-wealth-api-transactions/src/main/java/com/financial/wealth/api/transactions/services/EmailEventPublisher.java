@@ -32,8 +32,23 @@ public class EmailEventPublisher {
         data.put("amount", amount);
         data.put("currency", currency);
         data.put("ref", ref);
+        data.put("direction", "Credit");
+        data.put("narration", "Deposit to wallet");
+        data.put("datetime", Instant.now().toString());
 
         publish("WALLET", "SUCCESSFUL_WALLET_DEPOSIT", email, name, data);
+    }
+
+    public void publishLocalTransferSent(String email, String name, String amount, String currency, String ref,
+            String receiverName, String narration) {
+        Map<String, Object> data = transactionData(amount, currency, ref, receiverName, narration);
+        publish("WALLET", "SUCCESSFUL_LOCAL_TRANSFER_SENT", email, name, data);
+    }
+
+    public void publishLocalTransferReceived(String email, String name, String amount, String currency, String ref,
+            String senderName, String narration) {
+        Map<String, Object> data = transactionData(amount, currency, ref, senderName, narration);
+        publish("WALLET", "SUCCESSFUL_LOCAL_TRANSFER_RECEIVED", email, name, data);
     }
 
     public void publish(String module, String process, String email, String name, Map<String, Object> data) {
@@ -61,6 +76,19 @@ public class EmailEventPublisher {
         message.getMessageProperties().setMessageId(eventId);
         message.getMessageProperties().setCorrelationId(eventId);
         return message;
+    }
+
+    private Map<String, Object> transactionData(String amount, String currency, String ref,
+            String counterparty, String narration) {
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("amount", amount);
+        data.put("currency", currency);
+        data.put("currencyCode", currency);
+        data.put("ref", ref);
+        data.put("counterparty", counterparty);
+        data.put("narration", narration);
+        data.put("datetime", Instant.now().toString());
+        return data;
     }
 
     private boolean isBlank(String value) {

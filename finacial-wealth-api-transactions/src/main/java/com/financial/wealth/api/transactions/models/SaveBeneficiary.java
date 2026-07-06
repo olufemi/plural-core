@@ -18,4 +18,5 @@ public class SaveBeneficiary {
     private String beneficiaryName;
     private String bankCode;
     private String bankName;
+    private String currencyCode;
 }

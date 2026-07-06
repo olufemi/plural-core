@@ -128,9 +128,7 @@ public class CampaignService {
         c.setCreatedAt(new Date());
         c.setMediaContentType(req.getMediaContentType());
         c.setMediaObjectName(req.getMediaObjectName());
-        c.setStartAt(new Date());
-        c.setEndAt(new Date());
-        c.setApprovedBy(actor);
+
          // c.setMediaSignedUrl(req.getMediaSignedUrl());
 
         Campaign saved = campaignRepo.save(c);

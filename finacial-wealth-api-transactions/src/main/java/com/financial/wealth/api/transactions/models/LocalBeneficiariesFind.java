@@ -18,5 +18,6 @@ public class LocalBeneficiariesFind {
 
     private String beneficiaryName;
     private Long id;
+    private String currencyCode;
 
 }

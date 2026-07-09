@@ -98,6 +98,11 @@ public class BvnService {
             assertValidBvn(bvn);
             statusCode = 400;
             BvnLookup getBlook = this.getOrFetchAndPersist(bvn, auth);
+            if (getBlook == null) {
+                responseModel.setDescription("Unable to validate BVN at this time");
+                responseModel.setStatusCode(statusCode);
+                return responseModel;
+            }
 
             if (!"00".equals(getBlook.getResponseCode())) {
 
@@ -165,11 +170,53 @@ public class BvnService {
         return responseModel;
     }
 
+    public BaseResponse validateBvnForFaceCaller(String bvn, String auth) {
+        BaseResponse responseModel = new BaseResponse();
+        int statusCode = 500;
+        String statusMessage = "An error occured,please try again";
+        try {
+            assertValidBvn(bvn);
+            statusCode = 400;
+            BvnLookup getBlook = this.getOrFetchAndPersist(bvn, auth);
+
+            if (getBlook == null || !"00".equals(getBlook.getResponseCode())) {
+                responseModel.setDescription("Unable to process request");
+                responseModel.setStatusCode(statusCode);
+                return responseModel;
+            }
+
+            Map addExit = new HashMap();
+            addExit.put("bvnValidated", true);
+            addExit.put("bvnImageAvailable", getBlook.getBase64Image() != null && !getBlook.getBase64Image().trim().isEmpty());
+            responseModel.setDescription("BVN validated successfully");
+            responseModel.setStatusCode(200);
+            responseModel.setData(addExit);
+
+            try {
+                DecodedJWTToken decoded = DecodedJWTToken.getDecoded(auth);
+                regWalletInfoRepo.findByEmail(decoded.emailAddress).ifPresent(regWalletInfo ->
+                        marketProfileSyncService.syncNigeriaKycPending(
+                                regWalletInfo,
+                                "BVN_FACE",
+                                null,
+                                null
+                        )
+                );
+            } catch (Exception syncEx) {
+                syncEx.printStackTrace();
+            }
+        } catch (Exception ex) {
+            responseModel.setDescription(statusMessage);
+            responseModel.setStatusCode(statusCode);
+            ex.printStackTrace();
+        }
+
+        return responseModel;
+    }
+
     @Transactional
-    public BvnLookup getOrFetchAndPersist(String bvn, String autth
+    public BvnLookup getOrFetchAndPersist(String bvn, String requestAuth
     ) throws UnsupportedEncodingException {
-        System.out.println(" authKey :::::::::::::::: %S " + auth);
-        System.out.println(" subKey :::::::::::::::: %S " + subKey);
         BvnLookup cached = repo.findByBvn(bvn).orElse(null);
         if (cached != null) {
             // Optional: re-fetch if stale
@@ -199,9 +246,7 @@ public class BvnService {
             BvnLookup entity = (cached != null) ? cached : new BvnLookup();
             mapIntoEntity(entity, resp.getData());
             OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
-            if (entity.getCreatedAt() == null) {
-                entity.setCreatedAt(now);
-            }
+            applyCreateAuditDefaults(entity, now);
             entity.setLastCheckedAt(now);
 
             return repo.save(entity);
@@ -209,10 +254,13 @@ public class BvnService {
 
         //GetSingleBvnResponse resp = breezePayVirtApiDevAcctProxy.VerifySingleBVN(bReq, auth, subKey);
         GetSingleBvnResponse resp = new GetSingleBvnResponse();
-        DecodedJWTToken getDecoded = DecodedJWTToken.getDecoded(autth);
+        DecodedJWTToken getDecoded = DecodedJWTToken.getDecoded(requestAuth);
         String emailAddress = getDecoded.emailAddress;
 
         Optional<RegWalletInfo> getReg = regWalletInfoRepo.findByEmail(emailAddress);
+        if (!getReg.isPresent()) {
+            return cached;
+        }
         resp.setMessage("Success");
         resp.setStatus("success");
         BvnData vData = new BvnData();
@@ -223,7 +271,7 @@ public class BvnService {
         vData.setMiddleName(getReg.get().getMiddleName());
         vData.setLastName(getReg.get().getLastName());
         vData.setResponseCode("00");
-        vData.setPhoneNumber(vData.getPhoneNumber());
+        vData.setPhoneNumber(vData.getPhoneNumber1());
 
         resp.setData(vData);
 
@@ -235,12 +283,22 @@ public class BvnService {
         BvnLookup entity = (cached != null) ? cached : new BvnLookup();
         mapIntoEntity(entity, resp.getData());
         OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
-        if (entity.getCreatedAt() == null) {
-            entity.setCreatedAt(now);
-        }
+        applyCreateAuditDefaults(entity, now);
         entity.setLastCheckedAt(now);
 
         return repo.save(entity);
+    }
+
+    private void applyCreateAuditDefaults(BvnLookup entity, OffsetDateTime now) {
+        if (entity.getCreatedAt() == null) {
+            entity.setCreatedAt(now);
+        }
+        if (entity.getCreatedDate() == null) {
+            entity.setCreatedDate(Instant.now());
+        }
+        if (entity.getCreatedBy() == null || entity.getCreatedBy().trim().isEmpty()) {
+            entity.setCreatedBy("System");
+        }
     }
 
     private boolean isFresh(BvnLookup e) {

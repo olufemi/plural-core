@@ -11,6 +11,7 @@ package com.finacial.wealth.api.profiling.breezpay.virt.get.bvn;
 import lombok.Getter;
 import lombok.Setter;
 import javax.persistence.*;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 
@@ -102,7 +103,12 @@ public class BvnLookup {
     private String responseCode;           // e.g., "00"
 
     // bookkeeping
+    @Column(name = "created_by", length = 50)
+    private String createdBy;
+
+    @Column(name = "created_date")
+    private Instant createdDate;
+
     private OffsetDateTime createdAt;
     private OffsetDateTime lastCheckedAt;
 }
-

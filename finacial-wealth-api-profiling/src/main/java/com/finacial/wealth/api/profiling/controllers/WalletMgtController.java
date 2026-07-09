@@ -7,6 +7,8 @@ package com.finacial.wealth.api.profiling.controllers;
 
 import com.finacial.wealth.api.profiling.breezpay.virt.get.bvn.BvnService;
 import com.finacial.wealth.api.profiling.breezpay.virt.get.bvn.ValidateBvnReq;
+import com.finacial.wealth.api.profiling.identity.IdentityLivenessSessionRequest;
+import com.finacial.wealth.api.profiling.identity.IdentityLivenessVerifyRequest;
 import com.finacial.wealth.api.profiling.models.ApiResponseModel;
 import com.finacial.wealth.api.profiling.models.ChangeDevice;
 import com.finacial.wealth.api.profiling.models.ChangePasswordInApp;
@@ -26,6 +28,7 @@ import com.finacial.wealth.api.profiling.security.consent.hasher.raw.DefaultRawC
 import com.finacial.wealth.api.profiling.security.hasher.ChangePasswordPayloadHasher;
 import com.finacial.wealth.api.profiling.services.AddAccountService;
 import com.finacial.wealth.api.profiling.services.CountryService;
+import com.finacial.wealth.api.profiling.services.IdentityLivenessService;
 import com.finacial.wealth.api.profiling.services.WalletServices;
 import com.finacial.wealth.api.profiling.services.WalletSystemProxyService;
 import com.finacial.wealth.api.profiling.utilities.models.OtpResendRequest;
@@ -60,6 +63,7 @@ public class WalletMgtController {
     private final WalletServices walletServices;
     private final WalletSystemProxyService walletSystemProxyService;
     private final AddAccountService addAccountService;
+    private final IdentityLivenessService identityLivenessService;
     private final BvnService bvnService;
     private final CountryService countryService;
     private final ConsentVerificationCoordinator consentVerificationCoordinator;
@@ -94,11 +98,40 @@ public class WalletMgtController {
         return new ResponseEntity<>(baseResponse, HttpStatus.OK);
     }
 
+    @PostMapping("/bvn-face/validate-bvn")
+    public ResponseEntity<BaseResponse> validateBvnForFaceCaller(
+            @RequestHeader(value = "authorization", required = true) String auth,
+            @RequestBody @Valid ValidateBvnReq rq) throws UnsupportedEncodingException {
+
+        String bvn = rq.getBvn();
+
+        BaseResponse baseResponse = bvnService.validateBvnForFaceCaller(bvn, auth);
+        return new ResponseEntity<>(baseResponse, HttpStatus.OK);
+    }
+
     @PostMapping("/add-other-currency-account")
     public ResponseEntity<BaseResponse> addOtheCurrencyAccount(@RequestHeader(value = "authorization", required = true) String auth,
             @RequestBody @Valid AddAccountObj rq) {
 
         BaseResponse baseResponse = addAccountService.addAccount(rq, auth);
+        return new ResponseEntity<>(baseResponse, HttpStatus.OK);
+    }
+
+    @PostMapping("/bvn-face/liveness/session")
+    public ResponseEntity<BaseResponse> createBvnFaceLivenessSession(
+            @RequestHeader(value = "authorization", required = true) String auth,
+            @RequestBody @Valid IdentityLivenessSessionRequest rq) {
+
+        BaseResponse baseResponse = identityLivenessService.createLivenessSession(rq);
+        return new ResponseEntity<>(baseResponse, HttpStatus.OK);
+    }
+
+    @PostMapping("/bvn-face/liveness/verify")
+    public ResponseEntity<BaseResponse> verifyBvnFaceLiveness(
+            @RequestHeader(value = "authorization", required = true) String auth,
+            @RequestBody @Valid IdentityLivenessVerifyRequest rq) {
+
+        BaseResponse baseResponse = identityLivenessService.verifyLiveness(rq);
         return new ResponseEntity<>(baseResponse, HttpStatus.OK);
     }
 

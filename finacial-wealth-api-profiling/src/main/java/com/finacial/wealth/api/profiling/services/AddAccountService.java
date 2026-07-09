@@ -21,6 +21,9 @@ import com.finacial.wealth.api.profiling.domain.VerifyReqIdDetailsAuth;
 import com.finacial.wealth.api.profiling.identity.IdentityFaceCompareRequest;
 import com.finacial.wealth.api.profiling.identity.IdentityFaceCompareResponse;
 import com.finacial.wealth.api.profiling.identity.IdentityFaceProxy;
+import com.finacial.wealth.api.profiling.identity.IdentityLivenessApiResponse;
+import com.finacial.wealth.api.profiling.identity.IdentityLivenessVerifyRequest;
+import com.finacial.wealth.api.profiling.identity.IdentityLivenessVerifyResponse;
 import com.finacial.wealth.api.profiling.models.AddNewUserToLimit;
 import com.finacial.wealth.api.profiling.models.accounts.AddAccountObj;
 import com.finacial.wealth.api.profiling.models.accounts.ValidationResponse;
@@ -468,24 +471,38 @@ public class AddAccountService {
         }
 
         try {
+            Map<String, Object> livenessMetadata = null;
+            if (hasText(rq.getLivenessSessionReference())) {
+                BaseResponse livenessResponse = verifyLivenessForFace(rq, processId);
+                if (livenessResponse.getStatusCode() != 200) {
+                    return livenessResponse;
+                }
+                livenessMetadata = livenessResponse.getData();
+            }
+
             IdentityFaceCompareRequest request = new IdentityFaceCompareRequest();
             request.setRequestReference("NG-BVN-FACE-" + faceReference(processId));
             request.setImageABase64(rq.getLiveFaceBase64());
             request.setImageBBase64(bvnLookup.getBase64Image());
             request.setPurpose(BVN_FACE_PURPOSE);
-            request.setLivenessSessionReference(rq.getLivenessSessionReference());
 
             IdentityFaceCompareResponse response = identityFaceProxy.compare(request);
             Map<String, Object> metadata = faceMetadata(response);
             if (isApprovedFaceMatch(response)) {
                 responseModel.setDescription("Face verification successful");
                 responseModel.setStatusCode(200);
+                if (livenessMetadata != null) {
+                    metadata.put("livenessVerification", livenessMetadata);
+                }
                 responseModel.setData(metadata);
                 return responseModel;
             }
 
             responseModel.setDescription("Face verification failed");
             responseModel.setStatusCode(400);
+            if (livenessMetadata != null) {
+                metadata.put("livenessVerification", livenessMetadata);
+            }
             responseModel.setData(metadata);
             return responseModel;
         } catch (Exception ex) {
@@ -494,6 +511,66 @@ public class AddAccountService {
             responseModel.setStatusCode(400);
             return responseModel;
         }
+    }
+
+    private BaseResponse verifyLivenessForFace(AddAccountObj rq, String processId) {
+        BaseResponse responseModel = new BaseResponse();
+        try {
+            IdentityLivenessVerifyRequest request = new IdentityLivenessVerifyRequest();
+            request.setSessionReference(rq.getLivenessSessionReference());
+            request.setRequestReference("NG-BVN-LIVE-" + faceReference(processId));
+            request.setBase64Image(rq.getLiveFaceBase64());
+
+            IdentityLivenessApiResponse<IdentityLivenessVerifyResponse> response = identityFaceProxy.verifyLiveness(request);
+            Map<String, Object> metadata = livenessMetadata(response);
+            if (isApprovedLiveness(response)) {
+                responseModel.setDescription("Liveness verification successful");
+                responseModel.setStatusCode(200);
+                responseModel.setData(metadata);
+                return responseModel;
+            }
+
+            responseModel.setDescription("Liveness verification failed");
+            responseModel.setStatusCode(400);
+            responseModel.setData(metadata);
+            return responseModel;
+        } catch (Exception ex) {
+            logger.warn("Liveness verification failed for BVN account request {}", faceReference(processId), ex);
+            responseModel.setDescription("Liveness verification failed");
+            responseModel.setStatusCode(400);
+            return responseModel;
+        }
+    }
+
+    private boolean isApprovedLiveness(IdentityLivenessApiResponse<IdentityLivenessVerifyResponse> response) {
+        return response != null
+                && response.isSuccess()
+                && response.getData() != null
+                && "APPROVED".equalsIgnoreCase(response.getData().getDecision());
+    }
+
+    private Map<String, Object> livenessMetadata(IdentityLivenessApiResponse<IdentityLivenessVerifyResponse> response) {
+        Map<String, Object> metadata = new HashMap<>();
+        if (response == null) {
+            return metadata;
+        }
+        metadata.put("code", response.getCode());
+        metadata.put("message", response.getMessage());
+        metadata.put("correlationId", response.getCorrelationId());
+        if (response.getData() != null) {
+            IdentityLivenessVerifyResponse data = response.getData();
+            metadata.put("livenessSessionId", data.getLivenessSessionId());
+            metadata.put("sessionReference", data.getSessionReference());
+            metadata.put("livenessScore", data.getLivenessScore());
+            metadata.put("spoofScore", data.getSpoofScore());
+            metadata.put("confidenceScore", data.getConfidenceScore());
+            metadata.put("attackType", data.getAttackType());
+            metadata.put("decision", data.getDecision());
+            metadata.put("reasons", data.getReasons());
+            metadata.put("provider", data.getProvider());
+            metadata.put("providerReference", data.getProviderReference());
+        }
+        return metadata;
     }
 
     private boolean isApprovedFaceMatch(IdentityFaceCompareResponse response) {

@@ -31,10 +31,10 @@ public class TestOnboardingBypassGuard implements ApplicationRunner {
         if (!StringUtils.hasText(bypassKey)) {
             throw new IllegalStateException("test.onboarding.bypass.key must be set when test onboarding bypass is enabled");
         }
-        boolean prodProfile = Arrays.stream(environment.getActiveProfiles())
-                .anyMatch(profile -> "prod".equalsIgnoreCase(profile) || "production".equalsIgnoreCase(profile));
-        if (prodProfile) {
-            throw new IllegalStateException("Test onboarding bypass must not be enabled in production");
+        boolean allowedProfile = Arrays.stream(environment.getActiveProfiles())
+                .anyMatch(profile -> "dev".equalsIgnoreCase(profile) || "local".equalsIgnoreCase(profile));
+        if (!allowedProfile) {
+            throw new IllegalStateException("Test onboarding bypass can only be enabled with dev or local Spring profiles");
         }
     }
 }

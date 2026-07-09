@@ -29,7 +29,7 @@ Allowed `BVN_VERIFICATION_MODE` values:
 Endpoint:
 
 ```http
-POST /wallet-mgt/validate/bvn?bvn={bvn}
+POST /walletmgt/validate/bvn
 ```
 
 The service fetches or refreshes BVN details, stores them in `bvn_lookup`, sends an OTP to the BVN phone number, and returns `requestId`/`processId`.
@@ -41,7 +41,7 @@ The cached BVN record must contain `base64Image` before face verification can wo
 Endpoint:
 
 ```http
-POST /wallet-mgt/add-other-currency-account
+POST /walletmgt/add-other-currency-account
 ```
 
 Existing OTP-only FE payload still works:
@@ -69,7 +69,7 @@ Explicit OTP payload:
 }
 ```
 
-Explicit face payload:
+Explicit face payload without liveness:
 
 ```json
 {
@@ -79,6 +79,19 @@ Explicit face payload:
   "verificationMethod": "FACE",
   "liveFaceBase64": "base64-live-face-image",
   "livenessSessionReference": "optional-session-reference"
+}
+```
+
+Explicit face payload with backend-controlled liveness:
+
+```json
+{
+  "countryCode": "NG",
+  "country": "Nigeria",
+  "bvn": "12345678901",
+  "verificationMethod": "FACE",
+  "liveFaceBase64": "base64-live-face-image",
+  "livenessSessionReference": "session-reference-from-create-session"
 }
 ```
 
@@ -110,6 +123,42 @@ rq.setCountryCode("NG");
 rq.setCountry("Nigeria");
 ```
 
+## Liveness Proxy Calls
+
+Profiling exposes liveness endpoints so FE does not need to call identity directly.
+
+Create session:
+
+```http
+POST /walletmgt/bvn-face/liveness/session
+```
+
+```json
+{
+  "subjectReference": "CUS-001",
+  "requestReference": "REQ-LIVE-SESSION-001",
+  "consentReference": "CONSENT-001",
+  "channel": "WEB"
+}
+```
+
+Verify liveness:
+
+```http
+POST /walletmgt/bvn-face/liveness/verify
+```
+
+```json
+{
+  "sessionReference": "session-reference-from-create-session",
+  "requestReference": "REQ-LIVE-VERIFY-001",
+  "subjectReference": "CUS-001",
+  "base64Image": "base64-live-face-image"
+}
+```
+
+For account opening, the recommended flow is to call `/walletmgt/bvn-face/liveness/session`, capture the live face, then call `/walletmgt/add-other-currency-account` with `livenessSessionReference`. Profiling will verify liveness during add-account before BVN face comparison.
+
 ## Face Verification Call
 
 When face verification is required, profiling calls:
@@ -125,14 +174,30 @@ Request body sent to identity face service:
   "requestReference": "NG-BVN-FACE-{requestId-or-generated-id}",
   "imageABase64": "liveFaceBase64",
   "imageBBase64": "bvn_lookup.base64Image",
-  "purpose": "NG_BVN_ACCOUNT_OPENING",
-  "livenessSessionReference": "optional-session-reference"
+  "purpose": "NG_BVN_ACCOUNT_OPENING"
 }
 ```
 
 Profiling does not log biometric base64 payloads.
 
-## Face Pass Criteria
+## Liveness And Face Pass Criteria
+
+When `livenessSessionReference` is supplied to add-account, profiling first calls:
+
+```http
+POST {IDENTITY_FACE_BASE_URL}/api/v1/liveness/verify
+```
+
+Liveness must return:
+
+```json
+{
+  "success": true,
+  "data": {
+    "decision": "APPROVED"
+  }
+}
+```
 
 Profiling treats face verification as passed only when identity face service returns:
 
@@ -156,6 +221,7 @@ When face succeeds, useful metadata is returned in the add-account response unde
 * `Please validate BVN with OTP`: OTP path needs a valid `requestId`/OTP process.
 * `Please complete face verification`: face path was selected but `liveFaceBase64` is missing.
 * `BVN image not available for face verification`: cached BVN has no `base64Image`.
+* `Liveness verification failed`: identity face service rejected liveness or returned an error.
 * `Face verification failed`: identity face service rejected the comparison or returned an error.
 * `BVN ownership verification failed`: fallback mode was attempted but neither OTP nor face passed.
 * `Transaction is already completed!`: OTP process was already used.
@@ -176,8 +242,9 @@ If identity face service is not deployed yet, existing OTP-only FE payloads stil
 
 ## Smoke Test Checklist
 
-1. Call `/wallet-mgt/validate/bvn` and confirm OTP request data is returned.
-2. Call `/wallet-mgt/add-other-currency-account` with the existing OTP payload and confirm account creation.
+1. Call `/walletmgt/validate/bvn` and confirm OTP request data is returned.
+2. Call `/walletmgt/add-other-currency-account` with the existing OTP payload and confirm account creation.
 3. Call the same endpoint with an invalid OTP and confirm failure.
-4. If identity face service is deployed, call with `verificationMethod=FACE` and a valid `liveFaceBase64`.
-5. Confirm no logs contain face base64 data.
+4. If identity face service is deployed, call `/walletmgt/bvn-face/liveness/session`.
+5. Call `/walletmgt/add-other-currency-account` with `verificationMethod=FACE`, `liveFaceBase64`, and `livenessSessionReference`.
+6. Confirm no logs contain face base64 data.

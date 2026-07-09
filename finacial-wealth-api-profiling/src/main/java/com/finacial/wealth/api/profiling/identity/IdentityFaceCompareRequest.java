@@ -9,5 +9,4 @@ public class IdentityFaceCompareRequest {
     private String imageABase64;
     private String imageBBase64;
     private String purpose;
-    private String livenessSessionReference;
 }

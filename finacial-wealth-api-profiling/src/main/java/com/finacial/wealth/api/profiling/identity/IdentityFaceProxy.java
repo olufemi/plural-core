@@ -10,4 +10,12 @@ public interface IdentityFaceProxy {
 
     @RequestMapping(value = "/api/v1/verification/compare", consumes = "application/json", method = RequestMethod.POST)
     IdentityFaceCompareResponse compare(@RequestBody IdentityFaceCompareRequest request);
+
+    @RequestMapping(value = "/api/v1/liveness/session", consumes = "application/json", method = RequestMethod.POST)
+    IdentityLivenessApiResponse<IdentityLivenessSessionResponse> createLivenessSession(
+            @RequestBody IdentityLivenessSessionRequest request);
+
+    @RequestMapping(value = "/api/v1/liveness/verify", consumes = "application/json", method = RequestMethod.POST)
+    IdentityLivenessApiResponse<IdentityLivenessVerifyResponse> verifyLiveness(
+            @RequestBody IdentityLivenessVerifyRequest request);
 }

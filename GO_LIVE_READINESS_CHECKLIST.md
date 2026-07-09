@@ -39,24 +39,65 @@ The current release shape spans these areas:
 - `finacial-wealth-api-sessionmanager`
 - `finacial-wealth-api-utility`
 - `finacial-wealth-backoffice-service`
+- `finacial-wealth-gateway`
 
 ### Critical dependency to verify even if not newly changed
 
 - `finacial-wealth-api-transactions`
+- `identity-face-service`
 
 Reason:
 
 - referral reward payout depends on the existing transactions batch endpoint
 - FXPeer uses `/peer-to-peer/batch-post-with-type`
 - a healthy transactions deployment is required even if that service is not reworked heavily in this release
+- gateway owns public API exposure and must block internal-only pilot/test routes
+- identity-face-service is required for BVN face/liveness verification and must be version-aligned with profiling
 
 ## Pre-Freeze Hygiene
 
 - [ ] Remove untracked build artifacts from source trees before packaging
 - [ ] Specifically clean `finacial-wealth-api-profiling/BOOT-INF/`
 - [ ] Confirm there are no local-only temporary DB workarounds left undocumented
+- [ ] Confirm no test/mock bypass endpoint is reachable through the public gateway
+- [ ] Confirm all mock flags and bypass flags are disabled outside approved dev/local environments
 - [ ] Confirm packaged jars/images were built from the stable branch head
 - [ ] Record exact git commit/hash for each service artifact sent to pilot or prod
+
+## Internal-Only Test And Bypass Controls
+
+### CAD onboarding bypass
+
+Purpose:
+
+- controlled dev/local creation of CAD-ready users without external KYC calls
+- used only for pilot data setup and internal QA acceleration
+
+Route:
+
+- service-local only: `POST /internal/test/onboarding/cad-user`
+
+Required controls:
+
+- `test.onboarding.bypass.enabled` must default to `false`
+- bypass must only work with active Spring profile `dev` or `local`
+- `test.onboarding.bypass.key` must be set only in approved dev/local environments
+- gateway must block `/internal/test/onboarding/**` and any prefixed route such as `/api/profiling/internal/test/onboarding/**`
+- route must not be documented as a public FE/API route
+
+Go / No-Go:
+
+- GO for dev/local only if profiling starts with `dev` or `local`, bypass key is configured, and the call is made directly inside the server/private network
+- NO-GO for pilot/prod internet exposure if the route is reachable through `https://finacialwealth.com/api/...`
+- NO-GO for prod if `test.onboarding.bypass.enabled=true` in any production-like profile
+
+Verification:
+
+- [ ] Direct internal dev call succeeds only with valid `X-Test-Bypass-Key`
+- [ ] Direct internal dev call fails with invalid/missing key
+- [ ] Public gateway call to `/api/profiling/internal/test/onboarding/cad-user` returns not found/blocked
+- [ ] App fails startup if bypass is enabled under any profile other than `dev` or `local`
+- [ ] Prod/prod-like config review confirms bypass flag is absent or explicitly `false`
 
 ## Java And Build Compatibility
 
@@ -364,22 +405,26 @@ Rules:
 Recommended order:
 
 1. `finacial-wealth-api-profiling`
-2. `finacial-wealth-api-utility`
-3. `finacial-wealth-api-sessionmanager`
-4. `finacial-wealth-api-fxpeer-exchange`
-5. `finacial-wealth-backoffice-service`
-6. verify `finacial-wealth-api-transactions` dependency health
+2. `finacial-wealth-gateway`
+3. `finacial-wealth-api-utility`
+4. `finacial-wealth-api-sessionmanager`
+5. `finacial-wealth-api-fxpeer-exchange`
+6. `finacial-wealth-backoffice-service`
+7. verify `finacial-wealth-api-transactions` and `identity-face-service` dependency health
 
 Reason:
 
 - profiling owns market bootstrap and referral runtime
+- gateway owns public route exposure and must block internal-only test/bypass paths
 - utility/sessionmanager depend on referral data exposure
 - FXPeer depends on profiling runtime and transactions health
 - backoffice depends on profiling referral admin endpoints
+- identity-face-service is a runtime dependency for face/liveness verification
 
 ## After deployment
 
 - [ ] Check profiling startup logs for market bootstrap success
+- [ ] Check gateway blocks `/api/profiling/internal/test/onboarding/**`
 - [ ] Check no audit/bootstrap startup exceptions occur
 - [ ] Check login returns referral data correctly
 - [ ] Check referral program active lookup works

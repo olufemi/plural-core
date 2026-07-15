@@ -35,6 +35,8 @@ public interface InvestmentProductRepository extends JpaRepository<InvestmentPro
 
     Optional<InvestmentProduct> findByProductCode(String productCode);
 
+    Optional<InvestmentProduct> findByProductCodeIgnoreCase(String productCode);
+
     boolean existsByProductCode(String productCode);
     
     List<InvestmentProduct> findByActiveTrueOrderByNameAsc();

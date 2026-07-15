@@ -278,6 +278,32 @@ public class InvestmentServicesController {
         return ResponseEntity.ok(productService.getAdminProducts());
     }
 
+    @GetMapping(
+            path = "/admin/products/{productCode}",
+            produces = MediaType.APPLICATION_JSON_VALUE
+    )
+    public ResponseEntity<ApiResponseModel> getAdminProduct(
+            @PathVariable String productCode,
+            @RequestHeader(name = "authorization", required = true) String auth
+    ) {
+        ApiResponseModel response = productService.getAdminProduct(productCode);
+        HttpStatus httpStatus = HttpStatus.resolve(response.getStatusCode());
+        return new ResponseEntity<>(response, httpStatus == null ? HttpStatus.OK : httpStatus);
+    }
+
+    @GetMapping(
+            path = "/admin/products/{productCode}/history",
+            produces = MediaType.APPLICATION_JSON_VALUE
+    )
+    public ResponseEntity<ApiResponseModel> getAdminProductHistory(
+            @PathVariable String productCode,
+            @RequestHeader(name = "authorization", required = true) String auth
+    ) {
+        ApiResponseModel response = productService.getAdminProductHistory(productCode);
+        HttpStatus httpStatus = HttpStatus.resolve(response.getStatusCode());
+        return new ResponseEntity<>(response, httpStatus == null ? HttpStatus.OK : httpStatus);
+    }
+
     @PostMapping(
             path = "/create-subscription",
             produces = MediaType.APPLICATION_JSON_VALUE

@@ -21,6 +21,18 @@ public interface FxPeerExchangeClient {
     @GetMapping(value = "/investments/admin/products", produces = MediaType.APPLICATION_JSON_VALUE)
     Map<String, Object> getInvestmentProducts(@RequestHeader("authorization") String auth);
 
+    @GetMapping(value = "/investments/admin/products/{productCode}", produces = MediaType.APPLICATION_JSON_VALUE)
+    Map<String, Object> getInvestmentProduct(
+            @RequestHeader("authorization") String auth,
+            @PathVariable("productCode") String productCode
+    );
+
+    @GetMapping(value = "/investments/admin/products/{productCode}/history", produces = MediaType.APPLICATION_JSON_VALUE)
+    Map<String, Object> getInvestmentProductHistory(
+            @RequestHeader("authorization") String auth,
+            @PathVariable("productCode") String productCode
+    );
+
     @GetMapping(value = "/fxothers/services/featured", produces = MediaType.APPLICATION_JSON_VALUE)
     Map<String, Object> getFeaturedServices(@RequestHeader("authorization") String auth);
 

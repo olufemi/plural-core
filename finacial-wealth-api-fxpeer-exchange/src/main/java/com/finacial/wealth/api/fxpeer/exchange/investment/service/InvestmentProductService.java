@@ -20,6 +20,7 @@ import org.springframework.transaction.interceptor.TransactionAspectSupport;
 import java.math.BigDecimal;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import org.springframework.stereotype.Service;
@@ -77,6 +78,50 @@ public class InvestmentProductService {
         } catch (Exception ex) {
             ex.printStackTrace();
             return resp(500, "Unable to fetch investment products at the moment. Please try again.", Collections.emptyList());
+        }
+    }
+
+    @Transactional(readOnly = true)
+    public ApiResponseModel getAdminProduct(String productCode) {
+        if (productCode == null || productCode.trim().isEmpty()) {
+            return resp(400, "productCode is required", null);
+        }
+
+        try {
+            InvestmentProduct product = repo.findByProductCodeIgnoreCase(productCode.trim()).orElse(null);
+            if (product == null) {
+                return resp(404, "Product not found: " + productCode, null);
+            }
+            return resp(200, "Investment product fetched successfully.", toRecord(product));
+        } catch (Exception ex) {
+            ex.printStackTrace();
+            return resp(500, "Unable to fetch investment product at the moment. Please try again.", null);
+        }
+    }
+
+    @Transactional(readOnly = true)
+    public ApiResponseModel getAdminProductHistory(String productCode) {
+        if (productCode == null || productCode.trim().isEmpty()) {
+            return resp(400, "productCode is required", null);
+        }
+
+        try {
+            InvestmentProduct product = repo.findByProductCodeIgnoreCase(productCode.trim()).orElse(null);
+            if (product == null) {
+                return resp(404, "Product not found: " + productCode, null);
+            }
+
+            Map<String, Object> data = new LinkedHashMap<>();
+            data.put("productCode", product.getProductCode());
+            data.put("productName", product.getName());
+            data.put("current", toRecord(product));
+            data.put("configurationAuditAvailable", false);
+            data.put("configurationAuditMessage", "Detailed before/after product configuration history is not retained yet. Maker-checker audit should become the source for this before production.");
+            data.put("events", productLifecycleEvents(product));
+            return resp(200, "Investment product history fetched successfully.", data);
+        } catch (Exception ex) {
+            ex.printStackTrace();
+            return resp(500, "Unable to fetch investment product history at the moment. Please try again.", null);
         }
     }
 
@@ -245,6 +290,28 @@ public class InvestmentProductService {
         record.setYieldPa(product.getYieldPa());
         record.setYieldYtd(product.getYieldYtd());
         return record;
+    }
+
+    private List<Map<String, Object>> productLifecycleEvents(InvestmentProduct product) {
+        java.util.ArrayList<Map<String, Object>> events = new java.util.ArrayList<>();
+
+        if (product.getCreatedAt() != null) {
+            Map<String, Object> event = new LinkedHashMap<>();
+            event.put("eventType", "PRODUCT_CREATED");
+            event.put("eventAt", product.getCreatedAt());
+            event.put("description", "Investment product record was created.");
+            events.add(event);
+        }
+
+        if (product.getUpdatedAt() != null) {
+            Map<String, Object> event = new LinkedHashMap<>();
+            event.put("eventType", "PRODUCT_LAST_UPDATED");
+            event.put("eventAt", product.getUpdatedAt());
+            event.put("description", "Investment product record was last updated.");
+            events.add(event);
+        }
+
+        return events;
     }
 
     private String validate(InvestmentProductUpsertRequest req, InvestmentProduct existingProduct) {

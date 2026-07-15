@@ -70,15 +70,23 @@ public class BoInvestmentController {
             HttpServletRequest req
     ) {
         String auth = req.getHeader("Authorization");
-        Map<String, Object> data = fxPeerClient.getInvestmentProducts(auth);
+        return toStatusResponse(fxPeerClient.getInvestmentProduct(auth, productCode));
+    }
 
-        return extractItems(data).stream()
-                .filter(item -> matchesProductCode(item, productCode))
-                .findFirst()
-                .map(this::toSingleProductResponse)
-                .map(ResponseEntity::ok)
-                .orElseGet(() -> ResponseEntity.status(HttpStatus.NOT_FOUND)
-                        .body(notFoundProductResponse(productCode)));
+    @GetMapping("/products/{productCode}/history")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','ADMIN','OPERATIONS','FINANCE')")
+    @Operation(
+            summary = "Fetch investment product history",
+            description = "Returns lifecycle and current configuration metadata for a single investment product. "
+                    + "Detailed before/after configuration audit will be populated from maker-checker audit when enabled.",
+            security = @SecurityRequirement(name = "bearerAuth")
+    )
+    public ResponseEntity<Map<String, Object>> getProductHistory(
+            @PathVariable String productCode,
+            HttpServletRequest req
+    ) {
+        String auth = req.getHeader("Authorization");
+        return toStatusResponse(fxPeerClient.getInvestmentProductHistory(auth, productCode));
     }
 
     @GetMapping("/featured-services")

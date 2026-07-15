@@ -29,6 +29,8 @@ import java.util.regex.Pattern;
 @Component
 public class TokenAuthenticationFilter extends ZuulFilter {
 
+    private static final String BLOCKED_INTERNAL_TEST_ONBOARDING_PATH = "/internal/test/onboarding";
+
     private Logger logger = LoggerFactory.getLogger(getClass());
     private final List<Pattern> whiteList;
     private final TokenAuthFilterConfig config;
@@ -91,6 +93,17 @@ public class TokenAuthenticationFilter extends ZuulFilter {
     public Object run() throws ZuulException {
 
         RequestContext requestContext = RequestContext.getCurrentContext();
+        if (isBlockedInternalTestOnboardingPath(requestContext.getRequest().getRequestURI())) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("data", Collections.emptyMap());
+            response.put("statusCode", HttpStatus.NOT_FOUND.value());
+            response.put("description", "Resource not found");
+            String responseStr = Try.of(() -> objectMapper.writeValueAsString(response))
+                    .onFailure(System.out::println)
+                    .getOrNull();
+            return zuulErrorResponse(requestContext, responseStr, HttpStatus.NOT_FOUND);
+        }
+
         String authorizationHeader = requestContext.getRequest().getHeader("Authorization");
         //System.out.println("authorizationHeader ::::::::::::::::   " + authorizationHeader);
 
@@ -141,6 +154,19 @@ public class TokenAuthenticationFilter extends ZuulFilter {
         }
         return null;
 
+    }
+
+    private boolean isBlockedInternalTestOnboardingPath(String uri) {
+        if (uri == null) {
+            return false;
+        }
+        String normalizedUri = uri;
+        if (apiPrefix != null && !apiPrefix.isEmpty() && normalizedUri.startsWith(apiPrefix)) {
+            normalizedUri = normalizedUri.substring(apiPrefix.length());
+        }
+        return BLOCKED_INTERNAL_TEST_ONBOARDING_PATH.equals(normalizedUri)
+                || normalizedUri.startsWith(BLOCKED_INTERNAL_TEST_ONBOARDING_PATH + "/")
+                || normalizedUri.contains(BLOCKED_INTERNAL_TEST_ONBOARDING_PATH + "/");
     }
 
 }

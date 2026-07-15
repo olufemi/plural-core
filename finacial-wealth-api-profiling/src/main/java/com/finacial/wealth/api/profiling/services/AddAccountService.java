@@ -400,6 +400,8 @@ public class AddAccountService {
             addDe.setVirtualAccountNumber(virtAccNo);
             addDe.setPhoneNumber(getBvnDe.getPhoneNumber1());
             addDe.setVirtualAccountName(virtName);
+            addDe.setCreatedBy("System");
+            addDe.setLastModifiedBy("System");
 
             //call add and account to wallet
             WalletSystemResponse addUserToWalletSystem = walletServices.addUserToWalletSystem(addDe.getAccountNumber());

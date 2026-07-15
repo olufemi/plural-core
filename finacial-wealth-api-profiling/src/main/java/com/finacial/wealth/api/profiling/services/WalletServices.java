@@ -103,6 +103,7 @@ import com.finacial.wealth.api.profiling.utils.GlobalMethods;
 import com.finacial.wealth.api.profiling.utils.StrongAES;
 import com.finacial.wealth.api.profiling.utils.UttilityMethods;
 import com.google.gson.Gson;
+import feign.FeignException;
 import java.io.UnsupportedEncodingException;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -2289,8 +2290,6 @@ public class WalletServices {
 
                 updateWallet = regWalletInfoRepo.findByPhoneNumberId(getInitAcPin.get(0)
                         .getUserId());
-                updateWallet.setUuid(rq.getUuid());
-                regWalletInfoRepo.save(updateWallet);
 
                 List<DeviceChangeLimitConfig> getDevList = deviceChangeLimitConfigRepo
                         .findByWalletNumberList(rq.getPhoneNumber());
@@ -2302,7 +2301,25 @@ public class WalletServices {
 
                 System.out.println("getdevKe req:::::::::: ::::: %S " + new Gson().toJson(getdevKe));
 
-                DeviceBindingResponse getDevBind = fxPeerClient.bindConfirmOtp(getdevKe);
+                DeviceBindingResponse getDevBind;
+                try {
+                    getDevBind = fxPeerClient.bindConfirmOtp(getdevKe);
+                } catch (FeignException ex) {
+                    System.out.println("Device binding confirm failed:::::::::: status=" + ex.status() + " body=" + ex.contentUTF8());
+                    responseModel.setDescription("Device binding confirmation failed. Please try again.");
+                    responseModel.setStatusCode(500);
+                    return responseModel;
+                }
+
+                if (getDevBind == null) {
+                    responseModel.setDescription("Device binding confirmation failed. Please try again.");
+                    responseModel.setStatusCode(500);
+                    return responseModel;
+                }
+
+                updateWallet.setUuid(rq.getUuid());
+                regWalletInfoRepo.save(updateWallet);
+
                 Map mp = new HashMap();
 
                 if (getDevList.size() > 0) {

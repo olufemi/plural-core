@@ -15,6 +15,8 @@ import com.finacial.wealth.backoffice.approval.repo.BoApprovalRequestRepository;
 import com.finacial.wealth.backoffice.auth.service.AdminAuditService;
 import com.finacial.wealth.backoffice.integrations.fxpeer.FxPeerExchangeClient;
 import com.finacial.wealth.backoffice.integrations.transactions.TransactionsClient;
+import com.finacial.wealth.backoffice.notification.entity.BackofficeNotificationSeverity;
+import com.finacial.wealth.backoffice.notification.service.BackofficeNotificationService;
 import jakarta.servlet.http.HttpServletRequest;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -54,6 +56,7 @@ public class ReversalExceptionService {
     private final BoApprovalRequestRepository approvalRequestRepository;
     private final BoApprovalEventRepository approvalEventRepository;
     private final AdminAuditService adminAuditService;
+    private final BackofficeNotificationService notificationService;
     private final ObjectMapper objectMapper;
 
     public Map<String, Object> getSummary(HttpServletRequest request) {
@@ -179,6 +182,11 @@ public class ReversalExceptionService {
                 .metadataJson(writeJson(payload))
                 .build());
 
+        Map<String, Object> auditMetadata = new LinkedHashMap<>();
+        auditMetadata.put("source", normalizedSource);
+        auditMetadata.put("caseRef", caseRef.trim());
+        auditMetadata.put("notes", trimToNull(notes));
+
         adminAuditService.audit(
                 "REVERSAL_MANUAL_REQUEST",
                 actorAdminId,
@@ -186,7 +194,23 @@ public class ReversalExceptionService {
                 approvalRequest.getId(),
                 request.getRemoteAddr(),
                 request.getHeader("User-Agent"),
-                Map.of("source", normalizedSource, "caseRef", caseRef.trim(), "notes", trimToNull(notes))
+                auditMetadata
+        );
+
+        notificationService.notifyUsersWithAnyPermission(
+                List.of("reversal.manual.approve"),
+                "REVERSAL",
+                BackofficeNotificationSeverity.WARNING,
+                "Manual reversal approval pending",
+                "A reversal exception was submitted for checker approval.",
+                "BoApprovalRequest",
+                String.valueOf(approvalRequest.getId()),
+                Map.of(
+                        "approvalRequestId", approvalRequest.getId(),
+                        "source", normalizedSource,
+                        "caseRef", caseRef.trim(),
+                        "requestedByAdminId", actorAdminId
+                )
         );
 
         Map<String, Object> response = new LinkedHashMap<>();

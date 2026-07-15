@@ -6,6 +6,7 @@ import com.finacial.wealth.api.profiling.market.enums.MarketProfileStatus;
 import com.finacial.wealth.api.profiling.market.enums.ProvisionStatus;
 import com.finacial.wealth.api.profiling.market.repo.CustomerMarketProfileRepo;
 import com.finacial.wealth.api.profiling.market.service.CustomerMarketProfileService;
+import java.time.Instant;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -30,12 +31,14 @@ public class CustomerMarketProfileServiceImpl implements CustomerMarketProfileSe
                     profile.setKycStatus(KycStatus.NOT_REQUIRED.name());
                     profile.setAccountProvisionStatus(ProvisionStatus.NOT_STARTED.name());
                     profile.setWalletProvisionStatus(ProvisionStatus.NOT_STARTED.name());
+                    applyAuditDefaults(profile);
                     return customerMarketProfileRepo.save(profile);
                 });
     }
 
     @Override
     public CustomerMarketProfile save(CustomerMarketProfile customerMarketProfile) {
+        applyAuditDefaults(customerMarketProfile);
         return customerMarketProfileRepo.save(customerMarketProfile);
     }
 
@@ -45,7 +48,7 @@ public class CustomerMarketProfileServiceImpl implements CustomerMarketProfileSe
         profile.setStatus(MarketProfileStatus.PENDING_KYC.name());
         profile.setKycStatus(kycStatus);
         profile.setMetadataJson(metadataJson);
-        customerMarketProfileRepo.save(profile);
+        save(profile);
     }
 
     @Override
@@ -57,7 +60,7 @@ public class CustomerMarketProfileServiceImpl implements CustomerMarketProfileSe
         profile.setVirtualAccountNumber(virtualAccountNumber);
         profile.setExternalProviderReference(providerReference);
         profile.setMetadataJson(metadataJson);
-        customerMarketProfileRepo.save(profile);
+        save(profile);
     }
 
     @Override
@@ -66,7 +69,7 @@ public class CustomerMarketProfileServiceImpl implements CustomerMarketProfileSe
         profile.setWalletProvisionStatus(ProvisionStatus.PROVISIONED.name());
         profile.setWalletId(walletId);
         profile.setMetadataJson(metadataJson);
-        customerMarketProfileRepo.save(profile);
+        save(profile);
     }
 
     @Override
@@ -74,7 +77,7 @@ public class CustomerMarketProfileServiceImpl implements CustomerMarketProfileSe
         CustomerMarketProfile profile = getOrCreate(customerId, marketCode);
         profile.setStatus(MarketProfileStatus.ACTIVE.name());
         profile.setMetadataJson(metadataJson);
-        customerMarketProfileRepo.save(profile);
+        save(profile);
     }
 
     @Override
@@ -82,6 +85,29 @@ public class CustomerMarketProfileServiceImpl implements CustomerMarketProfileSe
         CustomerMarketProfile profile = getOrCreate(customerId, marketCode);
         profile.setStatus(MarketProfileStatus.FAILED.name());
         profile.setMetadataJson(metadataJson == null ? reason : metadataJson);
-        customerMarketProfileRepo.save(profile);
+        save(profile);
+    }
+
+    private void applyAuditDefaults(CustomerMarketProfile profile) {
+        if (profile == null) {
+            return;
+        }
+        Instant now = Instant.now();
+        if (isBlank(profile.getCreatedBy())) {
+            profile.setCreatedBy("System");
+        }
+        if (profile.getCreatedDate() == null) {
+            profile.setCreatedDate(now);
+        }
+        if (isBlank(profile.getLastModifiedBy())) {
+            profile.setLastModifiedBy("System");
+        }
+        if (profile.getLastModifiedDate() == null) {
+            profile.setLastModifiedDate(now);
+        }
+    }
+
+    private boolean isBlank(String value) {
+        return value == null || value.trim().isEmpty();
     }
 }

@@ -4,6 +4,8 @@
  */
 package com.finacial.wealth.backoffice.controller;
 
+import com.finacial.wealth.backoffice.approval.policy.service.ApprovalPolicyService;
+import com.finacial.wealth.backoffice.approval.service.ApprovalService;
 import com.finacial.wealth.backoffice.integrations.profiling.BackofficeCustomerService;
 import com.finacial.wealth.backoffice.model.ApiResponse;
 import com.finacial.wealth.backoffice.model.BlockUserRequest;
@@ -12,8 +14,11 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -36,6 +41,8 @@ import java.util.Map;
 public class ProfilingManagementController {
 
     private final BackofficeCustomerService backofficeCustomerService;
+    private final ApprovalPolicyService approvalPolicyService;
+    private final ApprovalService approvalService;
 
     @GetMapping
     @PreAuthorize("hasAnyRole('SUPER_ADMIN','ADMIN','OPERATIONS','FINANCE')")
@@ -144,30 +151,42 @@ public class ProfilingManagementController {
     }
 
     @PatchMapping("/{id}/block")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN','ADMIN','OPERATIONS','FINANCE')")
+    @PreAuthorize("hasAnyAuthority('customer.profile.manage','ROLE_SUPER_ADMIN')")
     @Operation(
             summary = "Block a customer",
-            description = "Blocks a customer account in profiling. Intended for support and risk workflows.",
+            description = "Blocks a customer account in profiling. If CUSTOMER_BLOCK_UNBLOCK approval policy is enabled, the action is submitted for maker-checker approval and not applied immediately.",
             security = @SecurityRequirement(name = "bearerAuth")
     )
-    public ApiResponse<RegWalletInfoBackofficeResponse> blockCustomer(
+    public ResponseEntity<?> blockCustomer(
             @PathVariable("id") Long id,
-            @RequestBody BlockUserRequest request
+            @RequestBody BlockUserRequest request,
+            HttpServletRequest httpRequest
     ) {
-        return backofficeCustomerService.blockCustomer(id, request);
+        if (approvalPolicyService.requiresApproval("CUSTOMER_BLOCK_UNBLOCK")) {
+            Long adminUserId = (Long) httpRequest.getAttribute("boAdminUserId");
+            return ResponseEntity.status(HttpStatus.ACCEPTED)
+                    .body(approvalService.submitCustomerBlock(id, request, adminUserId, httpRequest));
+        }
+        return ResponseEntity.ok(backofficeCustomerService.blockCustomer(id, request));
     }
 
     @PatchMapping("/{id}/unblock")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN','ADMIN','OPERATIONS','FINANCE')")
+    @PreAuthorize("hasAnyAuthority('customer.profile.manage','ROLE_SUPER_ADMIN')")
     @Operation(
             summary = "Unblock a customer",
-            description = "Reverses a prior customer block in profiling.",
+            description = "Reverses a prior customer block in profiling. If CUSTOMER_BLOCK_UNBLOCK approval policy is enabled, the action is submitted for maker-checker approval and not applied immediately.",
             security = @SecurityRequirement(name = "bearerAuth")
     )
-    public ApiResponse<RegWalletInfoBackofficeResponse> unblockCustomer(
+    public ResponseEntity<?> unblockCustomer(
             @PathVariable("id") Long id,
-            @RequestBody BlockUserRequest request
+            @RequestBody BlockUserRequest request,
+            HttpServletRequest httpRequest
     ) {
-        return backofficeCustomerService.unblockCustomer(id, request);
+        if (approvalPolicyService.requiresApproval("CUSTOMER_BLOCK_UNBLOCK")) {
+            Long adminUserId = (Long) httpRequest.getAttribute("boAdminUserId");
+            return ResponseEntity.status(HttpStatus.ACCEPTED)
+                    .body(approvalService.submitCustomerUnblock(id, request, adminUserId, httpRequest));
+        }
+        return ResponseEntity.ok(backofficeCustomerService.unblockCustomer(id, request));
     }
 }

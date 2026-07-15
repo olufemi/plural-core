@@ -93,6 +93,15 @@ public class DeviceKeyService {
     @Transactional
     public DeviceBindingResult confirmOtpActivate(String userId, String deviceId) {
         // OTP validation should happen outside before calling this method
+        Optional<DeviceKeyEntity> activeDevice = repo.findByUserIdAndDeviceIdAndStatus(userId, deviceId, DeviceKeyEntity.Status.ACTIVE);
+        if (activeDevice.isPresent()) {
+            DeviceKeyEntity active = activeDevice.get();
+            active.setLastSeenAt(Instant.now());
+            repo.save(active);
+            log.info("[DEVICE-KEY] confirmOtpActivate idempotent active userId={} deviceId={}", userId, deviceId);
+            return DeviceBindingResult.active(deviceId, active.getKid(), active.getPublicSpkiB64());
+        }
+
         DeviceKeyEntity pending = repo.findByUserIdAndDeviceIdAndStatus(userId, deviceId, DeviceKeyEntity.Status.PENDING)
                 .orElseThrow(() -> new IllegalArgumentException("No pending device to activate"));
 

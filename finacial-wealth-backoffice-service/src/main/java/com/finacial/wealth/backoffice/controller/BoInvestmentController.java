@@ -1,9 +1,13 @@
 package com.finacial.wealth.backoffice.controller;
 
+import com.finacial.wealth.backoffice.approval.policy.service.ApprovalPolicyService;
+import com.finacial.wealth.backoffice.approval.service.ApprovalService;
 import com.finacial.wealth.backoffice.integrations.fxpeer.FxPeerExchangeClient;
 import com.finacial.wealth.backoffice.integrations.fxpeer.model.FeaturedServicesConfigRequest;
 import com.finacial.wealth.backoffice.integrations.fxpeer.model.InvestmentProductUpsertRequest;
 import com.finacial.wealth.backoffice.integrations.fxpeer.model.LiquidationApprovalRequest;
+import com.finacial.wealth.backoffice.notification.entity.BackofficeNotificationSeverity;
+import com.finacial.wealth.backoffice.notification.service.BackofficeNotificationService;
 import com.finacial.wealth.backoffice.reports.CsvWriter;
 import jakarta.validation.Valid;
 import jakarta.servlet.http.HttpServletRequest;
@@ -38,6 +42,9 @@ import java.util.*;
 public class BoInvestmentController {
 
     private final FxPeerExchangeClient fxPeerClient;
+    private final BackofficeNotificationService notificationService;
+    private final ApprovalPolicyService approvalPolicyService;
+    private final ApprovalService approvalService;
 
     @GetMapping("/products")
     @PreAuthorize("hasAnyRole('SUPER_ADMIN','ADMIN','OPERATIONS','FINANCE')")
@@ -110,7 +117,12 @@ public class BoInvestmentController {
             @RequestBody FeaturedServicesConfigRequest request
     ) {
         String auth = req.getHeader("Authorization");
-        return fxPeerClient.saveFeaturedServicesConfig(auth, request);
+        try {
+            return fxPeerClient.saveFeaturedServicesConfig(auth, request);
+        } catch (RuntimeException ex) {
+            notifyIntegrationFailure("Featured services config save failed", "FXPEER_FEATURED_SERVICES_CONFIG", null, ex);
+            throw ex;
+        }
     }
 
     @PostMapping("/products")
@@ -126,8 +138,19 @@ public class BoInvestmentController {
             @ApiResponse(responseCode = "401", description = "Missing or invalid JWT"),
             @ApiResponse(responseCode = "403", description = "Caller lacks backoffice role")
     })
-    public ResponseEntity<Map<String, Object>> createProduct(@Valid @RequestBody InvestmentProductUpsertRequest req) {
-        return toStatusResponse(fxPeerClient.createInvestmentProduct(req));
+    public ResponseEntity<Map<String, Object>> createProduct(@Valid @RequestBody InvestmentProductUpsertRequest req,
+            @RequestAttribute("boAdminUserId") Long adminUserId,
+            HttpServletRequest httpRequest) {
+        if (approvalPolicyService.requiresApproval("INVESTMENT_PRODUCT_CREATE")) {
+            return ResponseEntity.status(HttpStatus.ACCEPTED)
+                    .body(approvalService.submitInvestmentProductCreate(req, adminUserId, httpRequest));
+        }
+        try {
+            return toStatusResponse(fxPeerClient.createInvestmentProduct(req));
+        } catch (RuntimeException ex) {
+            notifyIntegrationFailure("Investment product creation failed", "INVESTMENT_PRODUCT", req.getProductCode(), ex);
+            throw ex;
+        }
     }
 
     @PostMapping("/approve-liquidation-request")
@@ -138,7 +161,12 @@ public class BoInvestmentController {
             security = @SecurityRequirement(name = "bearerAuth")
     )
     public Map<String, Object> approveLiquidation(@RequestBody LiquidationApprovalRequest req) {
-        return fxPeerClient.approveLiquidation(req);
+        try {
+            return fxPeerClient.approveLiquidation(req);
+        } catch (RuntimeException ex) {
+            notifyIntegrationFailure("Liquidation approval failed", "LIQUIDATION", req == null ? null : req.getOrderRef(), ex);
+            throw ex;
+        }
     }
 
     @GetMapping("/liquidations")
@@ -301,7 +329,12 @@ public class BoInvestmentController {
             security = @SecurityRequirement(name = "bearerAuth")
     )
     public Map<String, Object> cancelLiquidation(@RequestBody LiquidationApprovalRequest req) {
-        return fxPeerClient.cancelLiquidation(req);
+        try {
+            return fxPeerClient.cancelLiquidation(req);
+        } catch (RuntimeException ex) {
+            notifyIntegrationFailure("Liquidation cancellation failed", "LIQUIDATION", req == null ? null : req.getOrderRef(), ex);
+            throw ex;
+        }
     }
 
     @PutMapping("/products/{productCode}")
@@ -313,10 +346,21 @@ public class BoInvestmentController {
     )
     public ResponseEntity<Map<String, Object>> updateProduct(
             @PathVariable String productCode,
-            @Valid @RequestBody InvestmentProductUpsertRequest req
+            @Valid @RequestBody InvestmentProductUpsertRequest req,
+            @RequestAttribute("boAdminUserId") Long adminUserId,
+            HttpServletRequest httpRequest
     ) {
         req.setProductCode(productCode); // path wins
-        return toStatusResponse(fxPeerClient.updateInvestmentProduct(productCode, req));
+        if (approvalPolicyService.requiresApproval("INVESTMENT_PRODUCT_UPDATE")) {
+            return ResponseEntity.status(HttpStatus.ACCEPTED)
+                    .body(approvalService.submitInvestmentProductUpdate(productCode, req, adminUserId, httpRequest));
+        }
+        try {
+            return toStatusResponse(fxPeerClient.updateInvestmentProduct(productCode, req));
+        } catch (RuntimeException ex) {
+            notifyIntegrationFailure("Investment product update failed", "INVESTMENT_PRODUCT", productCode, ex);
+            throw ex;
+        }
     }
 
     @GetMapping(value = "/products/export.csv", produces = "text/csv")
@@ -336,6 +380,7 @@ public class BoInvestmentController {
     ))
     public void exportProducts(HttpServletResponse response, HttpServletRequest req) throws Exception {
         String auth = req.getHeader("Authorization");
+        Long adminUserId = (Long) req.getAttribute("boAdminUserId");
         response.setHeader("Content-Disposition", "attachment; filename=\"investment-products.csv\"");
         Map<String, Object> data = fxPeerClient.getInvestmentProducts(auth);
         List<Map<String, Object>> items = extractItems(data);
@@ -356,6 +401,17 @@ public class BoInvestmentController {
         try (var writer = new OutputStreamWriter(response.getOutputStream(), StandardCharsets.UTF_8)) {
             CsvWriter.write(writer, headers, rows);
         }
+
+        notificationService.createForAdmin(
+                adminUserId,
+                "REPORT",
+                BackofficeNotificationSeverity.INFO,
+                "Report ready",
+                "Investment product CSV export is ready.",
+                "REPORT",
+                "investment-products.csv",
+                Map.of("report", "investment-products.csv", "rowCount", rows.size())
+        );
     }
 
     @SuppressWarnings("unchecked")
@@ -453,6 +509,26 @@ public class BoInvestmentController {
         response.put("data", null);
         response.put("productCode", productCode);
         return response;
+    }
+
+    private void notifyIntegrationFailure(String title, String entityType, String entityRef, RuntimeException ex) {
+        try {
+            notificationService.notifyUsersWithAnyPermission(
+                    List.of("investment.liquidation.view", "investment.order.view", "approval.inbox.view"),
+                    "INTEGRATION",
+                    BackofficeNotificationSeverity.CRITICAL,
+                    title,
+                    "A downstream service call failed while processing a backoffice operation.",
+                    entityType,
+                    entityRef,
+                    Map.of(
+                            "errorType", ex.getClass().getSimpleName(),
+                            "errorMessage", ex.getMessage() == null ? "" : ex.getMessage()
+                    )
+            );
+        } catch (Exception ignored) {
+            // Keep the original integration failure as the response cause.
+        }
     }
 
     @SuppressWarnings("unchecked")

@@ -55,6 +55,12 @@ public class AddAccountDetails implements Serializable {
     private String virtualAccountNumber;
      private String virtualAccountName;
     private String phoneNumber;
+    @Column(name = "CREATED_BY", nullable = false, updatable = false)
+    @JsonIgnore
+    private String createdBy;
+    @Column(name = "LAST_MODIFIED_BY")
+    @JsonIgnore
+    private String lastModifiedBy;
 
     @CreatedDate
     @Column(name = "CREATED_DATE", nullable = false, updatable = false, columnDefinition = "TIMESTAMP DEFAULT CURRENT_TIMESTAMP")

@@ -90,6 +90,7 @@ public class AdminUserController {
     }
 
     @GetMapping("/admins/{adminId}")
+    @PreAuthorize("hasAnyAuthority('user.manage','ROLE_SUPER_ADMIN')")
     public AdminUserResponse getAdmin(@PathVariable Long adminId,
             @RequestAttribute("boAdminUserId") Long actorAdminId,
             HttpServletRequest request) {
@@ -97,6 +98,7 @@ public class AdminUserController {
     }
 
     @GetMapping("/admins")
+    @PreAuthorize("hasAnyAuthority('user.manage','ROLE_SUPER_ADMIN')")
     public Page<AdminUserResponse> getAdmins(@RequestAttribute("boAdminUserId") Long actorAdminId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,

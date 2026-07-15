@@ -86,7 +86,9 @@ public class BoInvestmentController {
             HttpServletRequest req
     ) {
         String auth = req.getHeader("Authorization");
-        return toStatusResponse(fxPeerClient.getInvestmentProductHistory(auth, productCode));
+        Map<String, Object> response = fxPeerClient.getInvestmentProductHistory(auth, productCode);
+        attachApprovalHistory(response, productCode);
+        return toStatusResponse(response);
     }
 
     @GetMapping("/featured-services")
@@ -462,6 +464,27 @@ public class BoInvestmentController {
             return (List<Map<String, Object>>) l7;
         }
         return Collections.emptyList();
+    }
+
+    @SuppressWarnings("unchecked")
+    private void attachApprovalHistory(Map<String, Object> response, String productCode) {
+        if (response == null) {
+            return;
+        }
+
+        Map<String, Object> approvalHistory = approvalService.getInvestmentProductApprovalHistory(productCode);
+        Object rawData = response.get("data");
+        if (rawData instanceof Map<?, ?> rawMap) {
+            Map<String, Object> data = (Map<String, Object>) rawMap;
+            data.put("configurationAuditAvailable", approvalHistory.get("configurationAuditAvailable"));
+            data.put("approvalHistory", approvalHistory.get("items"));
+            if (Boolean.TRUE.equals(approvalHistory.get("configurationAuditAvailable"))) {
+                data.put("configurationAuditMessage", "Product configuration changes are available from maker-checker approval history.");
+            }
+            return;
+        }
+
+        response.put("approvalHistory", approvalHistory);
     }
 
     private boolean matchesProductCode(Map<String, Object> item, String productCode) {

@@ -78,6 +78,9 @@ public class ApprovalService {
                 "INVESTMENT_PRODUCT_CREATE",
                 productCode,
                 payload);
+        approvalPayload.put("beforeSnapshot", null);
+        approvalPayload.put("afterSnapshot", payload);
+        approvalPayload.put("snapshotSource", "BACKOFFICE_REQUEST");
         BoApprovalRequest approval = approvalRequestRepository.save(
                 BoApprovalRequest.builder()
                         .module(ApprovalModule.INVESTMENT)
@@ -95,10 +98,12 @@ public class ApprovalService {
                 "Investment product create submitted for approval", approvalPayload);
         notifyApprovalPending(approval, "Investment product approval pending",
                 "An investment product create request is waiting for checker approval.");
-        audit(request, actorAdminId, approval.getId(), "INVESTMENT_PRODUCT_CREATE_APPROVAL_REQUESTED", Map.of(
-                "productCode", productCode,
-                "approvalId", approval.getId()
-        ));
+        Map<String, Object> auditMeta = new LinkedHashMap<>();
+        auditMeta.put("productCode", productCode);
+        auditMeta.put("approvalId", approval.getId());
+        auditMeta.put("beforeSnapshot", null);
+        auditMeta.put("afterSnapshot", payload);
+        audit(request, actorAdminId, approval.getId(), "INVESTMENT_PRODUCT_CREATE_APPROVAL_REQUESTED", auditMeta);
         return toApprovalSubmittedResponse(approval);
     }
 
@@ -107,10 +112,17 @@ public class ApprovalService {
             Long actorAdminId, HttpServletRequest request) {
         String normalizedProductCode = requireText(productCode, "productCode");
         payload.setProductCode(normalizedProductCode);
+        Map<String, Object> beforeSnapshot = fetchCurrentInvestmentProductSnapshot(
+                request == null ? null : request.getHeader("Authorization"),
+                normalizedProductCode
+        );
         Map<String, Object> approvalPayload = approvalPayload(
                 "INVESTMENT_PRODUCT_UPDATE",
                 normalizedProductCode,
                 payload);
+        approvalPayload.put("beforeSnapshot", beforeSnapshot);
+        approvalPayload.put("afterSnapshot", payload);
+        approvalPayload.put("snapshotSource", beforeSnapshot == null ? "BACKOFFICE_REQUEST_ONLY" : "FXPEER_CURRENT_PRODUCT");
         BoApprovalRequest approval = approvalRequestRepository.save(
                 BoApprovalRequest.builder()
                         .module(ApprovalModule.INVESTMENT)
@@ -128,10 +140,12 @@ public class ApprovalService {
                 "Investment product update submitted for approval", approvalPayload);
         notifyApprovalPending(approval, "Investment product approval pending",
                 "An investment product update request is waiting for checker approval.");
-        audit(request, actorAdminId, approval.getId(), "INVESTMENT_PRODUCT_UPDATE_APPROVAL_REQUESTED", Map.of(
-                "productCode", normalizedProductCode,
-                "approvalId", approval.getId()
-        ));
+        Map<String, Object> auditMeta = new LinkedHashMap<>();
+        auditMeta.put("productCode", normalizedProductCode);
+        auditMeta.put("approvalId", approval.getId());
+        auditMeta.put("beforeSnapshot", beforeSnapshot);
+        auditMeta.put("afterSnapshot", payload);
+        audit(request, actorAdminId, approval.getId(), "INVESTMENT_PRODUCT_UPDATE_APPROVAL_REQUESTED", auditMeta);
         return toApprovalSubmittedResponse(approval);
     }
 
@@ -267,6 +281,28 @@ public class ApprovalService {
         return response;
     }
 
+    @Transactional(readOnly = true)
+    public Map<String, Object> getInvestmentProductApprovalHistory(String productCode) {
+        String normalizedProductCode = requireText(productCode, "productCode");
+        List<Map<String, Object>> items = approvalRequestRepository
+                .findTop100ByEntityTypeAndEntityRefContainingOrderByCreatedAtDesc(
+                        ApprovalEntityType.FXPEER_INVESTMENT_PRODUCT,
+                        normalizedProductCode
+                )
+                .stream()
+                .filter(approval -> normalizedProductCode.equalsIgnoreCase(
+                        stringValue(readJsonMap(approval.getPayloadJson()).get("targetRef"))
+                ))
+                .map(this::toProductApprovalHistoryRow)
+                .toList();
+
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("productCode", normalizedProductCode);
+        response.put("configurationAuditAvailable", !items.isEmpty());
+        response.put("items", items);
+        return response;
+    }
+
     @Transactional
     public Map<String, Object> approve(Long approvalId, Long actorAdminId, HttpServletRequest request) {
         BoApprovalRequest approval = getApprovalForDecision(approvalId, actorAdminId);
@@ -374,6 +410,48 @@ public class ApprovalService {
             return fxPeerExchangeClient.createInvestmentProduct(request);
         }
         return fxPeerExchangeClient.updateInvestmentProduct(productCode, request);
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> fetchCurrentInvestmentProductSnapshot(String auth, String productCode) {
+        if (auth == null || auth.isBlank() || productCode == null || productCode.isBlank()) {
+            return null;
+        }
+        try {
+            Map<String, Object> response = fxPeerExchangeClient.getInvestmentProduct(auth, productCode);
+            Object statusCode = response == null ? null : response.get("statusCode");
+            if (statusCode != null && !"200".equals(String.valueOf(statusCode))) {
+                return null;
+            }
+            Object data = response == null ? null : response.get("data");
+            if (data instanceof Map<?, ?> map) {
+                return (Map<String, Object>) map;
+            }
+        } catch (RuntimeException ignored) {
+            // Snapshot is helpful for audit, but should not block submission for approval.
+        }
+        return null;
+    }
+
+    private Map<String, Object> toProductApprovalHistoryRow(BoApprovalRequest approval) {
+        Map<String, Object> payload = readJsonMap(approval.getPayloadJson());
+        Map<String, Object> row = new LinkedHashMap<>();
+        row.put("approvalId", approval.getId());
+        row.put("actionCode", payload.get("actionCode"));
+        row.put("actionType", approval.getActionType() == null ? null : approval.getActionType().name());
+        row.put("status", approval.getStatus() == null ? null : approval.getStatus().name());
+        row.put("makerAdminId", approval.getMakerAdminId());
+        row.put("checkerAdminId", approval.getCheckerAdminId());
+        row.put("submittedAt", approval.getSubmittedAt());
+        row.put("approvedAt", approval.getApprovedAt());
+        row.put("rejectedAt", approval.getRejectedAt());
+        row.put("resubmittedAt", approval.getResubmittedAt());
+        row.put("beforeSnapshot", payload.get("beforeSnapshot"));
+        row.put("afterSnapshot", payload.get("afterSnapshot"));
+        row.put("snapshotSource", payload.get("snapshotSource"));
+        row.put("rejectionReason", approval.getRejectionReason());
+        row.put("remediationNotes", approval.getRemediationNotes());
+        return row;
     }
 
     private Map<String, Object> approveAppConfigUpdate(BoApprovalRequest approval,

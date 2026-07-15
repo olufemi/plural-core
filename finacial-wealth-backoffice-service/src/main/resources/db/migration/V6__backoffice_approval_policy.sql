@@ -38,12 +38,12 @@ WHERE r.name = 'SUPER_ADMIN'
 
 INSERT INTO bo_approval_policy
   (action_code, module, sub_module, description, approval_required, checker_permission, sla_hours, active)
-SELECT 'INVESTMENT_PRODUCT_CREATE', 'INVESTMENT', 'PRODUCT', 'Create investment product', FALSE, 'investment.product.approve', 24, TRUE
+SELECT 'INVESTMENT_PRODUCT_CREATE', 'INVESTMENT', 'PRODUCT', 'Create investment product', TRUE, 'investment.product.approve', 24, TRUE
 WHERE NOT EXISTS (SELECT 1 FROM bo_approval_policy WHERE action_code = 'INVESTMENT_PRODUCT_CREATE');
 
 INSERT INTO bo_approval_policy
   (action_code, module, sub_module, description, approval_required, checker_permission, sla_hours, active)
-SELECT 'INVESTMENT_PRODUCT_UPDATE', 'INVESTMENT', 'PRODUCT', 'Update investment product', FALSE, 'investment.product.approve', 24, TRUE
+SELECT 'INVESTMENT_PRODUCT_UPDATE', 'INVESTMENT', 'PRODUCT', 'Update investment product', TRUE, 'investment.product.approve', 24, TRUE
 WHERE NOT EXISTS (SELECT 1 FROM bo_approval_policy WHERE action_code = 'INVESTMENT_PRODUCT_UPDATE');
 
 INSERT INTO bo_approval_policy

@@ -40,7 +40,7 @@ public class BoAppConfigRegistry {
     @Column(name = "editable", nullable = false)
     private boolean editable;
 
-    @Column(name = "sensitive", nullable = false)
+    @Column(name = "is_sensitive", nullable = false)
     private boolean sensitive;
 
     @Column(name = "validation_regex")

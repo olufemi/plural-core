@@ -4,7 +4,7 @@ CREATE TABLE IF NOT EXISTS bo_app_config_registry (
   owner_service VARCHAR(80) NOT NULL,
   value_type VARCHAR(40) NOT NULL,
   editable BIT(1) NOT NULL DEFAULT b'0',
-  sensitive BIT(1) NOT NULL DEFAULT b'0',
+  is_sensitive BIT(1) NOT NULL DEFAULT b'0',
   validation_regex VARCHAR(500) NULL,
   description VARCHAR(500) NULL,
   created_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),

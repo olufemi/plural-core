@@ -28,6 +28,9 @@ public interface ProfilingClient {
     @GetMapping("/{id}")
     ApiResponse<RegWalletInfoBackofficeResponse> getById(@PathVariable("id") Long id);
 
+    @GetMapping("/{id}/customer-360")
+    ApiResponse<Map<String, Object>> getCustomer360(@PathVariable("id") Long id);
+
     @GetMapping("/customer/{customerId}")
     ApiResponse<RegWalletInfoBackofficeResponse> getByCustomerId(@PathVariable("customerId") String customerId);
 

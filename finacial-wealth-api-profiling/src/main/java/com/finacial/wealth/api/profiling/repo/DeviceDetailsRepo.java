@@ -9,6 +9,7 @@ import com.finacial.wealth.api.profiling.domain.DeviceChangeLimitConfig;
 import com.finacial.wealth.api.profiling.domain.DeviceDetails;
 import java.util.List;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.data.repository.CrudRepository;
 
 /**
@@ -17,5 +18,8 @@ import org.springframework.data.repository.CrudRepository;
  */
 public interface DeviceDetailsRepo extends
         CrudRepository<DeviceDetails, String> {
+
+    @Query("SELECT d FROM DeviceDetails d WHERE d.walletId = :walletId")
+    List<DeviceDetails> findByWalletId(@Param("walletId") String walletId);
 
 }

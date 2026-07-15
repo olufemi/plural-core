@@ -17,6 +17,7 @@ import com.finacial.wealth.api.profiling.service.profiling.bo.RegWalletInfoBacko
 import org.springframework.web.bind.annotation.*;
 
 import lombok.RequiredArgsConstructor;
+import java.util.Map;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
@@ -43,6 +44,15 @@ public class RegWalletInfoBackofficeController {
                 "00",
                 "Record fetched successfully",
                 service.getById(id)
+        );
+    }
+
+    @GetMapping("/{id}/customer-360")
+    public ApiResponse<Map<String, Object>> getCustomer360(@PathVariable Long id) {
+        return new ApiResponse<Map<String, Object>>(
+                "00",
+                "Customer 360 fetched successfully",
+                service.getCustomer360(id)
         );
     }
 

@@ -63,6 +63,41 @@ public class BackofficeCustomerService {
         return summary;
     }
 
+    @SuppressWarnings("unchecked")
+    public Map<String, Object> getCustomer360(Long id) {
+        RegWalletInfoBackofficeResponse customer = resolveCustomer(id);
+        ApiResponse<Map<String, Object>> sourceResponse = profilingClient.getCustomer360(id);
+
+        Map<String, Object> customer360 = new LinkedHashMap<>();
+        if (sourceResponse != null && sourceResponse.getData() != null) {
+            customer360.putAll(sourceResponse.getData());
+        } else {
+            customer360.put("profile", customer);
+        }
+
+        Map<String, Object> investment = new LinkedHashMap<>();
+        investment.put("orders", safeInvestmentSection(
+                "orders",
+                () -> fxPeerExchangeClient.getCustomerOrders(customer.getEmail(), null, null, 0, 10)
+        ));
+        investment.put("liquidations", safeInvestmentSection(
+                "liquidations",
+                () -> fxPeerExchangeClient.getCustomerLiquidations(customer.getEmail(), null, 0, 10)
+        ));
+        investment.put("positions", safeInvestmentSection(
+                "positions",
+                () -> fxPeerExchangeClient.getCustomerPositions(customer.getEmail(), 0, 10)
+        ));
+        customer360.put("investment", investment);
+
+        Map<String, Object> coverage = customer360.get("coverage") instanceof Map
+                ? (Map<String, Object>) customer360.get("coverage")
+                : new LinkedHashMap<>();
+        coverage.put("backofficeAggregation", "profile, accounts, KYC summary, device summary, referral summary, access summary, and investment summary");
+        customer360.put("coverage", coverage);
+        return customer360;
+    }
+
     public Map<String, Object> getCustomerInvestmentOrders(
             Long id,
             String type,
@@ -111,5 +146,22 @@ public class BackofficeCustomerService {
 
     private int safeSize(Integer size) {
         return size == null ? 20 : Math.max(size, 1);
+    }
+
+    private Map<String, Object> safeInvestmentSection(String section, InvestmentCall call) {
+        try {
+            return call.execute();
+        } catch (Exception ex) {
+            Map<String, Object> unavailable = new LinkedHashMap<>();
+            unavailable.put("available", false);
+            unavailable.put("section", section);
+            unavailable.put("message", "Investment downstream data is currently unavailable.");
+            return unavailable;
+        }
+    }
+
+    @FunctionalInterface
+    private interface InvestmentCall {
+        Map<String, Object> execute();
     }
 }

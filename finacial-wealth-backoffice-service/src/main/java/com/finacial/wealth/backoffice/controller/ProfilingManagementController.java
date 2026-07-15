@@ -76,6 +76,20 @@ public class ProfilingManagementController {
         return backofficeCustomerService.getCustomerById(id);
     }
 
+    @GetMapping("/{id}/customer-360")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','ADMIN','OPERATIONS','FINANCE')")
+    @Operation(
+            summary = "Get customer 360",
+            description = "Returns a consolidated customer support view including profile, KYC status summary, wallets/accounts, devices, referral context, access status, basic activity timeline, and investment sections where available.",
+            security = @SecurityRequirement(name = "bearerAuth")
+    )
+    public Map<String, Object> getCustomer360(
+            @Parameter(description = "Profiling record id returned by the list customers endpoint")
+            @PathVariable("id") Long id
+    ) {
+        return backofficeCustomerService.getCustomer360(id);
+    }
+
     @GetMapping("/{id}/investment-summary")
     @PreAuthorize("hasAnyRole('SUPER_ADMIN','ADMIN','OPERATIONS','FINANCE')")
     @Operation(

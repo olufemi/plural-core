@@ -4,6 +4,7 @@
  */
 package com.finacial.wealth.api.profiling.service.profiling.bo;
 
+import java.util.Map;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
@@ -19,6 +20,8 @@ public interface RegWalletInfoBackofficeServiceInter {
     RegWalletInfoBackofficeResponse getByCustomerId(String customerId);
 
     RegWalletInfoBackofficeResponse getByUuid(String uuid);
+
+    Map<String, Object> getCustomer360(Long id);
 
     Page<RegWalletInfoBackofficeResponse> filter(
             String keyword,

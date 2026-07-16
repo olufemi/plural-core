@@ -247,12 +247,23 @@ public class ApprovalService {
     }
 
     @Transactional
-    public Map<String, Object> listApprovals(String status, Integer page, Integer size) {
+    public Map<String, Object> listApprovals(String status, String module, String subModule, String actionType, String entityRef, Integer page, Integer size) {
         syncPendingLiquidations();
 
         List<ApprovalStatus> statuses = resolveStatuses(status);
+        String moduleFilter = trimToNull(module);
+        String subModuleFilter = trimToNull(subModule);
+        String actionTypeFilter = trimToNull(actionType);
+        String entityRefFilter = trimToNull(entityRef);
+
         List<BoApprovalRequest> approvals = new ArrayList<>(approvalRequestRepository.findByStatusIn(statuses));
-        approvals.sort(Comparator.comparing(BoApprovalRequest::getCreatedAt, Comparator.nullsLast(Comparator.reverseOrder())));
+        approvals = approvals.stream()
+                .filter(item -> enumNameMatches(item.getModule(), moduleFilter))
+                .filter(item -> enumNameMatches(item.getSubModule(), subModuleFilter))
+                .filter(item -> enumNameMatches(item.getActionType(), actionTypeFilter))
+                .filter(item -> entityRefFilter == null || (item.getEntityRef() != null && item.getEntityRef().toLowerCase(Locale.ROOT).contains(entityRefFilter.toLowerCase(Locale.ROOT))))
+                .sorted(Comparator.comparing(BoApprovalRequest::getCreatedAt, Comparator.nullsLast(Comparator.reverseOrder())))
+                .toList();
 
         int safePage = safePage(page);
         int safeSize = safeSize(size);
@@ -265,7 +276,29 @@ public class ApprovalService {
         data.put("size", safeSize);
         data.put("totalElements", approvals.size());
         data.put("totalPages", approvals.isEmpty() ? 0 : (int) Math.ceil((double) approvals.size() / safeSize));
+        data.put("filters", Map.of(
+                "status", status == null ? "" : status,
+                "module", moduleFilter == null ? "" : moduleFilter,
+                "subModule", subModuleFilter == null ? "" : subModuleFilter,
+                "actionType", actionTypeFilter == null ? "" : actionTypeFilter,
+                "entityRef", entityRefFilter == null ? "" : entityRefFilter
+        ));
         return data;
+    }
+
+    @Transactional(readOnly = true)
+    public Map<String, Object> findByEntityRef(String entityRef) {
+        String normalizedEntityRef = requireText(entityRef, "entityRef");
+        List<Map<String, Object>> items = approvalRequestRepository.findAll().stream()
+                .filter(item -> item.getEntityRef() != null && item.getEntityRef().toLowerCase(Locale.ROOT).contains(normalizedEntityRef.toLowerCase(Locale.ROOT)))
+                .sorted(Comparator.comparing(BoApprovalRequest::getCreatedAt, Comparator.nullsLast(Comparator.reverseOrder())))
+                .map(this::toApprovalRow)
+                .toList();
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("entityRef", normalizedEntityRef);
+        response.put("content", items);
+        response.put("totalElements", items.size());
+        return response;
     }
 
     @Transactional(readOnly = true)
@@ -937,6 +970,10 @@ public class ApprovalService {
         }
         String stringValue = String.valueOf(value).trim();
         return stringValue.isEmpty() ? null : stringValue;
+    }
+
+    private boolean enumNameMatches(Enum<?> value, String expected) {
+        return expected == null || (value != null && value.name().equalsIgnoreCase(expected));
     }
 
     private String trimToNull(String value) {

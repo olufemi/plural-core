@@ -9,4 +9,6 @@ import java.util.Optional;
 public interface BoRefreshTokenRepository extends JpaRepository<BoRefreshToken, Long> {
   Optional<BoRefreshToken> findByTokenHashAndRevokedFalse(String tokenHash);
   List<BoRefreshToken> findAllByAdminUserIdAndRevokedFalse(Long adminUserId);
+  Optional<BoRefreshToken> findByIdAndAdminUserIdAndRevokedFalse(Long id, Long adminUserId);
 }
+

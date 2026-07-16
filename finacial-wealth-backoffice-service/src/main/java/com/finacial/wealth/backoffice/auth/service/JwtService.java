@@ -75,6 +75,14 @@ public class JwtService {
                 .compact();
     }
 
+    public int getAccessTtlMinutes() {
+        return accessTtlMinutes;
+    }
+
+    public String getIssuer() {
+        return issuer;
+    }
+
     public Claims parse(String jwt) {
         return Jwts.parser()
                 .verifyWith(key)

@@ -42,12 +42,25 @@ public class ApprovalController {
     public Map<String, Object> list(
             @Parameter(description = "Optional approval status filter such as PENDING, IN_REMEDIATION, or RESUBMITTED")
             @RequestParam(required = false) String status,
+            @RequestParam(required = false) String module,
+            @RequestParam(required = false) String subModule,
+            @RequestParam(required = false) String actionType,
+            @RequestParam(required = false) String entityRef,
             @Parameter(description = "Zero-based page number")
             @RequestParam(defaultValue = "0") Integer page,
             @Parameter(description = "Page size")
             @RequestParam(defaultValue = "20") Integer size
     ) {
-        return approvalService.listApprovals(status, page, size);
+        return approvalService.listApprovals(status, module, subModule, actionType, entityRef, page, size);
+    }
+
+
+
+    @GetMapping("/by-entity-ref/{entityRef}")
+    @PreAuthorize("hasAnyAuthority('approval.inbox.view','ROLE_SUPER_ADMIN')")
+    @Operation(summary = "Find approval requests by entity reference", security = @SecurityRequirement(name = "bearerAuth"))
+    public Map<String, Object> byEntityRef(@PathVariable String entityRef) {
+        return approvalService.findByEntityRef(entityRef);
     }
 
     @GetMapping("/{approvalId}")

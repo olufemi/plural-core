@@ -15,7 +15,7 @@ public class BoInterbankController {
   private final TransactionsClient transactionsClient;
 
   @PostMapping("/name-enquiry")
-  @PreAuthorize("hasAnyRole('SUPER_ADMIN','ADMIN','OPERATIONS','FINANCE')")
+  @PreAuthorize("hasAnyAuthority('interbank.nameEnquiry.execute','ROLE_SUPER_ADMIN','ROLE_ADMIN','ROLE_OPERATIONS','ROLE_FINANCE')")
   public Map<String, Object> nameEnquiry(@RequestBody Map<String, Object> request) {
     return transactionsClient.interbankNameEnquiry(request);
   }

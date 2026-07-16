@@ -110,6 +110,23 @@ public class BoGroupSavingsController {
         return transactionsClient.getSlotAssignmentTracking(groupId, status);
     }
 
+    @PostMapping("/groups/{groupId}/deletion-request")
+    @PreAuthorize("hasAnyAuthority('groupSavings.group.delete','ROLE_SUPER_ADMIN','ROLE_ADMIN')")
+    @Audited(action = "REQUEST_DELETE_GROUP_SAVING", entityType = "GROUP_SAVINGS")
+    @Operation(
+            summary = "Request deletion of a group savings group",
+            description = "Typed FE-safe alias for the existing delete-group-saving transaction operation.",
+            security = @SecurityRequirement(name = "bearerAuth")
+    )
+    public Map<String, Object> requestGroupDeletion(@PathVariable Long groupId, @RequestBody(required = false) Map<String, Object> request) {
+        Map<String, Object> body = new java.util.LinkedHashMap<>();
+        if (request != null) {
+            body.putAll(request);
+        }
+        body.put("groupId", groupId);
+        return transactionsClient.deleteGroupSaving(body);
+    }
+
     @PostMapping("/delete")
     @PreAuthorize("hasAnyRole('SUPER_ADMIN','ADMIN')")
     @Audited(action = "DELETE_GROUP_SAVING", entityType = "GROUP_SAVINGS")

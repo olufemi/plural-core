@@ -7,6 +7,7 @@ import com.finacial.wealth.backoffice.admin.dto.CreateAdminUserRequest;
 import com.finacial.wealth.backoffice.admin.dto.UpdateAdminUserRequest;
 import com.finacial.wealth.backoffice.auth.dto.AdminPasswordResetResponse;
 import com.finacial.wealth.backoffice.auth.dto.AdminRoleDto;
+import com.finacial.wealth.backoffice.auth.entity.BoAdminRole;
 import com.finacial.wealth.backoffice.auth.entity.BoAdminUser;
 import com.finacial.wealth.backoffice.auth.repo.BoAdminRoleRepository;
 import com.finacial.wealth.backoffice.auth.repo.BoAdminUserRepository;
@@ -15,6 +16,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -170,31 +172,86 @@ public class AdminUserService {
             int page,
             int size,
             String q,
+            BoAdminUser.Status status,
+            String role,
+            String sort,
+            String direction,
             String ip,
             String ua) {
 
         int p = Math.max(page, 0);
         int s = Math.min(Math.max(size, 1), 100);
+        String sortField = allowedAdminSort(sort);
+        Sort.Direction sortDirection = "ASC".equalsIgnoreCase(direction) ? Sort.Direction.ASC : Sort.Direction.DESC;
+        PageRequest pr = PageRequest.of(p, s, Sort.by(sortDirection, sortField));
 
-        PageRequest pr = PageRequest.of(p, s, Sort.by(Sort.Direction.DESC, "id"));
+        String query = trimToNull(q);
+        String roleFilter = trimToNull(role);
+        Specification<BoAdminUser> spec = Specification.where(null);
 
-        String query = (q == null ? null : q.trim());
-        boolean hasQ = (query != null && !query.isEmpty());
+        if (query != null) {
+            spec = spec.and((root, criteriaQuery, cb) -> cb.or(
+                    cb.like(cb.lower(root.get("email")), "%" + query.toLowerCase() + "%"),
+                    cb.like(cb.lower(root.get("fullName")), "%" + query.toLowerCase() + "%")
+            ));
+        }
+        if (status != null) {
+            spec = spec.and((root, criteriaQuery, cb) -> cb.equal(root.get("status"), status));
+        }
+        if (roleFilter != null) {
+            spec = spec.and((root, criteriaQuery, cb) -> {
+                criteriaQuery.distinct(true);
+                var roles = root.join("roles", jakarta.persistence.criteria.JoinType.LEFT);
+                return cb.equal(cb.lower(roles.get("name")), roleFilter.toLowerCase());
+            });
+        }
 
-        Page<BoAdminUser> result = hasQ
-                ? userRepo.findByEmailContainingIgnoreCaseOrFullNameContainingIgnoreCase(query, query, pr)
-                : userRepo.findAll(pr);
+        Page<BoAdminUser> result = userRepo.findAll(spec, pr);
 
         Map<String, Object> meta = new HashMap<>();
         meta.put("page", p);
         meta.put("size", s);
-        if (hasQ) {
-            meta.put("q", query);
-        }
-
+        meta.put("q", query);
+        meta.put("status", status == null ? null : status.name());
+        meta.put("role", roleFilter);
+        meta.put("sort", sortField);
+        meta.put("direction", sortDirection.name());
         safeAuditAdminList(actorAdminId, ip, ua, meta);
 
         return result.map(this::toResponse);
+    }
+
+    @Transactional(readOnly = true)
+    public Map<String, Object> getAdminActivity(Long actorAdminId, Long adminId, String ip, String ua) {
+        BoAdminUser u = userRepo.findById(adminId).orElseThrow(() -> new IllegalArgumentException("Admin user not found"));
+        auditService.audit("ADMIN_ACTIVITY_VIEW", actorAdminId, u.getId(), ip, ua, Map.of("adminId", adminId));
+        Map<String, Object> activity = new HashMap<>();
+        activity.put("adminId", u.getId());
+        activity.put("email", u.getEmail());
+        activity.put("lastLoginAt", u.getLastLoginAt());
+        activity.put("failedAttempts", u.getFailedAttempts());
+        activity.put("lockedUntil", u.getLockedUntil());
+        activity.put("mfaEnabled", u.isMfaEnabled());
+        activity.put("status", u.getStatus() == null ? null : u.getStatus().name());
+        return activity;
+    }
+
+    private String allowedAdminSort(String sort) {
+        String value = trimToNull(sort);
+        if (value == null) {
+            return "id";
+        }
+        return switch (value) {
+            case "id", "email", "fullName", "status", "createdAt", "updatedAt", "lastLoginAt" -> value;
+            default -> "id";
+        };
+    }
+
+    private String trimToNull(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        return value.trim();
     }
 
     private void safeAuditAdminList(Long actorAdminId, String ip, String ua, Map<String, Object> meta) {

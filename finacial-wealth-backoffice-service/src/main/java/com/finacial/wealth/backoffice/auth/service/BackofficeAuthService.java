@@ -201,6 +201,37 @@ public class BackofficeAuthService {
         return rt.getAdminUser();
     }
 
+    public List<Map<String, Object>> listActiveSessions(Long adminUserId) {
+        return refreshRepo.findAllByAdminUserIdAndRevokedFalse(adminUserId)
+                .stream()
+                .filter(token -> token.getExpiresAt() == null || !token.getExpiresAt().isBefore(LocalDateTime.now()))
+                .map(token -> Map.<String, Object>of(
+                        "sessionId", token.getId(),
+                        "createdAt", token.getCreatedAt(),
+                        "expiresAt", token.getExpiresAt(),
+                        "revoked", token.isRevoked()
+                ))
+                .toList();
+    }
+
+    @Transactional
+    public void revokeSession(Long adminUserId, Long sessionId) {
+        BoRefreshToken token = refreshRepo.findByIdAndAdminUserIdAndRevokedFalse(sessionId, adminUserId)
+                .orElseThrow(() -> new IllegalArgumentException("Session not found"));
+        token.setRevoked(true);
+        refreshRepo.save(token);
+    }
+
+    @Transactional
+    public int revokeAllSessions(Long adminUserId) {
+        List<BoRefreshToken> tokens = refreshRepo.findAllByAdminUserIdAndRevokedFalse(adminUserId);
+        for (BoRefreshToken token : tokens) {
+            token.setRevoked(true);
+        }
+        refreshRepo.saveAll(tokens);
+        return tokens.size();
+    }
+
     public void revokeRefresh(String rawRefresh) {
         String hash = sha256Base64(rawRefresh);
         refreshRepo.findByTokenHashAndRevokedFalse(hash).ifPresent(rt -> {

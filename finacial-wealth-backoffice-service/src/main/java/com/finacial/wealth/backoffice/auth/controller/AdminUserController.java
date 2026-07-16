@@ -15,6 +15,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.Map;
+
 @RestController
 @RequestMapping({"/backoffice/admin-users", "/bo/admin-users", "/admin-users"})
 @RequiredArgsConstructor
@@ -103,7 +105,33 @@ public class AdminUserController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
             @RequestParam(required = false) String q,
+            @RequestParam(required = false) com.finacial.wealth.backoffice.auth.entity.BoAdminUser.Status status,
+            @RequestParam(required = false) String role,
+            @RequestParam(required = false) String sort,
+            @RequestParam(required = false) String direction,
             HttpServletRequest request) {
-        return adminUserService.getAdmins(actorAdminId, page, size, q, request.getRemoteAddr(), request.getHeader("User-Agent"));
+        return adminUserService.getAdmins(actorAdminId, page, size, q, status, role, sort, direction, request.getRemoteAddr(), request.getHeader("User-Agent"));
     }
+
+    @GetMapping("/me")
+    @PreAuthorize("isAuthenticated()")
+    public AdminUserResponse me(@RequestAttribute("boAdminUserId") Long actorAdminId, HttpServletRequest request) {
+        return adminUserService.getAdmin(actorAdminId, actorAdminId, request.getRemoteAddr(), request.getHeader("User-Agent"));
+    }
+
+    @PatchMapping("/me")
+    @PreAuthorize("isAuthenticated()")
+    public AdminUserResponse updateMe(
+            @RequestAttribute("boAdminUserId") Long actorAdminId,
+            @RequestBody UpdateAdminUserRequest req,
+            HttpServletRequest request) {
+        return adminUserService.updateAdmin(actorAdminId, actorAdminId, new UpdateAdminUserRequest(req.fullName(), null), request.getRemoteAddr(), request.getHeader("User-Agent"));
+    }
+
+    @GetMapping("/me/activity")
+    @PreAuthorize("isAuthenticated()")
+    public Map<String, Object> myActivity(@RequestAttribute("boAdminUserId") Long actorAdminId, HttpServletRequest request) {
+        return adminUserService.getAdminActivity(actorAdminId, actorAdminId, request.getRemoteAddr(), request.getHeader("User-Agent"));
+    }
+
 }

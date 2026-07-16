@@ -22,7 +22,12 @@ import org.springframework.web.bind.annotation.*;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Base64;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping({"/bo/auth", "/auth"})
@@ -162,6 +167,45 @@ public class AuthController {
         ));
     }
 
+
+    @Transactional(readOnly = true)
+    @Operation(
+            summary = "Get current admin context",
+            description = "Returns the signed-in admin, effective roles, effective permissions, MFA state, and token/session policy hints.",
+            security = @SecurityRequirement(name = "bearerAuth")
+    )
+    @GetMapping("/me")
+    public ResponseEntity<Map<String, Object>> me(@RequestAttribute("boAdminUserId") Long adminUserId) {
+        BoAdminUser user = userRepo.findById(adminUserId)
+                .orElseThrow(() -> new IllegalArgumentException("Admin user not found"));
+        return ResponseEntity.ok(adminContext(user));
+    }
+
+    @Transactional(readOnly = true)
+    @Operation(summary = "List current admin refresh-token sessions", security = @SecurityRequirement(name = "bearerAuth"))
+    @GetMapping("/sessions")
+    public ResponseEntity<Map<String, Object>> sessions(@RequestAttribute("boAdminUserId") Long adminUserId) {
+        List<Map<String, Object>> sessions = authService.listActiveSessions(adminUserId);
+        return ResponseEntity.ok(Map.of("content", sessions, "totalElements", sessions.size()));
+    }
+
+    @Operation(summary = "Revoke a current admin refresh-token session", security = @SecurityRequirement(name = "bearerAuth"))
+    @PostMapping("/sessions/{sessionId}/revoke")
+    public ResponseEntity<Map<String, Object>> revokeSession(
+            @RequestAttribute("boAdminUserId") Long adminUserId,
+            @PathVariable Long sessionId
+    ) {
+        authService.revokeSession(adminUserId, sessionId);
+        return ResponseEntity.ok(Map.of("revoked", true, "sessionId", sessionId));
+    }
+
+    @Operation(summary = "Revoke all current admin refresh-token sessions", security = @SecurityRequirement(name = "bearerAuth"))
+    @PostMapping("/sessions/revoke-all")
+    public ResponseEntity<Map<String, Object>> revokeAllSessions(@RequestAttribute("boAdminUserId") Long adminUserId) {
+        int revoked = authService.revokeAllSessions(adminUserId);
+        return ResponseEntity.ok(Map.of("revoked", revoked));
+    }
+
     @Operation(summary = "Logout admin user")
     @PostMapping("/logout")
     public ResponseEntity<Void> logout(@RequestParam("refreshToken") String refreshToken) {
@@ -207,6 +251,43 @@ public class AuthController {
     ) {
         authService.completePasswordRecovery(request, ip(httpRequest), ua(httpRequest));
         return ResponseEntity.ok().build();
+    }
+
+
+    private Map<String, Object> adminContext(BoAdminUser user) {
+        List<String> roles = user.getRoles() == null ? List.of() : user.getRoles().stream()
+                .map(BoAdminRole::getName)
+                .sorted()
+                .toList();
+        Set<String> permissions = user.getRoles() == null ? Set.of() : user.getRoles().stream()
+                .filter(role -> role.getPermissions() != null)
+                .flatMap(role -> role.getPermissions().stream())
+                .map(permission -> permission.getCode())
+                .collect(Collectors.toCollection(java.util.TreeSet::new));
+
+        Map<String, Object> admin = new LinkedHashMap<>();
+        admin.put("id", user.getId());
+        admin.put("email", user.getEmail());
+        admin.put("fullName", user.getFullName());
+        admin.put("status", user.getStatus() == null ? null : user.getStatus().name());
+        admin.put("mfaEnabled", user.isMfaEnabled());
+        admin.put("lastLoginAt", user.getLastLoginAt());
+        admin.put("roles", roles);
+        admin.put("permissions", permissions);
+
+        Map<String, Object> sessionPolicy = new LinkedHashMap<>();
+        sessionPolicy.put("issuer", jwtService.getIssuer());
+        sessionPolicy.put("accessTokenTtlMinutes", jwtService.getAccessTtlMinutes());
+        sessionPolicy.put("idleTimeoutMinutes", jwtService.getAccessTtlMinutes());
+        sessionPolicy.put("tokenTransport", "BEARER");
+        sessionPolicy.put("cookieModeSupported", false);
+
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("admin", admin);
+        response.put("effectiveRoles", roles);
+        response.put("effectivePermissions", permissions);
+        response.put("sessionPolicy", sessionPolicy);
+        return response;
     }
 
     private String ip(HttpServletRequest request) {

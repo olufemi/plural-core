@@ -30,6 +30,8 @@ import java.util.regex.Pattern;
 public class TokenAuthenticationFilter extends ZuulFilter {
 
     private static final String BLOCKED_INTERNAL_TEST_ONBOARDING_PATH = "/internal/test/onboarding";
+    private static final String BACKOFFICE_PATH = "/bo/";
+    private static final String BACKOFFICE_DISCOVERY_PATH = "/finacial-wealth-backoffice/";
 
     private Logger logger = LoggerFactory.getLogger(getClass());
     private final List<Pattern> whiteList;
@@ -107,6 +109,20 @@ public class TokenAuthenticationFilter extends ZuulFilter {
         String authorizationHeader = requestContext.getRequest().getHeader("Authorization");
         //System.out.println("authorizationHeader ::::::::::::::::   " + authorizationHeader);
 
+        if (isBackofficePath(requestContext.getRequest().getRequestURI())) {
+            if (StringUtils.isEmpty(authorizationHeader)) {
+                Map<String, Object> response = new HashMap<>();
+                response.put("data", Collections.emptyMap());
+                response.put("statusCode", HttpStatus.UNAUTHORIZED.value());
+                response.put("description", "Missing backoffice authorization token");
+                String responseStr = Try.of(() -> objectMapper.writeValueAsString(response))
+                        .onFailure(System.out::println)
+                        .getOrNull();
+                return zuulErrorResponse(requestContext, responseStr, HttpStatus.UNAUTHORIZED);
+            }
+            return null;
+        }
+
         if (requestContext.getRequest().getRequestURI().contains("notification-manager")) {
             Map<String, Object> response = new HashMap<>();
             response.put("data", Collections.emptyMap());
@@ -167,6 +183,20 @@ public class TokenAuthenticationFilter extends ZuulFilter {
         return BLOCKED_INTERNAL_TEST_ONBOARDING_PATH.equals(normalizedUri)
                 || normalizedUri.startsWith(BLOCKED_INTERNAL_TEST_ONBOARDING_PATH + "/")
                 || normalizedUri.contains(BLOCKED_INTERNAL_TEST_ONBOARDING_PATH + "/");
+    }
+
+    private boolean isBackofficePath(String uri) {
+        if (uri == null) {
+            return false;
+        }
+        String normalizedUri = uri;
+        if (apiPrefix != null && !apiPrefix.isEmpty() && normalizedUri.startsWith(apiPrefix)) {
+            normalizedUri = normalizedUri.substring(apiPrefix.length());
+        }
+        return normalizedUri.equals("/bo")
+                || normalizedUri.startsWith(BACKOFFICE_PATH)
+                || normalizedUri.equals("/finacial-wealth-backoffice")
+                || normalizedUri.startsWith(BACKOFFICE_DISCOVERY_PATH);
     }
 
 }

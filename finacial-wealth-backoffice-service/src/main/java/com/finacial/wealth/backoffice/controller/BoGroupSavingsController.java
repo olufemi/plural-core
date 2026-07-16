@@ -2,6 +2,7 @@ package com.finacial.wealth.backoffice.controller;
 
 import com.finacial.wealth.backoffice.audit.AuditAspect.Audited;
 import com.finacial.wealth.backoffice.integrations.transactions.TransactionsClient;
+import com.finacial.wealth.backoffice.model.GroupSavingsDeletionRequest;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -118,13 +119,11 @@ public class BoGroupSavingsController {
             description = "Typed FE-safe alias for the existing delete-group-saving transaction operation.",
             security = @SecurityRequirement(name = "bearerAuth")
     )
-    public Map<String, Object> requestGroupDeletion(@PathVariable Long groupId, @RequestBody(required = false) Map<String, Object> request) {
-        Map<String, Object> body = new java.util.LinkedHashMap<>();
-        if (request != null) {
-            body.putAll(request);
+    public Map<String, Object> requestGroupDeletion(@PathVariable Long groupId, @RequestBody(required = false) GroupSavingsDeletionRequest request) {
+        if (request == null) {
+            throw new IllegalArgumentException("request body is required");
         }
-        body.put("groupId", groupId);
-        return transactionsClient.deleteGroupSaving(body);
+        return transactionsClient.deleteGroupSaving(request.toDownstreamPayload(groupId));
     }
 
     @PostMapping("/delete")

@@ -121,6 +121,23 @@ public class ApprovalController {
         return approvalService.reject(approvalId, actorAdminId, safeDecision, request);
     }
 
+    @PostMapping("/{approvalId}/request-info")
+    @PreAuthorize("hasAnyAuthority('investment.liquidation.approve','reversal.manual.approve','investment.product.approve','app_config.manage','referral.program.manage','campaign.approve','customer.profile.manage','ROLE_SUPER_ADMIN')")
+    @Operation(
+            summary = "Request more information for an approval request",
+            description = "Alias for checker remediation. Moves the approval into remediation and records the requested clarification reason.",
+            security = @SecurityRequirement(name = "bearerAuth")
+    )
+    public Map<String, Object> requestInfo(
+            @PathVariable Long approvalId,
+            @RequestAttribute("boAdminUserId") Long actorAdminId,
+            @RequestBody(required = false) ApprovalDecisionRequest decision,
+            HttpServletRequest request
+    ) {
+        ApprovalDecisionRequest safeDecision = decision == null ? new ApprovalDecisionRequest("More information required") : decision;
+        return approvalService.reject(approvalId, actorAdminId, safeDecision, request);
+    }
+
     @PostMapping("/{approvalId}/resubmit")
     @PreAuthorize("hasAnyAuthority('investment.liquidation.remediate','reversal.manual.remediate','ROLE_SUPER_ADMIN')")
     @Operation(

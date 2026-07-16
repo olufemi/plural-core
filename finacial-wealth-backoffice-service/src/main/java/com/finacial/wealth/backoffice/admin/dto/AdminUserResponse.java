@@ -6,6 +6,7 @@ package com.finacial.wealth.backoffice.admin.dto;
 
 import com.finacial.wealth.backoffice.auth.entity.BoAdminRole;
 import com.finacial.wealth.backoffice.auth.entity.BoAdminUser;
+import java.time.LocalDateTime;
 import java.util.Set;
 
 /**
@@ -18,5 +19,10 @@ public record AdminUserResponse(
         String fullName,
         BoAdminUser.Status status,
         boolean mfaEnabled,
-        Set<BoAdminRole> roles
+        Set<BoAdminRole> roles,
+        LocalDateTime createdAt,
+        LocalDateTime updatedAt,
+        LocalDateTime lastLoginAt,
+        int failedAttempts,
+        LocalDateTime lockedUntil
 ) {}

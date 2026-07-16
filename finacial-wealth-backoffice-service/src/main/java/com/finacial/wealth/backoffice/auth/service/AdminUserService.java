@@ -152,7 +152,19 @@ public class AdminUserService {
     }
 
     private AdminUserResponse toResponse(BoAdminUser u) {
-        return new AdminUserResponse(u.getId(), u.getEmail(), u.getFullName(), u.getStatus(), u.isMfaEnabled(), u.getRoles());
+        return new AdminUserResponse(
+                u.getId(),
+                u.getEmail(),
+                u.getFullName(),
+                u.getStatus(),
+                u.isMfaEnabled(),
+                u.getRoles(),
+                u.getCreatedAt(),
+                u.getUpdatedAt(),
+                u.getLastLoginAt(),
+                u.getFailedAttempts(),
+                u.getLockedUntil()
+        );
     }
 
     @Transactional(readOnly = true)

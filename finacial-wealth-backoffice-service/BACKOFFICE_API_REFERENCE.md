@@ -179,6 +179,24 @@ Login request:
 
 Allowed admin list sort fields: `id`, `email`, `fullName`, `status`, `createdAt`, `updatedAt`, `lastLoginAt`.
 
+Admin list/profile response includes server-side pagination metadata from Spring `Page` and user rows shaped like:
+
+```json
+{
+  "id": 1,
+  "email": "ops@example.com",
+  "fullName": "Operations Admin",
+  "status": "ACTIVE",
+  "mfaEnabled": true,
+  "roles": [{"id": 2, "name": "OPERATIONS"}],
+  "createdAt": "2026-07-16T09:00:00",
+  "updatedAt": "2026-07-16T09:30:00",
+  "lastLoginAt": "2026-07-16T10:15:00",
+  "failedAttempts": 0,
+  "lockedUntil": null
+}
+```
+
 
 | Method | Gateway path | Purpose |
 | --- | --- | --- |
@@ -226,6 +244,7 @@ FE notification deep links can resolve approval items by approval id or entity r
 | `GET` | `/bo/backoffice/approvals/{approvalId}` | Get approval details |
 | `POST` | `/bo/backoffice/approvals/{approvalId}/approve` | Approve item |
 | `POST` | `/bo/backoffice/approvals/{approvalId}/reject` | Reject to remediation |
+| `POST` | `/bo/backoffice/approvals/{approvalId}/request-info` | Request more information; alias for remediation/reject with a clarification reason |
 | `POST` | `/bo/backoffice/approvals/{approvalId}/resubmit` | Resubmit after remediation |
 
 Checker permissions accepted by the decision endpoints include:
@@ -630,6 +649,15 @@ Create referral program request:
 |---|---|---|
 | `POST` | `/bo/backoffice/group-savings/groups/{groupId}/deletion-request` | Typed alias for requesting/admin-triggering group savings deletion. Body may include `reason`. |
 
+Deletion request:
+
+```json
+{
+  "reason": "Duplicate test group created during migration",
+  "expectedStatus": "DRAFT"
+}
+```
+
 
 | Method | Gateway path | Purpose |
 | --- | --- | --- |
@@ -662,6 +690,34 @@ Delete request is proxied to transactions service and follows the existing trans
 |---|---|---|
 | `POST` | `/bo/backoffice/interbank/name-enquiry` | Typed interbank name enquiry. Requires `interbank.nameEnquiry.execute` or privileged role. |
 | `PATCH` | `/bo/backoffice/fxpeer/offers/{offerId}` | Typed FxPeer offer update alias. Body contains editable offer fields. |
+
+Interbank name enquiry request:
+
+```json
+{
+  "bankCode": "058",
+  "accountNumber": "0123456789",
+  "country": "NG"
+}
+```
+
+FxPeer offer update request:
+
+```json
+{
+  "rate": 1520.25,
+  "availableAmount": 5000,
+  "minAmount": 100,
+  "maxAmount": 10000,
+  "status": "ACTIVE",
+  "active": true,
+  "sourceCurrency": "CAD",
+  "targetCurrency": "NGN",
+  "reason": "Corrected erroneous rate after customer verification"
+}
+```
+
+`reason` is required for FX offer updates and group deletion requests.
 
 
 | Method | Gateway path | Purpose |

@@ -126,6 +126,8 @@ Treat these as production blockers before full global launch:
    - 2026-07-15 progress: added `POST /backoffice/app-config/{configName}/history/{historyId}/rollback`. It applies the previous value from history directly when policy is disabled, or submits the rollback as an `APP_CONFIG_UPDATE` approval when policy is enabled. Sensitive masked history cannot be rolled back because the old secret value is not stored.
 5. Harden admin session/audit/reporting APIs for pilot-to-prod.
    - 2026-07-16 progress: added refresh-token rotation, session revoke aliases, configurable MFA requirement, configurable idle/privileged idle/warning policy, richer audit metadata, and report schedule deletion. Updated `BACKOFFICE_API_REFERENCE.md` for FE.
+6. Close FE dependency contract gaps from Macanthony prompt.
+   - 2026-07-16 progress: expanded admin-user responses with timestamps/login/security fields, added explicit approval `request-info` alias, aligned typed interbank name-enquiry, typed group-savings deletion request, and typed FxPeer offer update request with mandatory reason. Updated `BACKOFFICE_API_REFERENCE.md` examples.
 5. Harden investment product create/update validation and make FE error responses deterministic.
 6. Expand customer 360 with KYC/BVN/face status, wallets/accounts, devices, and service enrollment views.
 7. Decide whether VAS and P2P FX are pilot or production-later; if pilot, build operational dashboards before go-live.

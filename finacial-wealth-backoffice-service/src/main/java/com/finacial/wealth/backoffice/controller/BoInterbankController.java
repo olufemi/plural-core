@@ -1,6 +1,7 @@
 package com.finacial.wealth.backoffice.controller;
 
 import com.finacial.wealth.backoffice.integrations.transactions.TransactionsClient;
+import com.finacial.wealth.backoffice.model.InterbankNameEnquiryRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -16,8 +17,11 @@ public class BoInterbankController {
 
   @PostMapping("/name-enquiry")
   @PreAuthorize("hasAnyAuthority('interbank.nameEnquiry.execute','ROLE_SUPER_ADMIN','ROLE_ADMIN','ROLE_OPERATIONS','ROLE_FINANCE')")
-  public Map<String, Object> nameEnquiry(@RequestBody Map<String, Object> request) {
-    return transactionsClient.interbankNameEnquiry(request);
+  public Map<String, Object> nameEnquiry(@RequestBody InterbankNameEnquiryRequest request) {
+    if (request == null) {
+      throw new IllegalArgumentException("request body is required");
+    }
+    return transactionsClient.interbankNameEnquiry(request.toDownstreamPayload());
   }
 
   @GetMapping("/reversals/summary")

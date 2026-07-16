@@ -31,8 +31,12 @@ public class BoRefreshToken {
   @Column(nullable = false)
   private LocalDateTime createdAt;
 
+  @Column
+  private LocalDateTime lastSeenAt;
+
   @PrePersist
   void prePersist() {
     createdAt = LocalDateTime.now();
+    lastSeenAt = createdAt;
   }
 }

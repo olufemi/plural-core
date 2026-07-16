@@ -138,6 +138,18 @@ Cost-governance checks:
 - [ ] Confirm the calculator estimate matches the final architecture diagram
 - [ ] Confirm monthly estimate owner accepts `892.17 USD` as the current pilot-to-prod AWS baseline
 - [ ] Confirm whether the RDS estimate is still Single-AZ; price Multi-AZ before production signoff
+
+## Backoffice Security Runtime Controls
+
+The backoffice pilot is expected to become production, so these controls must be reviewed during deployment:
+
+- `BO_MFA_REQUIRED`: set to `true` for production only after the first super-admin MFA setup and recovery runbook are confirmed.
+- `BO_IDLE_TIMEOUT_SECONDS`: standard admin idle timeout exposed to FE through `/bo/auth/me`.
+- `BO_PRIVILEGED_IDLE_TIMEOUT_SECONDS`: shorter timeout for privileged roles such as `SUPER_ADMIN`.
+- `BO_EXPIRY_WARNING_SECONDS`: FE warning window before session expiry.
+- `/bo/auth/refresh` rotates refresh tokens; FE must persist the returned refresh token.
+- `/bo/auth/sessions` and `/bo/auth/sessions/{sessionId}` support active-session cleanup/revocation.
+- Approval policies for product, `app_config`, referral, campaign, and customer block/unblock can be enabled through `BACKOFFICE_APPROVAL_POLICY_ENABLE_PROD.sql` when the checker inbox flow is ready.
 - [ ] Confirm NAT Gateway count is intentional because VPC/NAT is the largest line item in this estimate
 - [ ] Confirm WAF, Route 53, and Secrets Manager are included in business cost communication
 - [ ] Confirm taxes, support plan, data egress, backups, snapshots, and log growth may increase actual monthly spend

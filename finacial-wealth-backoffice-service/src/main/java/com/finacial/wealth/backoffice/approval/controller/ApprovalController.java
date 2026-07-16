@@ -75,7 +75,7 @@ public class ApprovalController {
     }
 
     @PostMapping("/{approvalId}/approve")
-    @PreAuthorize("hasAnyAuthority('investment.liquidation.approve','reversal.manual.approve','ROLE_SUPER_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('investment.liquidation.approve','reversal.manual.approve','investment.product.approve','app_config.manage','referral.program.manage','campaign.approve','customer.profile.manage','ROLE_SUPER_ADMIN')")
     @Operation(
             summary = "Approve an approval request",
             description = "Approves a liquidation or manual reversal approval item and forwards execution to the owning service. "
@@ -96,7 +96,7 @@ public class ApprovalController {
     }
 
     @PostMapping("/{approvalId}/reject")
-    @PreAuthorize("hasAnyAuthority('investment.liquidation.approve','reversal.manual.approve','ROLE_SUPER_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('investment.liquidation.approve','reversal.manual.approve','investment.product.approve','app_config.manage','referral.program.manage','campaign.approve','customer.profile.manage','ROLE_SUPER_ADMIN')")
     @Operation(
             summary = "Reject an approval request",
             description = "Moves an approval item into remediation with an optional rejection reason. "

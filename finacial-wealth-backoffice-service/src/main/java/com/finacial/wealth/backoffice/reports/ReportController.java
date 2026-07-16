@@ -16,6 +16,7 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -38,9 +39,9 @@ public class ReportController {
   @PreAuthorize("hasAnyAuthority('audit.view','ROLE_SUPER_ADMIN','ROLE_ADMIN','ROLE_FINANCE')")
   public Map<String, Object> catalog() {
     List<Map<String, Object>> reports = List.of(
-        report("sample-transactions", "Sample Transactions", "CSV", List.of("walletNo"), "Pilot smoke-test export"),
-        report("investment-products", "Investment Products", "CSV", List.of("status", "assetClass"), "Investment product configuration export"),
-        report("audit-log", "Audit Log", "CSV", List.of("fromDate", "toDate", "actorAdminId", "action"), "Backoffice audit activity export")
+        report("sample-transactions", "Sample Transactions", List.of("CSV"), List.of("walletNo"), "Pilot smoke-test export", "audit.view"),
+        report("investment-products", "Investment Products", List.of("CSV"), List.of("status", "assetClass"), "Investment product configuration export", "investment.product.view"),
+        report("audit-log", "Audit Log", List.of("CSV"), List.of("fromDate", "toDate", "actorAdminId", "action"), "Backoffice audit activity export", "audit.view")
     );
     return Map.of("content", reports, "totalElements", reports.size());
   }
@@ -60,6 +61,7 @@ public class ReportController {
     job.put("reportCode", reportCode);
     job.put("status", "READY");
     job.put("format", stringValue(body.getOrDefault("format", "CSV")));
+    job.put("parameters", body.getOrDefault("parameters", Map.of()));
     job.put("requestedByAdminId", adminUserId);
     job.put("requestedAt", Instant.now());
     job.put("completedAt", Instant.now());
@@ -138,11 +140,29 @@ public class ReportController {
     schedule.put("scheduleId", scheduleId);
     schedule.put("reportCode", stringValue(body.getOrDefault("reportCode", "sample-transactions")));
     schedule.put("frequency", stringValue(body.getOrDefault("frequency", "MANUAL")));
+    schedule.put("format", stringValue(body.getOrDefault("format", "CSV")));
+    schedule.put("filters", body.getOrDefault("filters", Map.of()));
+    schedule.put("parameters", body.getOrDefault("parameters", Map.of()));
     schedule.put("recipients", body.getOrDefault("recipients", List.of()));
     schedule.put("active", body.getOrDefault("active", Boolean.TRUE));
     schedule.put("createdAt", Instant.now());
     schedules.put(scheduleId, schedule);
     return schedule;
+  }
+
+  @DeleteMapping("/schedules/{scheduleId}")
+  @PreAuthorize("hasAnyAuthority('ROLE_SUPER_ADMIN','ROLE_ADMIN')")
+  @Audited(action = "DELETE_REPORT_SCHEDULE", entityType = "REPORT")
+  public Map<String, Object> deleteSchedule(@PathVariable String scheduleId) {
+    Map<String, Object> removed = schedules.remove(scheduleId);
+    if (removed == null) {
+      throw new IllegalArgumentException("Report schedule not found");
+    }
+    return Map.of(
+        "scheduleId", scheduleId,
+        "deleted", true,
+        "deletedAt", Instant.now()
+    );
   }
 
   @GetMapping(value = "/sample-transactions.csv", produces = "text/csv")
@@ -176,13 +196,16 @@ public class ReportController {
     );
   }
 
-  private Map<String, Object> report(String code, String name, String format, List<String> filters, String description) {
+  private Map<String, Object> report(String code, String name, List<String> formats, List<String> filters, String description,
+                                     String requiredPermission) {
     Map<String, Object> item = new LinkedHashMap<>();
     item.put("code", code);
     item.put("name", name);
-    item.put("format", format);
+    item.put("format", formats.get(0));
+    item.put("formats", formats);
     item.put("filters", filters);
     item.put("description", description);
+    item.put("requiredPermission", requiredPermission);
     item.put("async", true);
     return item;
   }

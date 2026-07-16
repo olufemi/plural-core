@@ -25,6 +25,8 @@ import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
 
 @Service
 @RequiredArgsConstructor
@@ -198,7 +200,29 @@ public class BackofficeAuthService {
             refreshRepo.save(rt);
             throw new IllegalArgumentException("Refresh token expired");
         }
+        rt.setLastSeenAt(LocalDateTime.now());
+        refreshRepo.save(rt);
         return rt.getAdminUser();
+    }
+
+    @Transactional
+    public RefreshResult rotateRefreshOrThrow(String rawRefresh) {
+        String hash = sha256Base64(rawRefresh);
+        BoRefreshToken rt = refreshRepo.findByTokenHashAndRevokedFalse(hash)
+                .orElseThrow(() -> new IllegalArgumentException("Invalid refresh token"));
+
+        if (rt.getExpiresAt().isBefore(LocalDateTime.now())) {
+            rt.setRevoked(true);
+            refreshRepo.save(rt);
+            throw new IllegalArgumentException("Refresh token expired");
+        }
+
+        BoAdminUser user = rt.getAdminUser();
+        rt.setRevoked(true);
+        rt.setLastSeenAt(LocalDateTime.now());
+        refreshRepo.save(rt);
+
+        return new RefreshResult(user, issueRefreshToken(user));
     }
 
     public List<Map<String, Object>> listActiveSessions(Long adminUserId) {
@@ -208,6 +232,7 @@ public class BackofficeAuthService {
                 .map(token -> Map.<String, Object>of(
                         "sessionId", token.getId(),
                         "createdAt", token.getCreatedAt(),
+                        "lastSeenAt", token.getLastSeenAt(),
                         "expiresAt", token.getExpiresAt(),
                         "revoked", token.isRevoked()
                 ))
@@ -399,5 +424,12 @@ public class BackofficeAuthService {
             return email;
         }
         return email.charAt(0) + "***" + email.substring(at - 1);
+    }
+
+    @Getter
+    @AllArgsConstructor
+    public static class RefreshResult {
+        private final BoAdminUser adminUser;
+        private final String refreshToken;
     }
 }

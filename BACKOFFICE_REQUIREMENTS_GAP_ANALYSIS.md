@@ -51,12 +51,12 @@ Key implemented areas observed in the service:
 
 | Requirement Area | Current Implementation | Status | Missing / Improvement Needed |
 | --- | --- | --- | --- |
-| RBAC and permissions | Permission catalog, roles, permissions, JWT permission claims, role controllers, some `@PreAuthorize` usage. | Partial | Need full route coverage audit, country/currency/department scoping, temporary elevation, delegated access, and consistent action-level permission codes for every sensitive endpoint. |
-| Maker-checker | Approval inbox with approve/reject/resubmit. Supports liquidation, reversals, investment product create/update, app_config update, referral/campaign changes, and customer block/unblock when policies are enabled. | Partial | Need threshold rules and enforced coverage for rate changes, wallet/treasury actions, VAS refunds/retries, user/admin management, and all high-risk operations. |
-| Authentication and session security | Login, MFA verify/setup, refresh, logout, password change/recovery. | Partial | Need confirm MFA policy for all admins, idle timeout/high-privilege timeout enforcement, password policy, device/session list, forced logout, IP allowlist, and admin lockout/risk rules. |
-| Audit trail | Audit controller and audit logging support exist. | Partial | Need ensure all business endpoints write full before/after snapshots, actor, IP, user-agent, request id, approval id, downstream response, export, retention policy, and tamper-resistant storage. |
+| RBAC and permissions | Permission catalog, roles, permissions, JWT permission claims, role controllers, method-level `@PreAuthorize`, and approval checker authorities for the currently wired approval domains. | Partial / stronger pilot foundation | Need full route coverage audit, country/currency/department scoping, temporary elevation, delegated access, and consistent action-level permission codes for every future sensitive endpoint. |
+| Maker-checker | Approval inbox with approve/reject/resubmit. Supports liquidation, reversals, investment product create/update, app_config update, referral/campaign changes, and customer block/unblock when policies are enabled. Checker permissions now cover currently wired approval domains. | Partial / stronger pilot foundation | Need threshold rules and enforced coverage for rate changes, wallet/treasury actions, VAS refunds/retries, user/admin management, and all high-risk operations. |
+| Authentication and session security | Login, MFA verify/setup, refresh-token rotation, logout, password change/recovery, active session list, session revoke/revoke-all aliases, and FE-visible session policy. | Partial / stronger pilot foundation | Prod must enable `BO_MFA_REQUIRED=true` after MFA setup is verified. FE must enforce idle-warning UX from `/bo/auth/me`; final signoff may still require server-side idle blocking, IP allowlist, admin lockout, and password policy hardening. |
+| Audit trail | Audit controller and audit logging support exist. Audited endpoints now capture request method, URI, actor, IP, user-agent, outcome, and failure class; product/app_config approval paths include before/after where wired. | Partial / stronger pilot foundation | Need ensure all business endpoints write full before/after snapshots, approval id, downstream response, export, retention policy, and tamper-resistant storage. |
 | Dashboard and global search | No broad global dashboard/search implementation found. Investment-specific dashboard exists. | Not implemented / minimal | Need cross-module dashboard, operational KPIs, global customer/order/product/search index, saved filters, and alert widgets. |
-| Reporting framework | Sample CSV endpoint and investment product CSV export exist. | Partial | Need standardized report builder, filters, CSV/XLSX/PDF exports, scheduled reports, finance reports, audit reports, VAS reports, FX reports, referral reports, and permissioned downloads. |
+| Reporting framework | Report catalog, CSV endpoint, investment product CSV export, job status/history/download, schedule create/list/delete, and parameter echoing exist. | Partial / stronger pilot foundation | Need DB-persisted report jobs/schedules, XLSX/PDF exports, finance reports, audit reports, VAS reports, FX reports, referral reports, and production permissioned download storage. |
 | Admin profile/self-service | Password change/recovery and MFA setup exist. | Partial | Need admin profile details, notification preferences, login activity, trusted devices, profile update controls, and self-service MFA reset policy. |
 | Group Savings Admin | Group list/detail, close group, delete, contribution/payout monitoring, slot assignment tracking. | Partial | Missing group creation/editing, rules management, pause/resume, member vetting/removal, contribution enforcement, payout overrides, dispute management, default/risk monitoring, group reports, and maker-checker for sensitive actions. |
 | Investment Admin | Product list/detail/history, create/update product with maker-checker, before/after product approval snapshots, featured services config, liquidation approve/deny, orders, liquidations, history, performance, dashboard, oversight, CSV export. | Strong partial | Direct product detail API and product create/update approval audit are now in place. Need validation hardening, dedicated rate/yield calendar, maturity/rollover controls, custodian settlement, NAV/unit pricing history, risk limits, portfolio exposure views, bulk exports, immutable audit retention, and reconciliation reports. |
@@ -78,7 +78,7 @@ Key implemented areas observed in the service:
 4. Finance/treasury, VAS, P2P FX, and compliance are too thin for full production operations.
 5. Reporting is not yet a complete business reporting suite.
 6. Admin audit exists, but we still need to confirm every high-risk endpoint logs enough business context.
-7. The `app_config` table is heavily used across the platform; direct edits are now guarded by registry, validation, history, and audit, but maker-checker and rollback still need to be added before broad production use.
+7. The `app_config` table is heavily used across the platform; direct edits are now guarded by registry, validation, history, audit, rollback, and optional maker-checker. The remaining production work is environment tagging, final editable-key whitelist, and enabling approval policies for prod.
 
 ## Recommended Implementation Plan
 
@@ -96,10 +96,10 @@ Target: 2-3 days.
 Target: 1-2 weeks.
 
 - Complete permission catalog and `@PreAuthorize` coverage across all controllers.
-- Add a maker-checker policy matrix: action code, module, threshold, required checker role, same-user prevention, remediation rules.
-- Ensure all sensitive operations create approval requests instead of executing immediately.
-- Standardize audit events with request id, actor, before/after snapshot, downstream response, IP, user-agent, approval id, and correlation id.
-- Add admin session policy: MFA required, idle timeout, refresh-token revocation, lockout rules, and password policy.
+- Continue expanding the maker-checker policy matrix: action code, module, threshold, required checker role, same-user prevention, remediation rules.
+- Ensure remaining sensitive operations create approval requests instead of executing immediately.
+- Continue standardizing audit events with request id, actor, before/after snapshot, downstream response, IP, user-agent, approval id, and correlation id.
+- Admin session policy now exposes MFA requirement, idle timeout, privileged idle timeout, expiry warning, refresh-token rotation, and session revocation. Remaining items are lockout rules, password policy, IP allowlist, and final server-side idle enforcement if required.
 
 ### Phase 2 - Pilot Operations MVP
 
@@ -161,6 +161,6 @@ Please confirm these before implementation planning is locked:
 
 1. Approve pilot scope and mark each requirement as Pilot, Production, or Later.
 2. Run a security/permission route audit on current backoffice endpoints.
-3. Add missing permission annotations and maker-checker coverage for existing sensitive endpoints.
-4. Complete safe `app_config` management by adding maker-checker, rollback, environment tagging, and the approved editable-key whitelist for pilot/prod.
+3. Add missing permission annotations and maker-checker coverage for remaining sensitive endpoints.
+4. Complete safe `app_config` management by adding environment tagging and the approved editable-key whitelist for pilot/prod; maker-checker and rollback are now available.
 5. Prioritize the missing customer 360, investment hardening, reversal governance, and referral audit/reporting work for pilot.

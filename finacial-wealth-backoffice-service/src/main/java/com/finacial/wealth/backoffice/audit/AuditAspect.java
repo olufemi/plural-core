@@ -33,17 +33,38 @@ public class AuditAspect {
         .entityType(audited.entityType())
         .entityId(audited.entityId())
         .requestId(request.getHeader("X-Request-Id"))
-        .ip(request.getRemoteAddr())
+        .requestMethod(request.getMethod())
+        .requestUri(request.getRequestURI())
+        .ip(clientIp())
         .userAgent(request.getHeader("User-Agent"))
         .reason(request.getHeader("X-Reason"))
         .beforeJson(null)
         .build();
 
-    Object result = pjp.proceed();
+    try {
+      Object result = pjp.proceed();
+      log.setOutcome("SUCCESS");
+      log.setAfterJson(JsonUtil.safeToJson(result));
+      repo.save(log);
+      return result;
+    } catch (Throwable ex) {
+      log.setOutcome("FAILED");
+      log.setErrorMessage(ex.getClass().getSimpleName());
+      repo.save(log);
+      throw ex;
+    }
+  }
 
-    log.setAfterJson(JsonUtil.safeToJson(result));
-    repo.save(log);
-    return result;
+  private String clientIp() {
+    String forwardedFor = request.getHeader("X-Forwarded-For");
+    if (forwardedFor != null && !forwardedFor.isBlank()) {
+      return forwardedFor.split(",")[0].trim();
+    }
+    String realIp = request.getHeader("X-Real-IP");
+    if (realIp != null && !realIp.isBlank()) {
+      return realIp.trim();
+    }
+    return request.getRemoteAddr();
   }
 
   public @interface Audited {

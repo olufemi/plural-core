@@ -3,7 +3,6 @@ package com.finacial.wealth.backoffice.auth.controller;
 import com.finacial.wealth.backoffice.auth.dto.*;
 import com.finacial.wealth.backoffice.auth.entity.BoAdminRole;
 import com.finacial.wealth.backoffice.auth.entity.BoAdminUser;
-import com.finacial.wealth.backoffice.auth.repo.BoAdminRoleRepository;
 import com.finacial.wealth.backoffice.auth.repo.BoAdminUserRepository;
 import com.finacial.wealth.backoffice.auth.repo.BoMfaChallengeRepository;
 import com.finacial.wealth.backoffice.auth.service.BackofficeAuthService;
@@ -15,6 +14,7 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
@@ -25,7 +25,6 @@ import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -40,9 +39,19 @@ public class AuthController {
     private final TotpService totpService;
     private final BoAdminUserRepository userRepo;
     private final CryptoBox cryptoBox;
-    private final BoAdminRoleRepository roleRepo;
-
     private final BoMfaChallengeRepository mfaChallengeRepo;
+
+    @Value("${bo.security.mfa-required:false}")
+    private boolean mfaRequired;
+
+    @Value("${bo.security.idle-timeout-seconds:1800}")
+    private long idleTimeoutSeconds;
+
+    @Value("${bo.security.privileged-idle-timeout-seconds:900}")
+    private long privilegedIdleTimeoutSeconds;
+
+    @Value("${bo.security.expiry-warning-seconds:120}")
+    private long expiryWarningSeconds;
 
     @Operation(summary = "Login admin user")
     @PostMapping("/login")
@@ -58,14 +67,16 @@ public class AuthController {
             return ResponseEntity.ok(new LoginStep1Response("MFA_SETUP_REQUIRED", null));
         }
 
+        if (!mfaProperlyEnabled && mfaRequired) {
+            return ResponseEntity.ok(new LoginStep1Response("MFA_SETUP_REQUIRED", null));
+        }
+
         if (!mfaProperlyEnabled) {
             String access = jwtService.issueAccessToken(user);
             String refresh = authService.issueRefreshToken(user);
             String email = user.getEmail();
             String fullName = user.getFullName();
-            Optional<BoAdminRole> getRoleName = roleRepo.findById(user.getId());
-
-            String userRoleName = getRoleName.get().getName();
+            String userRoleName = firstRoleName(user);
             return ResponseEntity.ok(new TokenResponse(access, refresh, email, fullName, userRoleName, user.getId()));
         }
 
@@ -97,9 +108,7 @@ public class AuthController {
         String refresh = authService.issueRefreshToken(user);
         String email = user.getEmail();
         String fullName = user.getFullName();
-        Optional<BoAdminRole> getRoleName = roleRepo.findById(user.getId());
-
-        String userRoleName = getRoleName.get().getName();
+        String userRoleName = firstRoleName(user);
 
         return ResponseEntity.ok(new TokenResponse(access, refresh, email, fullName, userRoleName, user.getId()));
     }
@@ -124,9 +133,7 @@ public class AuthController {
         String refresh = authService.issueRefreshToken(user);
         String email = user.getEmail();
         String fullName = user.getFullName();
-        Optional<BoAdminRole> getRoleName = roleRepo.findById(user.getId());
-
-        String userRoleName = getRoleName.get().getName();
+        String userRoleName = firstRoleName(user);
 
         return ResponseEntity.ok(new TokenResponse(access, refresh, email, fullName, userRoleName, user.getId()));
     }
@@ -138,9 +145,7 @@ public class AuthController {
         String access = jwtService.issueAccessToken(user);
         String email = user.getEmail();
         String fullName = user.getFullName();
-        Optional<BoAdminRole> getRoleName = roleRepo.findById(user.getId());
-
-        String userRoleName = getRoleName.get().getName();
+        String userRoleName = firstRoleName(user);
 
         return ResponseEntity.ok(new TokenResponse(access, refreshToken, email, fullName, userRoleName, user.getId()));
     }
@@ -149,7 +154,8 @@ public class AuthController {
     @Operation(summary = "Refresh access token")
     @PostMapping("/refresh")
     public ResponseEntity<TokenResponse> refresh(@RequestParam("refreshToken") String refreshToken) {
-        BoAdminUser user = authService.validateRefreshOrThrow(refreshToken);
+        BackofficeAuthService.RefreshResult refreshResult = authService.rotateRefreshOrThrow(refreshToken);
+        BoAdminUser user = refreshResult.getAdminUser();
 
         String access = jwtService.issueAccessToken(user);
 
@@ -160,7 +166,7 @@ public class AuthController {
 
         return ResponseEntity.ok(new TokenResponse(
                 access,
-                refreshToken,
+                refreshResult.getRefreshToken(),
                 user.getEmail(),
                 user.getFullName(),
                 userRoleName, user.getId()
@@ -199,9 +205,26 @@ public class AuthController {
         return ResponseEntity.ok(Map.of("revoked", true, "sessionId", sessionId));
     }
 
+    @Operation(summary = "Revoke a current admin refresh-token session", security = @SecurityRequirement(name = "bearerAuth"))
+    @DeleteMapping("/sessions/{sessionId}")
+    public ResponseEntity<Map<String, Object>> deleteSession(
+            @RequestAttribute("boAdminUserId") Long adminUserId,
+            @PathVariable Long sessionId
+    ) {
+        authService.revokeSession(adminUserId, sessionId);
+        return ResponseEntity.ok(Map.of("revoked", true, "sessionId", sessionId));
+    }
+
     @Operation(summary = "Revoke all current admin refresh-token sessions", security = @SecurityRequirement(name = "bearerAuth"))
     @PostMapping("/sessions/revoke-all")
     public ResponseEntity<Map<String, Object>> revokeAllSessions(@RequestAttribute("boAdminUserId") Long adminUserId) {
+        int revoked = authService.revokeAllSessions(adminUserId);
+        return ResponseEntity.ok(Map.of("revoked", revoked));
+    }
+
+    @Operation(summary = "Revoke all current admin refresh-token sessions", security = @SecurityRequirement(name = "bearerAuth"))
+    @DeleteMapping("/sessions")
+    public ResponseEntity<Map<String, Object>> deleteAllSessions(@RequestAttribute("boAdminUserId") Long adminUserId) {
         int revoked = authService.revokeAllSessions(adminUserId);
         return ResponseEntity.ok(Map.of("revoked", revoked));
     }
@@ -278,7 +301,9 @@ public class AuthController {
         Map<String, Object> sessionPolicy = new LinkedHashMap<>();
         sessionPolicy.put("issuer", jwtService.getIssuer());
         sessionPolicy.put("accessTokenTtlMinutes", jwtService.getAccessTtlMinutes());
-        sessionPolicy.put("idleTimeoutMinutes", jwtService.getAccessTtlMinutes());
+        sessionPolicy.put("idleTimeoutSeconds", roles.contains("SUPER_ADMIN") ? privilegedIdleTimeoutSeconds : idleTimeoutSeconds);
+        sessionPolicy.put("warningBeforeExpirySeconds", expiryWarningSeconds);
+        sessionPolicy.put("mfaRequired", mfaRequired);
         sessionPolicy.put("tokenTransport", "BEARER");
         sessionPolicy.put("cookieModeSupported", false);
 
@@ -288,6 +313,13 @@ public class AuthController {
         response.put("effectivePermissions", permissions);
         response.put("sessionPolicy", sessionPolicy);
         return response;
+    }
+
+    private String firstRoleName(BoAdminUser user) {
+        return user.getRoles() == null ? null : user.getRoles().stream()
+                .findFirst()
+                .map(BoAdminRole::getName)
+                .orElse(null);
     }
 
     private String ip(HttpServletRequest request) {

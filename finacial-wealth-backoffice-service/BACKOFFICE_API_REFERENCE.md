@@ -110,7 +110,9 @@ These endpoints close the FE session/permission contract. The current implementa
 | `GET` | `/bo/auth/me` | Returns current admin profile, effective roles, effective permissions, MFA state, and token/session policy hints. |
 | `GET` | `/bo/auth/sessions` | Lists active refresh-token sessions for the current admin. |
 | `POST` | `/bo/auth/sessions/{sessionId}/revoke` | Revokes one refresh-token session owned by the current admin. |
+| `DELETE` | `/bo/auth/sessions/{sessionId}` | Revokes one refresh-token session owned by the current admin. |
 | `POST` | `/bo/auth/sessions/revoke-all` | Revokes all refresh-token sessions for the current admin. |
+| `DELETE` | `/bo/auth/sessions` | Revokes all refresh-token sessions for the current admin. |
 
 Sample `/bo/auth/me` response:
 
@@ -131,12 +133,16 @@ Sample `/bo/auth/me` response:
   "sessionPolicy": {
     "issuer": "finacial-wealth-backoffice",
     "accessTokenTtlMinutes": 15,
-    "idleTimeoutMinutes": 15,
+    "idleTimeoutSeconds": 900,
+    "warningBeforeExpirySeconds": 120,
+    "mfaRequired": true,
     "tokenTransport": "BEARER",
     "cookieModeSupported": false
   }
 }
 ```
+
+`POST /bo/auth/refresh` rotates refresh tokens. FE must replace both the access token and refresh token with the values returned by the refresh response.
 
 
 | Method | Gateway path | Purpose |
@@ -222,6 +228,18 @@ FE notification deep links can resolve approval items by approval id or entity r
 | `POST` | `/bo/backoffice/approvals/{approvalId}/reject` | Reject to remediation |
 | `POST` | `/bo/backoffice/approvals/{approvalId}/resubmit` | Resubmit after remediation |
 
+Checker permissions accepted by the decision endpoints include:
+
+| Workflow | Checker permission |
+| --- | --- |
+| Liquidation approvals | `investment.liquidation.approve` |
+| Manual reversals | `reversal.manual.approve` |
+| Investment product approvals | `investment.product.approve` |
+| app_config changes | `app_config.manage` |
+| Referral program changes | `referral.program.manage` |
+| Campaign changes | `campaign.approve` |
+| Customer profile block/unblock | `customer.profile.manage` |
+
 Reject request:
 
 ```json
@@ -277,6 +295,8 @@ Use this for approval alerts, failed integrations, reversal exceptions, settleme
 | `GET` | `/bo/backoffice/audit` | List audit events |
 
 Common filters depend on the current audit service implementation. Use it for admin actions, approvals, app_config changes, product changes, and sensitive customer operations.
+
+Audited endpoint rows include request metadata where available: `requestId`, `requestMethod`, `requestUri`, `ip`, `userAgent`, `reason`, `outcome`, and `errorMessage`. The audit layer intentionally does not persist raw request bodies because many backoffice requests can contain secrets, tokens, or PII.
 
 ---
 
@@ -664,6 +684,7 @@ Report/export endpoints are contract-ready for FE. In this pilot build jobs are 
 | `GET` | `/bo/backoffice/reports/jobs/{jobId}/download` | Download job CSV. |
 | `GET` | `/bo/backoffice/reports/schedules` | List report schedules. |
 | `POST` | `/bo/backoffice/reports/schedules` | Create a report schedule. |
+| `DELETE` | `/bo/backoffice/reports/schedules/{scheduleId}` | Delete a report schedule. |
 | `POST` | `/bo/backoffice/audit/export-jobs` | Create an audit export job. |
 | `GET` | `/bo/backoffice/audit/export-jobs` | List audit export jobs. |
 | `GET` | `/bo/backoffice/audit/export-jobs/{jobId}` | Get audit export job status. |
@@ -675,6 +696,7 @@ Sample create report job request:
 {
   "reportCode": "audit-log",
   "format": "CSV",
+  "parameters": {},
   "filters": {
     "fromDate": "2026-07-01",
     "toDate": "2026-07-16"
@@ -690,10 +712,31 @@ Sample job response:
   "reportCode": "audit-log",
   "status": "READY",
   "format": "CSV",
+  "parameters": {},
+  "filters": {
+    "fromDate": "2026-07-01",
+    "toDate": "2026-07-16"
+  },
   "requestedByAdminId": 1,
   "requestedAt": "2026-07-16T08:30:00Z",
   "completedAt": "2026-07-16T08:30:00Z",
   "downloadUrl": "/bo/backoffice/reports/jobs/bo-report-abc123def456/download"
+}
+```
+
+Sample create schedule request:
+
+```json
+{
+  "reportCode": "audit-log",
+  "frequency": "DAILY",
+  "format": "CSV",
+  "filters": {
+    "fromDate": "2026-07-01"
+  },
+  "parameters": {},
+  "recipients": ["ops@finacialwealth.com"],
+  "active": true
 }
 ```
 
@@ -709,6 +752,7 @@ Sample job response:
 
 - Product create/update now returns `202` when approval is enabled. Do not expect the product list to update until checker approval is completed.
 - `GET /investments/products/{productCode}/history` now includes `approvalHistory` when maker-checker history exists.
+- Refresh-token calls rotate the refresh token; FE must persist the new refresh token returned by `/bo/auth/refresh`.
 - Use `/backoffice/profiling/{id}/customer-360` for customer detail where possible.
 - Use `/backoffice/notifications/unread-count` for the top-bar badge and poll/list `/backoffice/notifications`.
 - Use `/backoffice/reversals` for unified reversal screens instead of product-specific wrappers.

@@ -779,6 +779,9 @@ Reason:
 - [ ] Execute at least one controlled P2P referral test
 - [ ] Execute at least one controlled investment valuation test
 - [ ] Execute one backoffice product edit test
+- [ ] Execute one backoffice global search test: `/bo/backoffice/search?q=<known customer/product>`
+- [ ] Execute one saved view create/list/delete test: `/bo/backoffice/saved-views`
+- [ ] Execute one dependency health test: `/bo/backoffice/system/integration-health`
 - [ ] Execute one SmartCore posting test and reconcile references
 - [ ] Execute one OTP notification test
 - [ ] Execute one email notification test

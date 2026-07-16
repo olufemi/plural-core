@@ -804,6 +804,137 @@ Sample create schedule request:
 
 ---
 
+# Global Search, Saved Views, And Ops Health
+
+These endpoints close the FE dependency for cross-module search, per-admin saved filters/views, and an operations dependency-health screen. They all require a valid backoffice JWT.
+
+## Global Search
+
+| Method | Gateway path | Purpose |
+| --- | --- | --- |
+| `GET` | `/bo/backoffice/search?q=MF_BAL001&types=PRODUCT,APPROVAL&page=0&size=10` | Search across customers, products, approvals, and group savings. |
+
+Supported `types`: `CUSTOMER`, `PRODUCT`, `APPROVAL`, `GROUP`. If omitted, all supported types are queried.
+
+Sample response:
+
+```json
+{
+  "query": "MF_BAL001",
+  "types": ["PRODUCT", "APPROVAL"],
+  "page": 0,
+  "size": 10,
+  "sections": [
+    {
+      "type": "PRODUCT",
+      "status": "AVAILABLE",
+      "data": {
+        "statusCode": 200,
+        "data": []
+      },
+      "durationMs": 47
+    },
+    {
+      "type": "APPROVAL",
+      "status": "AVAILABLE",
+      "data": {
+        "content": [
+          {
+            "id": 31,
+            "module": "INVESTMENT",
+            "subModule": "PRODUCT",
+            "entityType": "FXPEER_INVESTMENT_PRODUCT",
+            "entityRef": "INVESTMENT_PRODUCT_UPDATE:MF_BAL001",
+            "actionType": "UPDATE",
+            "status": "PENDING"
+          }
+        ],
+        "page": 0,
+        "size": 10
+      },
+      "durationMs": 12
+    }
+  ]
+}
+```
+
+If one downstream dependency is unavailable, that section returns `status: "UNAVAILABLE"` while the rest of the search still completes.
+
+## Saved Views
+
+| Method | Gateway path | Purpose |
+| --- | --- | --- |
+| `GET` | `/bo/backoffice/saved-views?moduleKey=INVESTMENTS` | List the logged-in admin's saved views for a module. |
+| `POST` | `/bo/backoffice/saved-views` | Save a filter/table view for the logged-in admin. |
+| `POST` | `/bo/backoffice/saved-views/{viewId}/default` | Mark a saved view as the module default. |
+| `DELETE` | `/bo/backoffice/saved-views/{viewId}` | Delete a saved view owned by the logged-in admin. |
+
+Sample create request:
+
+```json
+{
+  "moduleKey": "INVESTMENTS",
+  "name": "Pending Liquidations",
+  "defaultView": true,
+  "filters": {
+    "status": "LIQUIDATION_PENDING_APPROVAL",
+    "productCode": "MF_BAL001",
+    "columns": ["customerName", "amount", "status", "createdAt"]
+  }
+}
+```
+
+Sample response:
+
+```json
+{
+  "id": 7,
+  "moduleKey": "INVESTMENTS",
+  "name": "Pending Liquidations",
+  "filters": {
+    "status": "LIQUIDATION_PENDING_APPROVAL",
+    "productCode": "MF_BAL001"
+  },
+  "defaultView": true,
+  "createdAt": "2026-07-16T09:30:00Z",
+  "updatedAt": "2026-07-16T09:30:00Z"
+}
+```
+
+## Integration Health
+
+| Method | Gateway path | Purpose |
+| --- | --- | --- |
+| `GET` | `/bo/backoffice/system/integration-health` | Probe backoffice DB, profiling, FXPeer, and transactions dependencies. |
+
+Sample response:
+
+```json
+{
+  "status": "DEGRADED",
+  "checkedAt": "2026-07-16T09:35:00Z",
+  "dependencies": [
+    {
+      "name": "BACKOFFICE_DB",
+      "status": "UP",
+      "details": {
+        "adminUsers": 3
+      },
+      "durationMs": 3
+    },
+    {
+      "name": "FXPEER_EXCHANGE_SERVICE",
+      "status": "DOWN",
+      "error": "FeignException",
+      "message": "Dependency probe failed.",
+      "durationMs": 1012
+    }
+  ]
+}
+```
+
+---
+
 # Deployment Notes for FE
 
 - Product create/update now returns `202` when approval is enabled. Do not expect the product list to update until checker approval is completed.
@@ -812,4 +943,6 @@ Sample create schedule request:
 - Use `/backoffice/profiling/{id}/customer-360` for customer detail where possible.
 - Use `/backoffice/notifications/unread-count` for the top-bar badge and poll/list `/backoffice/notifications`.
 - Use `/backoffice/reversals` for unified reversal screens instead of product-specific wrappers.
+- Use `/backoffice/search` for the global search bar and `/backoffice/saved-views` for admin-owned table filters/views.
+- Use `/backoffice/system/integration-health` for the operations dependency health screen before raising downstream tickets.
 - `app_config` edits should show “pending approval” if the endpoint returns `202`.

@@ -100,6 +100,8 @@ Target: 1-2 weeks.
 - Ensure remaining sensitive operations create approval requests instead of executing immediately.
 - Continue standardizing audit events with request id, actor, before/after snapshot, downstream response, IP, user-agent, approval id, and correlation id.
 - Admin session policy now exposes MFA requirement, idle timeout, privileged idle timeout, expiry warning, refresh-token rotation, and session revocation. Remaining items are lockout rules, password policy, IP allowlist, and final server-side idle enforcement if required.
+- Global search and saved views now have backend support: `/backoffice/search` aggregates customers, investment products, approvals, and group savings, while `/backoffice/saved-views` persists per-admin FE filters/table views. Remaining gap is richer ranked search once downstream services expose native search endpoints.
+- Ops dependency visibility now has backend support through `/backoffice/system/integration-health`, probing backoffice DB, profiling, FXPeer, and transactions. Remaining gap is CloudWatch/alert integration and health history persistence.
 
 ### Phase 2 - Pilot Operations MVP
 

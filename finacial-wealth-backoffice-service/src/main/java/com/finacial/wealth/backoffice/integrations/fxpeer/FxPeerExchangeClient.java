@@ -19,17 +19,15 @@ public interface FxPeerExchangeClient {
     Map<String, Object> updateOffer(@RequestBody Map<String, Object> request);
 
     @GetMapping(value = "/investments/admin/products", produces = MediaType.APPLICATION_JSON_VALUE)
-    Map<String, Object> getInvestmentProducts(@RequestHeader("authorization") String auth);
+    Map<String, Object> getInvestmentProducts();
 
     @GetMapping(value = "/investments/admin/products/{productCode}", produces = MediaType.APPLICATION_JSON_VALUE)
     Map<String, Object> getInvestmentProduct(
-            @RequestHeader("authorization") String auth,
             @PathVariable("productCode") String productCode
     );
 
     @GetMapping(value = "/investments/admin/products/{productCode}/history", produces = MediaType.APPLICATION_JSON_VALUE)
     Map<String, Object> getInvestmentProductHistory(
-            @RequestHeader("authorization") String auth,
             @PathVariable("productCode") String productCode
     );
 

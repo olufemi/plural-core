@@ -414,11 +414,11 @@ public class ApprovalService {
 
     @SuppressWarnings("unchecked")
     private Map<String, Object> fetchCurrentInvestmentProductSnapshot(String auth, String productCode) {
-        if (auth == null || auth.isBlank() || productCode == null || productCode.isBlank()) {
+        if (productCode == null || productCode.isBlank()) {
             return null;
         }
         try {
-            Map<String, Object> response = fxPeerExchangeClient.getInvestmentProduct(auth, productCode);
+            Map<String, Object> response = fxPeerExchangeClient.getInvestmentProduct(productCode);
             Object statusCode = response == null ? null : response.get("statusCode");
             if (statusCode != null && !"200".equals(String.valueOf(statusCode))) {
                 return null;

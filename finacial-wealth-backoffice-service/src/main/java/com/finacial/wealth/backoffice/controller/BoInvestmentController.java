@@ -54,8 +54,7 @@ public class BoInvestmentController {
             security = @SecurityRequirement(name = "bearerAuth")
     )
     public Map<String, Object> getProducts(HttpServletRequest req) {
-        String auth = req.getHeader("Authorization"); // preserve case
-        return fxPeerClient.getInvestmentProducts(auth);
+        return fxPeerClient.getInvestmentProducts();
     }
 
     @GetMapping("/products/{productCode}")
@@ -69,8 +68,7 @@ public class BoInvestmentController {
             @PathVariable String productCode,
             HttpServletRequest req
     ) {
-        String auth = req.getHeader("Authorization");
-        return toStatusResponse(fxPeerClient.getInvestmentProduct(auth, productCode));
+        return toStatusResponse(fxPeerClient.getInvestmentProduct(productCode));
     }
 
     @GetMapping("/products/{productCode}/history")
@@ -85,8 +83,7 @@ public class BoInvestmentController {
             @PathVariable String productCode,
             HttpServletRequest req
     ) {
-        String auth = req.getHeader("Authorization");
-        Map<String, Object> response = fxPeerClient.getInvestmentProductHistory(auth, productCode);
+        Map<String, Object> response = fxPeerClient.getInvestmentProductHistory(productCode);
         attachApprovalHistory(response, productCode);
         return toStatusResponse(response);
     }
@@ -389,10 +386,9 @@ public class BoInvestmentController {
             ))
     ))
     public void exportProducts(HttpServletResponse response, HttpServletRequest req) throws Exception {
-        String auth = req.getHeader("Authorization");
         Long adminUserId = (Long) req.getAttribute("boAdminUserId");
         response.setHeader("Content-Disposition", "attachment; filename=\"investment-products.csv\"");
-        Map<String, Object> data = fxPeerClient.getInvestmentProducts(auth);
+        Map<String, Object> data = fxPeerClient.getInvestmentProducts();
         List<Map<String, Object>> items = extractItems(data);
 
         List<String> headers = List.of("productCode", "name", "currency", "minimumInvestmentAmount", "status");

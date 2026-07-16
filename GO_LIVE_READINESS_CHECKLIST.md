@@ -35,6 +35,8 @@ The current release shape spans these areas:
 - notification channels: OTP, push notification, email, and ops alerts
 - AWS pilot-to-production infrastructure readiness
 - `app_config` runtime data/config governance
+- backoffice P2P FX operational bridges for market offers, seller offers, escrow operations, ratings, and receipts
+- backoffice VAS/Sochitel catalog visibility and airtime reversal retry support
 
 ## Services To Treat As A Coordinated Release Group
 
@@ -78,6 +80,8 @@ Reason:
 - SmartCore owns the ledger/accounting truth for customer, account, ledger, and posting operations
 - notification providers are part of user-visible onboarding, login, device-change, transfer, and ops-alert flows
 - Redis, RabbitMQ, and MySQL are runtime dependencies, not optional infrastructure
+- FXPeer owns P2P FX offers, orders, escrow, ratings, and receipts; backoffice now exposes secured wrappers for the currently available downstream contracts
+- FxPeer/Sochitel VAS owns provider categories/products and airtime reversal cases; backoffice now exposes secured wrappers for visibility and retry, while deeper reconciliation/refund workflow remains a production-hardening item
 
 ## AWS Infrastructure Readiness
 

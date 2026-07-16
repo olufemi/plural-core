@@ -727,6 +727,64 @@ FxPeer offer update request:
 
 ---
 
+# P2P FX Operations
+
+These endpoints are secured by the backoffice JWT. They bridge existing FXPeer service contracts so FE does not call mobile/customer FXPeer APIs directly.
+
+| Method | Path | Purpose |
+|---|---|---|
+| `GET` | `/bo/backoffice/p2p-fx/market/offers?ccySell=CAD&ccyRecv=NGN&page=0&size=20&sort=bestRate` | Browse market offers with filters and seller stats where available |
+| `GET` | `/bo/backoffice/p2p-fx/seller-offers?sellerId=123&status=ACTIVE&page=0&size=20` | List one seller's offers for admin oversight |
+| `GET` | `/bo/backoffice/p2p-fx/seller-offers/{offerId}?sellerId=123` | Get one seller offer |
+| `PATCH` | `/bo/backoffice/p2p-fx/seller-offers/{offerId}/rate?sellerId=123&rate=1520.25&reason=Corrected%20rate` | Admin rate intervention; reason is required |
+| `POST` | `/bo/backoffice/p2p-fx/seller-offers/{offerId}/cancel?sellerId=123&reason=Compliance%20hold` | Admin offer cancellation; reason is required |
+| `POST` | `/bo/backoffice/p2p-fx/orders/{orderId}/escrow/init?reason=Manual%20ops%20init` | Initialize escrow for an order |
+| `GET` | `/bo/backoffice/p2p-fx/escrows/{escrowId}` | Get escrow detail |
+| `POST` | `/bo/backoffice/p2p-fx/escrows/{escrowId}/fund/buyer?reason=Manual%20funding` | Fund buyer escrow leg. Requires `Idempotency-Key` header |
+| `POST` | `/bo/backoffice/p2p-fx/escrows/{escrowId}/fund/seller?reason=Manual%20funding` | Fund seller escrow leg. Requires `Idempotency-Key` header |
+| `POST` | `/bo/backoffice/p2p-fx/escrows/{escrowId}/release/buyer?reason=Dispute%20resolved` | Release buyer escrow leg |
+| `POST` | `/bo/backoffice/p2p-fx/escrows/{escrowId}/release/seller?reason=Trade%20completed` | Release seller escrow leg |
+| `GET` | `/bo/backoffice/p2p-fx/sellers/{sellerId}/ratings?page=0&size=20` | List seller ratings |
+| `GET` | `/bo/backoffice/p2p-fx/sellers/{sellerId}/stats` | Get seller trade/rating stats |
+| `GET` | `/bo/backoffice/p2p-fx/orders/{orderId}/receipt/buyer` | View buyer receipt HTML |
+| `GET` | `/bo/backoffice/p2p-fx/orders/{orderId}/receipt/seller` | View seller receipt HTML |
+
+Notes:
+
+- Escrow funding/release actions are sensitive money-movement operations. FE must capture a clear `reason` and send a unique `Idempotency-Key` where required.
+- These endpoints expose existing downstream capabilities. Full dispute workflow, AML flags, corridor controls, reconciliation workspace, and FX reports are still production-hardening items.
+
+---
+
+# VAS / Sochitel Operations
+
+| Method | Path | Purpose |
+|---|---|---|
+| `GET` | `/bo/backoffice/fxpeer/services/featured` | List featured VAS services |
+| `GET` | `/bo/backoffice/fxpeer/services/categories` | List VAS categories |
+| `POST` | `/bo/backoffice/fxpeer/services/products` | Lookup VAS products |
+| `POST` | `/bo/backoffice/fxpeer/services/products/by-category` | Lookup VAS products by category |
+| `POST` | `/bo/backoffice/fxpeer/services/products/by-country` | Lookup VAS products by country |
+| `GET` | `/bo/backoffice/fxpeer/services/airtime-reversals/summary` | Airtime reversal summary |
+| `GET` | `/bo/backoffice/fxpeer/services/airtime-reversals?status=PENDING` | Airtime reversal cases |
+| `POST` | `/bo/backoffice/fxpeer/services/airtime-reversals/{processId}/retry?reason=Provider%20timeout%20retry` | Retry an airtime reversal case |
+
+Example VAS product lookup:
+
+```json
+{
+  "countryCode": "NG",
+  "categoryId": "AIRTIME"
+}
+```
+
+Notes:
+
+- Backoffice now has provider/catalog visibility wrappers and reversal retry support.
+- Provider reconciliation, duplicate-detection dashboard, refund workflow, and full VAS reporting still need downstream support or new service workflow design.
+
+---
+
 # Reports
 
 Report/export endpoints are contract-ready for FE. In this pilot build jobs are completed immediately and held in service memory; persistent/background export storage can be added later without changing the FE contract.

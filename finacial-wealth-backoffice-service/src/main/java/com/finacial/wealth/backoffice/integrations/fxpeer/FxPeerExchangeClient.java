@@ -6,6 +6,7 @@ import com.finacial.wealth.backoffice.integrations.fxpeer.model.LiquidationAppro
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.*;
 
+import java.math.BigDecimal;
 import java.util.Map;
 import org.springframework.http.MediaType;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -15,8 +16,87 @@ import java.time.LocalDate;
 @FeignClient(name = "fxpeer-exchange-service", configuration = com.finacial.wealth.backoffice.config.FeignConfig.class)
 public interface FxPeerExchangeClient {
 
-    @PostMapping("/investment/offers/update-offer")
+    @PostMapping("/offers/update-offer")
     Map<String, Object> updateOffer(@RequestBody Map<String, Object> request);
+
+    @GetMapping(value = "/api/market/offers", produces = MediaType.APPLICATION_JSON_VALUE)
+    Map<String, Object> browseMarketOffers(
+            @RequestParam(required = false) String ccySell,
+            @RequestParam(required = false) String ccyRecv,
+            @RequestParam(required = false) BigDecimal rateMin,
+            @RequestParam(required = false) BigDecimal rateMax,
+            @RequestParam(required = false) BigDecimal amountMin,
+            @RequestParam(defaultValue = "0") Integer page,
+            @RequestParam(defaultValue = "20") Integer size,
+            @RequestParam(required = false, defaultValue = "bestRate") String sort
+    );
+
+    @GetMapping(value = "/offers/{offerId}", produces = MediaType.APPLICATION_JSON_VALUE)
+    Map<String, Object> getOffer(
+            @RequestHeader("X-User-Id") Long sellerId,
+            @PathVariable("offerId") Long offerId
+    );
+
+    @GetMapping(value = "/offers", produces = MediaType.APPLICATION_JSON_VALUE)
+    Map<String, Object> listSellerOffers(
+            @RequestHeader("X-User-Id") Long sellerId,
+            @RequestParam(required = false) String status,
+            @RequestParam(defaultValue = "0") Integer page,
+            @RequestParam(defaultValue = "20") Integer size
+    );
+
+    @PatchMapping(value = "/offers/{offerId}/rate", produces = MediaType.APPLICATION_JSON_VALUE)
+    Map<String, Object> updateOfferRate(
+            @RequestHeader("X-User-Id") Long sellerId,
+            @PathVariable("offerId") Long offerId,
+            @RequestParam BigDecimal rate
+    );
+
+    @PostMapping(value = "/offers/{offerId}/cancel", produces = MediaType.APPLICATION_JSON_VALUE)
+    Map<String, Object> cancelOffer(
+            @RequestHeader("X-User-Id") Long sellerId,
+            @PathVariable("offerId") Long offerId
+    );
+
+    @PostMapping(value = "/orders/orders/{orderId}/escrow/init", produces = MediaType.APPLICATION_JSON_VALUE)
+    Map<String, Object> initEscrow(@PathVariable("orderId") Long orderId);
+
+    @GetMapping(value = "/api/escrows/{escrowId}", produces = MediaType.APPLICATION_JSON_VALUE)
+    Map<String, Object> getEscrow(@PathVariable("escrowId") Long escrowId);
+
+    @PostMapping(value = "/api/escrows/{escrowId}/fund/buyer", produces = MediaType.APPLICATION_JSON_VALUE)
+    void fundEscrowBuyer(
+            @PathVariable("escrowId") Long escrowId,
+            @RequestHeader("Idempotency-Key") String idempotencyKey
+    );
+
+    @PostMapping(value = "/api/escrows/{escrowId}/fund/seller", produces = MediaType.APPLICATION_JSON_VALUE)
+    void fundEscrowSeller(
+            @PathVariable("escrowId") Long escrowId,
+            @RequestHeader("Idempotency-Key") String idempotencyKey
+    );
+
+    @PostMapping(value = "/api/escrows/{escrowId}/release/buyer", produces = MediaType.APPLICATION_JSON_VALUE)
+    void releaseEscrowBuyer(@PathVariable("escrowId") Long escrowId);
+
+    @PostMapping(value = "/api/escrows/{escrowId}/release/seller", produces = MediaType.APPLICATION_JSON_VALUE)
+    void releaseEscrowSeller(@PathVariable("escrowId") Long escrowId);
+
+    @GetMapping(value = "/api/sellers/{sellerId}/ratings", produces = MediaType.APPLICATION_JSON_VALUE)
+    Map<String, Object> getSellerRatings(
+            @PathVariable("sellerId") Long sellerId,
+            @RequestParam(defaultValue = "0") Integer page,
+            @RequestParam(defaultValue = "20") Integer size
+    );
+
+    @GetMapping(value = "/api/sellers/{sellerId}/stats", produces = MediaType.APPLICATION_JSON_VALUE)
+    Map<String, Object> getSellerStats(@PathVariable("sellerId") Long sellerId);
+
+    @GetMapping(value = "/api/orders/{orderId}/receipt/buyer", produces = MediaType.TEXT_HTML_VALUE)
+    String getBuyerReceiptHtml(@PathVariable("orderId") Long orderId);
+
+    @GetMapping(value = "/api/orders/{orderId}/receipt/seller", produces = MediaType.TEXT_HTML_VALUE)
+    String getSellerReceiptHtml(@PathVariable("orderId") Long orderId);
 
     @GetMapping(value = "/investments/admin/products", produces = MediaType.APPLICATION_JSON_VALUE)
     Map<String, Object> getInvestmentProducts();
@@ -33,6 +113,27 @@ public interface FxPeerExchangeClient {
 
     @GetMapping(value = "/fxothers/services/featured", produces = MediaType.APPLICATION_JSON_VALUE)
     Map<String, Object> getFeaturedServices(@RequestHeader("authorization") String auth);
+
+    @GetMapping(value = "/fxothers/int-utilities-get-categories", produces = MediaType.APPLICATION_JSON_VALUE)
+    Map<String, Object> getVasCategories(@RequestHeader("authorization") String auth);
+
+    @PostMapping(value = "/fxothers/get-all-products", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
+    Map<String, Object> getVasProducts(
+            @RequestHeader("authorization") String auth,
+            @RequestBody Map<String, Object> request
+    );
+
+    @PostMapping(value = "/fxothers/int-utilities-get-products", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
+    Map<String, Object> getVasProductsByCategory(
+            @RequestHeader("authorization") String auth,
+            @RequestBody Map<String, Object> request
+    );
+
+    @PostMapping(value = "/fxothers/int-utilities-get-products-by-country", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
+    Map<String, Object> getVasProductsByCountry(
+            @RequestHeader("authorization") String auth,
+            @RequestBody Map<String, Object> request
+    );
 
     @GetMapping(value = "/fxothers/admin/featured-services-config", produces = MediaType.APPLICATION_JSON_VALUE)
     Map<String, Object> getFeaturedServicesConfig(@RequestHeader("authorization") String auth);

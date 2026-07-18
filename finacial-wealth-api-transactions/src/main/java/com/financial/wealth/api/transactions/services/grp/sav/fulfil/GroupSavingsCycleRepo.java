@@ -23,6 +23,8 @@ public interface GroupSavingsCycleRepo extends JpaRepository<GroupSavingsCycle, 
     @Query("select c from GroupSavingsCycle c where c.groupId=:groupId and c.cycleNumber=:cycle")
     Optional<GroupSavingsCycle> lockOne(@Param("groupId") Long groupId, @Param("cycle") Integer cycle);
 
+    List<GroupSavingsCycle> findByGroupIdOrderByCycleNumberAsc(Long groupId);
+
     @Query("select c from GroupSavingsCycle c " +
             "where c.contributionDate <= :today and c.contributionWindowEnd >= :today " +
             "and c.status in (com.financial.wealth.api.transactions.services.grp.sav.fulfil.GroupSavingsCycle$CycleStatus.PENDING," +

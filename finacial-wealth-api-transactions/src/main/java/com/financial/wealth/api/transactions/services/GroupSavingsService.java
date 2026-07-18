@@ -169,6 +169,7 @@ public class GroupSavingsService {
         this.groupSavingsCycleRepo = groupSavingsCycleRepo;
     }
 
+    @Transactional
     public BaseResponse deleteGroupSaving(GroupSavingConf rq, String channel, String auth) {
         BaseResponse responseModel = new BaseResponse();
         int statusCode = 500;
@@ -234,7 +235,7 @@ public class GroupSavingsService {
 
                 itsId = true;
 
-                updateRecord = groupSavingsDataRepo.findByInviteCodeDe(rq.getInvitationCodeReqId());
+                updateRecord = groupSavingsDataRepo.findByInviteCodeForUpdate(rq.getInvitationCodeReqId());
                 updateRecord.setLastModifiedDate(Instant.now());
 
                 updateRecord.setIsTrnsactionDeleted("1");
@@ -256,7 +257,7 @@ public class GroupSavingsService {
                 }
                 itsIdLink = true;
 
-                updateRecord = groupSavingsDataRepo.findByTransactionIdLinkDe(rq.getInvitationCodeReqId());
+                updateRecord = groupSavingsDataRepo.findByTransactionIdLinkForUpdate(rq.getInvitationCodeReqId());
                 updateRecord.setLastModifiedDate(Instant.now());
                 updateRecord.setIsTrnsactionDeleted("1");
                 updateRecord.setIsTrnsactionDeletedDesc("Deleted");
@@ -1131,6 +1132,7 @@ public class GroupSavingsService {
 
     }
 
+    @Transactional
     public BaseResponse confirmCreateTransaction(GroupSavingConf rq, String channel, String auth) {
         BaseResponse responseModel = new BaseResponse();
         int statusCode = 500;
@@ -1208,7 +1210,7 @@ public class GroupSavingsService {
 
                 itsId = true;
 
-                updateRecord = groupSavingsDataRepo.findByInviteCodeDe(rq.getInvitationCodeReqId());
+                updateRecord = groupSavingsDataRepo.findByInviteCodeForUpdate(rq.getInvitationCodeReqId());
                 updateRecord.setLastModifiedDate(Instant.now());
                 updateRecord.setTransactionStatus("2");
                 updateRecord.setTransactionStatusDesc("Created");
@@ -1288,7 +1290,7 @@ public class GroupSavingsService {
 
                 itsIdLink = true;
 
-                updateRecord = groupSavingsDataRepo.findByTransactionIdLinkDe(rq.getInvitationCodeReqId());
+                updateRecord = groupSavingsDataRepo.findByTransactionIdLinkForUpdate(rq.getInvitationCodeReqId());
                 updateRecord.setLastModifiedDate(Instant.now());
                 updateRecord.setTransactionStatus("2");
                 updateRecord.setTransactionStatusDesc("Created");
@@ -1367,6 +1369,7 @@ public class GroupSavingsService {
         return responseModel;
     }
 
+    @Transactional
     public BaseResponse activateGroup(GroupSavingActivation rq, String channel, String auth) {
         BaseResponse responseModel = new BaseResponse();
         int statusCode = 500;
@@ -1502,7 +1505,7 @@ public class GroupSavingsService {
                 }
                 itsId = true;
 
-                updateRecord = groupSavingsDataRepo.findByInviteCodeDe(rq.getInvitationCodeReqId());
+                updateRecord = groupSavingsDataRepo.findByInviteCodeForUpdate(rq.getInvitationCodeReqId());
                 updateRecord.setLastModifiedDate(Instant.now());
                 updateRecord.setTransactionStatus("3");
                 updateRecord.setTransactionStatusDesc("Activate");
@@ -1582,7 +1585,7 @@ public class GroupSavingsService {
                 }
                 itsIdLink = true;
 
-                updateRecord = groupSavingsDataRepo.findByTransactionIdLinkDe(rq.getInvitationCodeReqId());
+                updateRecord = groupSavingsDataRepo.findByTransactionIdLinkForUpdate(rq.getInvitationCodeReqId());
                 updateRecord.setLastModifiedDate(Instant.now());
                 updateRecord.setTransactionStatus("3");
                 updateRecord.setTransactionStatusDesc("Activate");
@@ -1734,6 +1737,7 @@ public class GroupSavingsService {
 
     }
 
+    @Transactional
     public BaseResponse addMembers(AddedMembersFE rq, String channel, String auth) {
         final BaseResponse resp = new BaseResponse();
         int errorCode = 400;
@@ -1941,6 +1945,7 @@ public class GroupSavingsService {
         }
     }
 
+    @Transactional
     public BaseResponse addMembersOld(AddedMembersFE rq, String channel, String auth) {
         BaseResponse responseModel = new BaseResponse();
         int statusCode = 500;
@@ -2127,7 +2132,7 @@ public class GroupSavingsService {
                 numMems = chkPendId.get(0).getNumberOfMembers();
 
                 getAddedMemberString = chkPendId.get(0).getAddedMembersModels();
-                updateRecord = groupSavingsDataRepo.findByInviteCodeDe(rq.getInvitationCodeReqId());
+                updateRecord = groupSavingsDataRepo.findByInviteCodeForUpdate(rq.getInvitationCodeReqId());
                 updateRecord.setLastModifiedDate(Instant.now());
 
                 responseModel.addData("InviteCode", chkPendId.get(0).getInviteCode());
@@ -2171,7 +2176,7 @@ public class GroupSavingsService {
 
                 getAddedMemberString = chkPendIdLink.get(0).getAddedMembersModels();
 
-                updateRecord = groupSavingsDataRepo.findByInviteCodeDe(rq.getInvitationCodeReqId());
+                updateRecord = groupSavingsDataRepo.findByTransactionIdLinkForUpdate(rq.getInvitationCodeReqId());
                 updateRecord.setLastModifiedDate(Instant.now());
 
                 responseModel.addData("InviteCode", chkPendIdLink.get(0).getInviteCode());
@@ -2659,6 +2664,7 @@ public class GroupSavingsService {
     //send swap request to receiver
     //swap request could either be accepted or failed
     //if accepted update repective paired swap
+    @Transactional
     public BaseResponse sendSwapRequest(SwapSlotReq rq, String channel, String auth) {
         BaseResponse responseModel = new BaseResponse();
         int statusCode = 500;
@@ -2881,6 +2887,7 @@ public class GroupSavingsService {
         return responseModel;
     }
 
+    @Transactional
     public BaseResponse joinGroup(JoinGroupRequest rq, String channel, String auth) {
         BaseResponse responseModel = new BaseResponse();
         int statusCode = 500;
@@ -3031,7 +3038,7 @@ public class GroupSavingsService {
                 return responseModel;
             }
 
-            GroupSavingsData getByInvite = groupSavingsDataRepo.findByInviteCodeDe(rq.getInvitationCodeReqId());
+            GroupSavingsData getByInvite = groupSavingsDataRepo.findByInviteCodeForUpdate(rq.getInvitationCodeReqId());
 
             for (GroupSavingsData getByCodeI : getALLGROUPS) {
 
@@ -3053,10 +3060,12 @@ public class GroupSavingsService {
                                 getByInvite.setLastModifiedDate(Instant.now());
                                 boolean found = false;
                                 int target = getMemsByCode.getSlot();
-                                for (int n : getByInvite.getAvailablePayOutSlot()) {
-                                    if (n == target) {
-                                        found = true;
-                                        break;
+                                if (getByInvite.getAvailablePayOutSlot() != null) {
+                                    for (int n : getByInvite.getAvailablePayOutSlot()) {
+                                        if (n == target) {
+                                            found = true;
+                                            break;
+                                        }
                                     }
                                 }
 
@@ -3082,7 +3091,7 @@ public class GroupSavingsService {
 
             GroupSavingsData getagain = groupSavingsDataRepo.findByInviteCodeDe(rq.getInvitationCodeReqId());
 
-            if (getagain.getAvailablePayOutSlot() != null || getagain.getAvailablePayOutSlot().length != 0) {
+            if (getagain.getAvailablePayOutSlot() != null && getagain.getAvailablePayOutSlot().length != 0) {
                 System.out.println("getagain.getAvailablePayOutSlot() == null || getagain.getAvailablePayOutSlot().length == 0" + "  :::::::::::::::::::::   ");
 
                 //set transactionStatus = 4
@@ -3107,6 +3116,7 @@ public class GroupSavingsService {
         return responseModel;
     }
 
+    @Transactional
     public BaseResponse leaveGroup(LeaveGroupRequest rq, String channel, String auth) {
         BaseResponse responseModel = new BaseResponse();
         int statusCode = 500;
@@ -3158,7 +3168,7 @@ public class GroupSavingsService {
                 return responseModel;
 
             }*/
-            GroupSavingsData group = groupSavingsDataRepo.findByInviteCodeDe(rq.getInvitationCodeReqId());
+            GroupSavingsData group = groupSavingsDataRepo.findByInviteCodeForUpdate(rq.getInvitationCodeReqId());
             if (group == null || "1".equals(group.getIsTrnsactionDeleted())) {
                 responseModel.setDescription("Invalid or deleted group.");
                 responseModel.setStatusCode(statusCode);
@@ -3202,7 +3212,7 @@ public class GroupSavingsService {
 
             // Restore payout slot
             if (slotToRestore != null) {
-                int[] currentSlots = group.getAvailablePayOutSlot();
+                int[] currentSlots = group.getAvailablePayOutSlot() == null ? new int[0] : group.getAvailablePayOutSlot();
                 int[] updatedSlots = Arrays.copyOf(currentSlots, currentSlots.length + 1);
                 updatedSlots[updatedSlots.length - 1] = slotToRestore;
                 group.setAvailablePayOutSlot(updatedSlots);
@@ -3484,7 +3494,7 @@ public class GroupSavingsService {
                 return set(resp, statusCode, MSG_NO_GROUP);
             }
 
-            final GroupSavingsData group = groupSavingsDataRepo.findByInviteCodeDe(rq.getInvitationCodeReqId());
+            final GroupSavingsData group = groupSavingsDataRepo.findByInviteCodeForUpdate(rq.getInvitationCodeReqId());
             if (group == null || "1".equals(group.getIsTrnsactionDeleted())) {
                 logFailure(MSG_NO_GROUP);
                 return set(resp, statusCode, MSG_NO_GROUP);
@@ -3506,17 +3516,19 @@ public class GroupSavingsService {
                 final AddMembersModels receiver = byEmail.get(swap.getReceiverEmailAddress());
                 final AddMembersModels sender = byEmail.get(swap.getSenderEmailAddress());
 
-                if (receiver != null && sender != null) {
-                    // swap the slots
-                    final int tmp = receiver.getSlot();
-                    receiver.setSlot(swap.getSenderSlot());
-                    sender.setSlot(swap.getReceiverSlot());
-
-                    group.setAddedMembersModels(mapper.writeValueAsString(members));
-                    group.setLastModifiedDate(Instant.now());
-                    groupSavingsDataRepo.save(group);
+                if (receiver == null || sender == null) {
+                    logFailure("Unable to resolve group members for slot swap.");
+                    return set(resp, statusCode, "Unable to resolve group members for slot swap.");
                 }
-                // If either is missing, we still accept the swap to keep business flow predictable.
+
+                // swap the slots
+                final int tmp = receiver.getSlot();
+                receiver.setSlot(swap.getSenderSlot());
+                sender.setSlot(swap.getReceiverSlot());
+
+                group.setAddedMembersModels(mapper.writeValueAsString(members));
+                group.setLastModifiedDate(Instant.now());
+                groupSavingsDataRepo.save(group);
             }
 
             // --- Mark swap accepted
@@ -3553,6 +3565,7 @@ public class GroupSavingsService {
         settlementFailureLogRepo.save(new SettlementFailureLog("", "", msg));
     }
 
+    @Transactional
     public BaseResponse acceptDeclineSwapOld(AcceptDeclineSwapSlotReq rq, String channel, String auth) {
         BaseResponse responseModel = new BaseResponse();
         int statusCode = 500;
@@ -3662,7 +3675,7 @@ public class GroupSavingsService {
                 return responseModel;
             }
 
-            GroupSavingsData getByInvite = groupSavingsDataRepo.findByInviteCodeDe(rq.getInvitationCodeReqId());
+            GroupSavingsData getByInvite = groupSavingsDataRepo.findByInviteCodeForUpdate(rq.getInvitationCodeReqId());
 
             for (GroupSavingsData getByCodeI : getALLGROUPS) {
 

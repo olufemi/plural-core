@@ -60,4 +60,19 @@ public class AdminGroupSavingsController {
     public ResponseEntity<ApiResponseModel> closeGroup(@PathVariable Long groupId) {
         return new ResponseEntity<>(groupSavingsAdminService.closeGroup(groupId), HttpStatus.OK);
     }
+
+    @GetMapping("/groups/{groupId}/cycle-health")
+    public ResponseEntity<ApiResponseModel> getGroupCycleHealth(@PathVariable Long groupId) {
+        return new ResponseEntity<>(groupSavingsAdminService.getGroupCycleHealth(groupId), HttpStatus.OK);
+    }
+
+    @GetMapping("/cycles/{cycleId}/health")
+    public ResponseEntity<ApiResponseModel> getCycleHealth(@PathVariable Long cycleId) {
+        return new ResponseEntity<>(groupSavingsAdminService.getCycleHealth(cycleId), HttpStatus.OK);
+    }
+
+    @PostMapping("/cycles/{cycleId}/retry-failed")
+    public ResponseEntity<ApiResponseModel> retryFailedCycle(@PathVariable Long cycleId) {
+        return new ResponseEntity<>(groupSavingsAdminService.retryFailedCycle(cycleId), HttpStatus.OK);
+    }
 }

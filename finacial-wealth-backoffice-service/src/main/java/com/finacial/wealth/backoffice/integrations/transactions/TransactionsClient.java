@@ -50,4 +50,13 @@ public interface TransactionsClient {
 
   @PostMapping("/api/transactions/admin/group-savings/groups/{groupId}/close")
   Map<String, Object> closeGroupSavingsGroup(@PathVariable("groupId") Long groupId);
+
+  @GetMapping("/api/transactions/admin/group-savings/groups/{groupId}/cycle-health")
+  Map<String, Object> getGroupSavingsCycleHealth(@PathVariable("groupId") Long groupId);
+
+  @GetMapping("/api/transactions/admin/group-savings/cycles/{cycleId}/health")
+  Map<String, Object> getGroupSavingsCycleHealthByCycle(@PathVariable("cycleId") Long cycleId);
+
+  @PostMapping("/api/transactions/admin/group-savings/cycles/{cycleId}/retry-failed")
+  Map<String, Object> retryFailedGroupSavingsCycle(@PathVariable("cycleId") Long cycleId);
 }

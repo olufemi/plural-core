@@ -70,6 +70,40 @@ public class BoGroupSavingsController {
         return transactionsClient.closeGroupSavingsGroup(groupId);
     }
 
+    @GetMapping("/groups/{groupId}/cycle-health")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','ADMIN','OPERATIONS','FINANCE')")
+    @Operation(
+            summary = "Get group savings cycle health",
+            description = "Returns per-cycle contribution and payout health so backoffice can identify failed, expired, pending, and completed cycle work.",
+            security = @SecurityRequirement(name = "bearerAuth")
+    )
+    public Map<String, Object> getGroupCycleHealth(@PathVariable Long groupId) {
+        return transactionsClient.getGroupSavingsCycleHealth(groupId);
+    }
+
+    @GetMapping("/cycles/{cycleId}/health")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','ADMIN','OPERATIONS','FINANCE')")
+    @Operation(
+            summary = "Get one group savings cycle health record",
+            description = "Returns contribution and payout detail for one cycle.",
+            security = @SecurityRequirement(name = "bearerAuth")
+    )
+    public Map<String, Object> getCycleHealth(@PathVariable Long cycleId) {
+        return transactionsClient.getGroupSavingsCycleHealthByCycle(cycleId);
+    }
+
+    @PostMapping("/cycles/{cycleId}/retry-failed")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','ADMIN','OPERATIONS')")
+    @Audited(action = "RETRY_FAILED_GROUP_SAVING_CYCLE", entityType = "GROUP_SAVINGS")
+    @Operation(
+            summary = "Requeue failed group savings cycle records",
+            description = "Resets failed contribution and payout records to PENDING after operations confirms downstream ledger state. The scheduler/processor can then pick eligible records up again.",
+            security = @SecurityRequirement(name = "bearerAuth")
+    )
+    public Map<String, Object> retryFailedCycle(@PathVariable Long cycleId) {
+        return transactionsClient.retryFailedGroupSavingsCycle(cycleId);
+    }
+
     @GetMapping("/contribution-payout-monitoring")
     @PreAuthorize("hasAnyRole('SUPER_ADMIN','ADMIN','OPERATIONS','FINANCE')")
     @Operation(

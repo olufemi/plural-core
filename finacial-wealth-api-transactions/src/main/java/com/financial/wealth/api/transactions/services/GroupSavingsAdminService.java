@@ -30,6 +30,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
@@ -244,6 +245,111 @@ public class GroupSavingsAdminService {
         return success("Slot assignment and tracking fetched successfully.", data);
     }
 
+
+    public ApiResponseModel getGroupCycleHealth(Long groupId) {
+        return groupSavingsDataRepo.findById(groupId)
+                .map(group -> {
+                    List<AddMembersModels> members = readMembers(group);
+                    List<GroupSavingsCycle> cycles = groupSavingsCycleRepo.findByGroupIdOrderByCycleNumberAsc(groupId);
+                    List<Map<String, Object>> rows = cycles.stream()
+                            .map(cycle -> toCycleHealthRow(cycle, group, members))
+                            .collect(Collectors.toList());
+
+                    long attentionCount = rows.stream()
+                            .filter(row -> "ATTENTION".equals(row.get("healthStatus")) || "EXPIRED".equals(row.get("healthStatus")))
+                            .count();
+                    long settledCount = rows.stream()
+                            .filter(row -> "COMPLETED".equals(row.get("healthStatus")))
+                            .count();
+
+                    Map<String, Object> summary = new LinkedHashMap<>();
+                    summary.put("groupId", group.getId());
+                    summary.put("groupName", group.getGroupSavingName());
+                    summary.put("expectedMembers", members.size());
+                    summary.put("cycleCount", rows.size());
+                    summary.put("completedCycles", settledCount);
+                    summary.put("cyclesNeedingAttention", attentionCount);
+                    summary.put("lastUpdatedAt", Instant.now().toString());
+
+                    Map<String, Object> data = new LinkedHashMap<>();
+                    data.put("summary", summary);
+                    data.put("cycles", rows);
+                    data.put("actionHints", java.util.Arrays.asList(
+                            "Use retry-failed only after validating the failed debit/credit did not already settle downstream.",
+                            "If schedulerEligible=false, operations must extend the cycle window or handle settlement manually before expecting the scheduler to pick it up."
+                    ));
+                    return success("Group savings cycle health fetched successfully.", data);
+                })
+                .orElseGet(() -> error(404, "Group savings group not found."));
+    }
+
+    public ApiResponseModel getCycleHealth(Long cycleId) {
+        return groupSavingsCycleRepo.findById(cycleId)
+                .map(cycle -> {
+                    GroupSavingsData group = groupSavingsDataRepo.findById(cycle.getGroupId()).orElse(null);
+                    List<AddMembersModels> members = readMembers(group);
+                    return success("Group savings cycle health fetched successfully.", toCycleHealthRow(cycle, group, members));
+                })
+                .orElseGet(() -> error(404, "Group savings cycle not found."));
+    }
+
+    @Transactional
+    public ApiResponseModel retryFailedCycle(Long cycleId) {
+        GroupSavingsCycle cycle = groupSavingsCycleRepo.findById(cycleId).orElse(null);
+        if (cycle == null) {
+            return error(404, "Group savings cycle not found.");
+        }
+        GroupSavingsData group = groupSavingsDataRepo.findById(cycle.getGroupId()).orElse(null);
+        if (group == null) {
+            return error(404, "Group savings group not found.");
+        }
+
+        Instant now = Instant.now();
+        List<GroupContribution> contributions = groupContributionRepo.lockByGroupIdAndCycleNumber(cycle.getGroupId(), cycle.getCycleNumber());
+        int requeuedContributions = 0;
+        for (GroupContribution contribution : contributions) {
+            if (contribution.getStatus() == GroupContribution.Status.FAILED) {
+                contribution.setStatus(GroupContribution.Status.PENDING);
+                contribution.setProviderRef(null);
+                contribution.setLastUpdatedAt(now);
+                requeuedContributions++;
+            }
+        }
+        if (requeuedContributions > 0) {
+            groupContributionRepo.saveAll(contributions);
+        }
+
+        GroupPayout payout = groupPayoutRepo.lockByGroupIdAndCycleNumber(cycle.getGroupId(), cycle.getCycleNumber()).orElse(null);
+        boolean requeuedPayout = false;
+        if (payout != null && payout.getStatus() == GroupPayout.Status.FAILED) {
+            payout.setStatus(GroupPayout.Status.PENDING);
+            payout.setProviderRef(null);
+            payout.setLastUpdatedAt(now);
+            groupPayoutRepo.save(payout);
+            requeuedPayout = true;
+        }
+
+        long settled = contributions.stream()
+                .filter(contribution -> contribution.getStatus() == GroupContribution.Status.SETTLED)
+                .count();
+        int expectedMembers = readMembers(group).size();
+        if (cycle.getStatus() == GroupSavingsCycle.CycleStatus.EXPIRED || cycle.getStatus() == GroupSavingsCycle.CycleStatus.PAID) {
+            cycle.setStatus(settled >= expectedMembers && expectedMembers > 0
+                    ? GroupSavingsCycle.CycleStatus.AWAITING_PAYOUT
+                    : GroupSavingsCycle.CycleStatus.IN_PROGRESS);
+            cycle.setLastUpdatedAt(now);
+            groupSavingsCycleRepo.save(cycle);
+        }
+
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("cycle", toCycleHealthRow(cycle, group, readMembers(group)));
+        data.put("requeuedContributions", requeuedContributions);
+        data.put("requeuedPayout", requeuedPayout);
+        data.put("schedulerEligible", schedulerEligible(cycle));
+        data.put("note", "Failed records were reset to PENDING. Confirm downstream ledger state before retrying to avoid duplicate debit or credit.");
+        return success("Group savings failed cycle records requeued successfully.", data);
+    }
+
     private ApiResponseModel success(String description, Object data) {
         ApiResponseModel response = new ApiResponseModel();
         response.setStatusCode(200);
@@ -302,6 +408,120 @@ public class GroupSavingsAdminService {
                 .map(this::toCycleRow)
                 .collect(Collectors.toList()));
         return detail;
+    }
+
+
+    private Map<String, Object> toCycleHealthRow(GroupSavingsCycle cycle, GroupSavingsData group, List<AddMembersModels> members) {
+        List<GroupContribution> contributions = groupContributionRepo.findByGroupIdAndCycleNumber(cycle.getGroupId(), cycle.getCycleNumber());
+        GroupPayout payout = groupPayoutRepo.findByGroupIdAndCycleNumber(cycle.getGroupId(), cycle.getCycleNumber()).orElse(null);
+
+        long settled = countContributions(contributions, GroupContribution.Status.SETTLED);
+        long pending = countContributions(contributions, GroupContribution.Status.PENDING);
+        long processing = countContributions(contributions, GroupContribution.Status.PROCESSING);
+        long failed = countContributions(contributions, GroupContribution.Status.FAILED);
+        BigDecimal settledAmount = sumAmounts(contributions.stream()
+                .filter(contribution -> contribution.getStatus() == GroupContribution.Status.SETTLED)
+                .map(GroupContribution::getAmount)
+                .collect(Collectors.toList()));
+
+        Map<String, Object> row = new LinkedHashMap<>();
+        row.put("cycleId", cycle.getId());
+        row.put("groupId", cycle.getGroupId());
+        row.put("groupName", groupName(group));
+        row.put("cycleNumber", cycle.getCycleNumber());
+        row.put("contributionDate", cycle.getContributionDate() != null ? cycle.getContributionDate().toString() : null);
+        row.put("contributionWindowEnd", cycle.getContributionWindowEnd() != null ? cycle.getContributionWindowEnd().toString() : null);
+        row.put("payoutDate", cycle.getPayoutDate() != null ? cycle.getPayoutDate().toString() : null);
+        row.put("cycleStatus", cycle.getStatus() != null ? cycle.getStatus().name() : null);
+        row.put("expectedContributionCount", members.size());
+        row.put("actualContributionCount", contributions.size());
+        row.put("settledContributionCount", settled);
+        row.put("pendingContributionCount", pending);
+        row.put("processingContributionCount", processing);
+        row.put("failedContributionCount", failed);
+        row.put("settledContributionAmount", settledAmount);
+        row.put("schedulerEligible", schedulerEligible(cycle));
+        row.put("payout", toPayoutHealthRow(payout));
+        row.put("healthStatus", cycleHealthStatus(cycle, members.size(), settled, failed, payout));
+        row.put("recommendedAction", cycleRecommendedAction(cycle, members.size(), settled, failed, payout));
+        row.put("contributions", contributions.stream()
+                .sorted(Comparator.comparing(GroupContribution::getId))
+                .map(this::toContributionHealthRow)
+                .collect(Collectors.toList()));
+        return row;
+    }
+
+    private long countContributions(List<GroupContribution> contributions, GroupContribution.Status status) {
+        return contributions.stream().filter(contribution -> contribution.getStatus() == status).count();
+    }
+
+    private Map<String, Object> toContributionHealthRow(GroupContribution contribution) {
+        Map<String, Object> row = new LinkedHashMap<>();
+        row.put("contributionId", contribution.getId());
+        row.put("memberWalletId", contribution.getMemberWalletId());
+        row.put("amount", contribution.getAmount());
+        row.put("status", contribution.getStatus() != null ? contribution.getStatus().name() : null);
+        row.put("idempotencyRef", contribution.getIdempotencyRef());
+        row.put("providerRef", contribution.getProviderRef());
+        row.put("createdAt", contribution.getCreatedAt() != null ? contribution.getCreatedAt().toString() : null);
+        row.put("lastUpdatedAt", contribution.getLastUpdatedAt() != null ? contribution.getLastUpdatedAt().toString() : null);
+        return row;
+    }
+
+    private Map<String, Object> toPayoutHealthRow(GroupPayout payout) {
+        if (payout == null) {
+            return null;
+        }
+        Map<String, Object> row = new LinkedHashMap<>();
+        row.put("payoutId", payout.getId());
+        row.put("receiverWalletId", payout.getReceiverWalletId());
+        row.put("amount", payout.getAmount());
+        row.put("status", payout.getStatus() != null ? payout.getStatus().name() : null);
+        row.put("idempotencyRef", payout.getIdempotencyRef());
+        row.put("providerRef", payout.getProviderRef());
+        row.put("createdAt", payout.getCreatedAt() != null ? payout.getCreatedAt().toString() : null);
+        row.put("lastUpdatedAt", payout.getLastUpdatedAt() != null ? payout.getLastUpdatedAt().toString() : null);
+        return row;
+    }
+
+    private boolean schedulerEligible(GroupSavingsCycle cycle) {
+        LocalDate today = LocalDate.now(AFRICA_LAGOS);
+        return cycle.getContributionDate() != null
+                && cycle.getContributionWindowEnd() != null
+                && !today.isBefore(cycle.getContributionDate())
+                && !today.isAfter(cycle.getContributionWindowEnd());
+    }
+
+    private String cycleHealthStatus(GroupSavingsCycle cycle, int expectedMembers, long settled, long failed, GroupPayout payout) {
+        if (failed > 0 || (payout != null && payout.getStatus() == GroupPayout.Status.FAILED)) {
+            return "ATTENTION";
+        }
+        if (cycle.getStatus() == GroupSavingsCycle.CycleStatus.EXPIRED) {
+            return "EXPIRED";
+        }
+        if (cycle.getStatus() == GroupSavingsCycle.CycleStatus.PAID || (payout != null && payout.getStatus() == GroupPayout.Status.SETTLED)) {
+            return "COMPLETED";
+        }
+        if (expectedMembers > 0 && settled < expectedMembers) {
+            return "WAITING_CONTRIBUTIONS";
+        }
+        return "WAITING_PAYOUT";
+    }
+
+    private String cycleRecommendedAction(GroupSavingsCycle cycle, int expectedMembers, long settled, long failed, GroupPayout payout) {
+        if (failed > 0 || (payout != null && payout.getStatus() == GroupPayout.Status.FAILED)) {
+            return "Review downstream ledger state, then call retry-failed if debit/credit did not settle.";
+        }
+        if (cycle.getStatus() == GroupSavingsCycle.CycleStatus.EXPIRED) {
+            return "Review expired cycle and decide whether to extend window or close manually.";
+        }
+        if (expectedMembers > 0 && settled < expectedMembers) {
+            return "Monitor pending member contributions.";
+        }
+        if (payout == null || payout.getStatus() != GroupPayout.Status.SETTLED) {
+            return "Monitor payout settlement.";
+        }
+        return "No action required.";
     }
 
     private Map<String, Object> toCycleRow(GroupSavingsCycle cycle) {

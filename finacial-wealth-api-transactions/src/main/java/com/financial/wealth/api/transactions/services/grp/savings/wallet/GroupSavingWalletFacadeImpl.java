@@ -188,7 +188,11 @@ public class GroupSavingWalletFacadeImpl implements WalletFacade {
             throw new IllegalStateException(debitAcct.getDescription() != null ? debitAcct.getDescription() : "Transaction processing failed");
         }
 
+        txn.setWalletPocRef(reff);
+        txn.setStatus(GroupSavingWalletTxnStatus.SUCCESS);
+        txnRepo.saveAndFlush(txn);
 
+        try {
             FinWealthPaymentTransaction kTrans2b = new FinWealthPaymentTransaction();
             kTrans2b.setAmmount(amount);
             kTrans2b.setCreatedDate(Instant.now().plusSeconds(1));
@@ -236,9 +240,9 @@ public class GroupSavingWalletFacadeImpl implements WalletFacade {
                 }
             }
 
-        txn.setWalletPocRef(reff);
-        txn.setStatus(GroupSavingWalletTxnStatus.SUCCESS);
-        txnRepo.save(txn);
+        } catch (Exception sideEffectEx) {
+            System.out.println("Group savings debit side-effect failed after core success :::::::: " + sideEffectEx.getMessage());
+        }
 
         return txn.getId();
     }
@@ -330,7 +334,11 @@ public class GroupSavingWalletFacadeImpl implements WalletFacade {
             throw new IllegalStateException(creditAcct.getDescription() != null ? creditAcct.getDescription() : "Transaction processing failed");
         }
 
+        txn.setWalletPocRef(reff);
+        txn.setStatus(GroupSavingWalletTxnStatus.SUCCESS);
+        txnRepo.saveAndFlush(txn);
 
+        try {
             FinWealthPaymentTransaction kTrans2b = new FinWealthPaymentTransaction();
             kTrans2b.setAmmount(amount);
             kTrans2b.setCreatedDate(Instant.now().plusSeconds(1));
@@ -380,15 +388,16 @@ public class GroupSavingWalletFacadeImpl implements WalletFacade {
                 }
             }
 
+        } catch (Exception sideEffectEx) {
+            System.out.println("Group savings credit side-effect failed after core success :::::::: " + sideEffectEx.getMessage());
+        }
+
         /*Wallet wallet = walletRepo.findByIdForUpdate(walletId)
                 .orElseThrow(() -> new IllegalArgumentException("Wallet not found: " + walletId));
 
         wallet.setBalance(wallet.getBalance().add(amount));
         walletRepo.save(wallet);*/
         //here call wallet-service
-        txn.setStatus(GroupSavingWalletTxnStatus.SUCCESS);
-        txnRepo.save(txn);
-
         return txn.getId();
     }
 

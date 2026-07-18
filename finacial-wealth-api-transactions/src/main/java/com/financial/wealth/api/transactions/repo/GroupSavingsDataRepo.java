@@ -7,7 +7,9 @@ package com.financial.wealth.api.transactions.repo;
 
 import com.financial.wealth.api.transactions.domain.GroupSavingsData;
 import java.util.List;
+import javax.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
 
@@ -44,6 +46,10 @@ public interface GroupSavingsDataRepo extends JpaRepository<GroupSavingsData, Lo
 
     @Query("select bs from GroupSavingsData bs where bs.inviteCode=:inviteCode")
     GroupSavingsData findByInviteCodeDe(String inviteCode);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select bs from GroupSavingsData bs where bs.inviteCode=:inviteCode")
+    GroupSavingsData findByInviteCodeForUpdate(String inviteCode);
     
      @Query("select ud from GroupSavingsData ud where ud.transactionIdLink=:transactionIdLink")
     List<GroupSavingsData> findByTransactionIdLink(String transactionIdLink);
@@ -54,5 +60,9 @@ public interface GroupSavingsDataRepo extends JpaRepository<GroupSavingsData, Lo
 
     @Query("select bs from GroupSavingsData bs where bs.transactionIdLink=:transactionIdLink")
     GroupSavingsData findByTransactionIdLinkDe(String transactionIdLink);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select bs from GroupSavingsData bs where bs.transactionIdLink=:transactionIdLink")
+    GroupSavingsData findByTransactionIdLinkForUpdate(String transactionIdLink);
 
 }

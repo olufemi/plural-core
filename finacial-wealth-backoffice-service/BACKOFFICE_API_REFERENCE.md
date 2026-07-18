@@ -664,9 +664,87 @@ Deletion request:
 | `GET` | `/bo/backoffice/group-savings/groups?page=0&size=20&status=ACTIVE` | List groups |
 | `GET` | `/bo/backoffice/group-savings/groups/{groupId}` | Get group detail |
 | `POST` | `/bo/backoffice/group-savings/groups/{groupId}/close` | Close group |
+| `GET` | `/bo/backoffice/group-savings/groups/{groupId}/cycle-health` | Per-cycle contribution/payout health for one group |
+| `GET` | `/bo/backoffice/group-savings/cycles/{cycleId}/health` | Contribution/payout health for one cycle |
+| `POST` | `/bo/backoffice/group-savings/cycles/{cycleId}/retry-failed` | Requeue failed contribution/payout records for a cycle after ops review |
 | `GET` | `/bo/backoffice/group-savings/contribution-payout-monitoring?page=0&size=20` | Contribution/payout monitoring |
 | `GET` | `/bo/backoffice/group-savings/slot-assignment-tracking?page=0&size=20` | Slot assignment tracking |
 | `POST` | `/bo/backoffice/group-savings/delete` | Delete group saving |
+
+Cycle health response example:
+
+```json
+{
+  "statusCode": 200,
+  "description": "Group savings cycle health fetched successfully.",
+  "data": {
+    "summary": {
+      "groupId": 12,
+      "groupName": "July Staff Group",
+      "expectedMembers": 5,
+      "cycleCount": 5,
+      "completedCycles": 2,
+      "cyclesNeedingAttention": 1,
+      "lastUpdatedAt": "2026-07-18T09:15:30Z"
+    },
+    "cycles": [
+      {
+        "cycleId": 31,
+        "groupId": 12,
+        "cycleNumber": 3,
+        "cycleStatus": "IN_PROGRESS",
+        "expectedContributionCount": 5,
+        "actualContributionCount": 5,
+        "settledContributionCount": 4,
+        "pendingContributionCount": 0,
+        "processingContributionCount": 0,
+        "failedContributionCount": 1,
+        "settledContributionAmount": 40000.00,
+        "schedulerEligible": true,
+        "healthStatus": "ATTENTION",
+        "recommendedAction": "Review downstream ledger state, then call retry-failed if debit/credit did not settle.",
+        "payout": {
+          "payoutId": 17,
+          "receiverWalletId": "9354185507",
+          "amount": 50000.00,
+          "status": "PENDING",
+          "idempotencyRef": "12:3:payout",
+          "providerRef": null
+        },
+        "contributions": [
+          {
+            "contributionId": 101,
+            "memberWalletId": "9354185507",
+            "amount": 10000.00,
+            "status": "FAILED",
+            "idempotencyRef": "12:3:9354185507",
+            "providerRef": null
+          }
+        ]
+      }
+    ],
+    "actionHints": [
+      "Use retry-failed only after validating the failed debit/credit did not already settle downstream.",
+      "If schedulerEligible=false, operations must extend the cycle window or handle settlement manually before expecting the scheduler to pick it up."
+    ]
+  }
+}
+```
+
+Retry failed cycle response example:
+
+```json
+{
+  "statusCode": 200,
+  "description": "Group savings failed cycle records requeued successfully.",
+  "data": {
+    "requeuedContributions": 1,
+    "requeuedPayout": false,
+    "schedulerEligible": true,
+    "note": "Failed records were reset to PENDING. Confirm downstream ledger state before retrying to avoid duplicate debit or credit."
+  }
+}
+```
 
 Delete request is proxied to transactions service and follows the existing transaction service request shape.
 

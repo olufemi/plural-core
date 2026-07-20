@@ -407,8 +407,8 @@ Still required before full production hardening:
 
 ### Phase 2: Idempotency and database safety
 
-- Run `finacial-wealth-api-transactions/src/main/resources/db/migration/V20260720_01__transaction_reversal_hardening.sql`.
-- Run `finacial-wealth-api-fxpeer-exchange/src/main/resources/db/migration/V20260720_01__airtime_reversal_hardening.sql`.
+- `finacial-wealth-api-transactions/src/main/resources/db/migration/V20260720_01__transaction_reversal_hardening.sql` is wired through Flyway and should run on transactions-service startup when `TRANSACTIONS_FLYWAY_ENABLED=true`.
+- `finacial-wealth-api-fxpeer-exchange/src/main/resources/db/migration/V20260720_01__airtime_reversal_hardening.sql` is wired through the existing fxpeer Flyway configuration and should run on fxpeer-service startup.
 - Run the duplicate-audit scripts under each service `src/main/resources/db/manual`, clean duplicates, then apply the unique indexes.
 - Idempotent duplicate handling in utility-service credit/debit callers is implemented as a pre-check; the DB unique key is the final protection after audit.
 - Status claim/lock before retry execution is implemented.

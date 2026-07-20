@@ -11,7 +11,10 @@ import com.financial.wealth.api.transactions.domain.SuccessDebitLog;
 import java.util.Collection;
 import java.util.List;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.repository.CrudRepository;
+import org.springframework.data.repository.query.Param;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  *
@@ -37,5 +40,31 @@ public interface SuccessDebitLogRepo extends
 
     @Query("SELECT config from SuccessDebitLog config where config.transactionId=:transactionId")
     SuccessDebitLog findByTransactionIdUpdate(String transactionId);
+
+    @Transactional
+    @Modifying
+    @Query("UPDATE SuccessDebitLog config SET config.reversalStatus = 'PROCESSING', "
+            + "config.processingClaimedAt = :claimedAt, "
+            + "config.processingClaimedBy = :claimedBy, "
+            + "config.lastModifiedDate = :claimedAt "
+            + "WHERE config.id = :id AND config.reversalStatus IN :statuses")
+    int claimForReversalProcessing(@Param("id") Long id,
+            @Param("claimedAt") java.time.Instant claimedAt,
+            @Param("claimedBy") String claimedBy,
+            @Param("statuses") Collection<String> statuses);
+
+    @Transactional
+    @Modifying
+    @Query("UPDATE SuccessDebitLog config SET config.reversalStatus = 'FAILED', "
+            + "config.processingClaimedAt = null, "
+            + "config.processingClaimedBy = null, "
+            + "config.reversalLastError = :errorMessage, "
+            + "config.lastModifiedDate = :releasedAt "
+            + "WHERE config.reversalStatus = 'PROCESSING' "
+            + "AND config.processingClaimedAt IS NOT NULL "
+            + "AND config.processingClaimedAt < :cutoff")
+    int releaseStaleProcessingClaims(@Param("cutoff") java.time.Instant cutoff,
+            @Param("releasedAt") java.time.Instant releasedAt,
+            @Param("errorMessage") String errorMessage);
 
 }

@@ -34,13 +34,17 @@ public class AirtimeRollbackService {
     private static final String STATUS_PENDING = "PENDING";
     private static final String STATUS_FAILED = "FAILED";
     private static final String STATUS_SUCCESS = "SUCCESS";
+    private static final String STATUS_PROCESSING = "PROCESSING";
+    private static final String STATUS_RECON_REQUIRED = "RECON_REQUIRED";
+    private static final String FULFILMENT_CONFIRMED_FAILED = "CONFIRMED_FAILED";
+    private static final String FULFILMENT_MANUAL_APPROVED = "MANUAL_APPROVED";
     private static final String ACTION_DEBIT = "DEBIT";
     private static final String ACTION_CREDIT = "CREDIT";
     private static final String LEG_REVERSE_GL_CREDIT = "reverseGLCredit";
     private static final String LEG_REVERSE_SELLER_CREDIT = "reverseSellerCredit";
     private static final String LEG_REVERSE_GL_DEBIT = "reverseGLDebit";
     private static final String LEG_REVERSE_BUYER_DEBIT = "reverseBuyerDebit";
-    private static final List<String> ACTIVE_STATUSES = Arrays.asList(STATUS_PENDING, STATUS_FAILED, STATUS_SUCCESS);
+    private static final List<String> ACTIVE_STATUSES = Arrays.asList(STATUS_PENDING, STATUS_FAILED, STATUS_SUCCESS, STATUS_PROCESSING, STATUS_RECON_REQUIRED);
     private static final List<String> RETRYABLE_STATUSES = Arrays.asList(STATUS_PENDING, STATUS_FAILED);
 
     private final AirtimeRollbackLogRepository rollbackLogRepository;
@@ -48,6 +52,9 @@ public class AirtimeRollbackService {
 
     @Value("${fx.airtime.rollback.retry.authorization:}")
     private String schedulerAuthorization;
+
+    @Value("${fx.airtime.rollback.processing-stale-minutes:15}")
+    private long rollbackProcessingStaleMinutes;
 
     public AirtimeRollbackService(AirtimeRollbackLogRepository rollbackLogRepository,
             TransactionServiceProxies transactionServiceProxies) {
@@ -60,6 +67,9 @@ public class AirtimeRollbackService {
         response.put("rollbackStarted", true);
         List<AirtimeRollbackLog> logs = upsertRollbackLegs(pre, rq, providerError);
         for (AirtimeRollbackLog logItem : logs) {
+            if (!claim(logItem, "PROVIDER_FAILURE_FLOW")) {
+                continue;
+            }
             BaseResponse res = executeRollbackLeg(logItem, auth);
             if (res != null) {
                 response.put(logItem.getLegKey(), res.getStatusCode());
@@ -79,9 +89,13 @@ public class AirtimeRollbackService {
     @Scheduled(cron = "${fx.airtime.rollback.retry.cron:0 */2 * * * *}", zone = "${fx.timezone:Africa/Lagos}")
     @SchedulerLock(name = "AirtimeRollbackService.retryPendingRollbacks", lockAtMostFor = "10m", lockAtLeastFor = "30s")
     public void retryPendingRollbacks() {
+        releaseStaleProcessingClaims();
         List<AirtimeRollbackLog> logs = rollbackLogRepository.findByStatusIn(RETRYABLE_STATUSES);
         for (AirtimeRollbackLog logItem : logs) {
             try {
+                if (!isReversalEligible(logItem) || !claim(logItem, "AIRTIME_ROLLBACK_SCHEDULER")) {
+                    continue;
+                }
                 executeRollbackLeg(logItem, schedulerAuthorization == null ? "" : schedulerAuthorization);
             } catch (Exception ex) {
                 log.error("Airtime rollback retry failed for processId={} legKey={}", logItem.getProcessId(), logItem.getLegKey(), ex);
@@ -129,6 +143,13 @@ public class AirtimeRollbackService {
 
         for (AirtimeRollbackLog logItem : logs) {
             if (!RETRYABLE_STATUSES.contains(logItem.getStatus())) {
+                continue;
+            }
+            if (!isReversalEligible(logItem)) {
+                markNotEligible(logItem);
+                continue;
+            }
+            if (!claim(logItem, "ADMIN_RETRY")) {
                 continue;
             }
             executeRollbackLeg(logItem, auth == null ? "" : auth);
@@ -202,6 +223,9 @@ public class AirtimeRollbackService {
         leg.put("legKey", logItem.getLegKey());
         leg.put("transactionId", logItem.getRollbackTransactionId());
         leg.put("status", logItem.getStatus());
+        leg.put("fulfilmentStatus", logItem.getFulfilmentStatus());
+        leg.put("reversalEligibility", logItem.getReversalEligibility());
+        leg.put("providerStatusCheckedAt", logItem.getProviderStatusCheckedAt());
         leg.put("amount", logItem.getAmount());
         leg.put("retryCount", logItem.getRetryCount());
         leg.put("lastResponseCode", logItem.getLastResponseCode());
@@ -217,8 +241,14 @@ public class AirtimeRollbackService {
                 .filter(Objects::nonNull)
                 .collect(Collectors.toCollection(LinkedHashSet::new));
 
+        if (statuses.contains(STATUS_PROCESSING)) {
+            return STATUS_PROCESSING;
+        }
         if (statuses.contains(STATUS_PENDING)) {
             return STATUS_PENDING;
+        }
+        if (statuses.contains(STATUS_RECON_REQUIRED)) {
+            return STATUS_RECON_REQUIRED;
         }
         if (statuses.contains(STATUS_FAILED)) {
             return STATUS_FAILED;
@@ -282,6 +312,10 @@ public class AirtimeRollbackService {
         logItem.setOperatorCode(rq == null ? null : rq.getOperator());
         logItem.setProductCode(rq == null ? null : rq.getProduct());
         logItem.setProviderError(providerError);
+        logItem.setFulfilmentStatus(FULFILMENT_CONFIRMED_FAILED);
+        logItem.setReversalEligibility("AUTO_ELIGIBLE_CONFIRMED_FAILED");
+        logItem.setProviderStatusResponse(providerError);
+        logItem.setProviderStatusCheckedAt(now);
         if (!STATUS_SUCCESS.equals(logItem.getStatus())) {
             logItem.setStatus(STATUS_PENDING);
             logItem.setCompletedAt(null);
@@ -321,6 +355,8 @@ public class AirtimeRollbackService {
             logItem.setRetryCount(logItem.getRetryCount() + 1);
             logItem.setStatus(STATUS_FAILED);
             logItem.setLastError(ex.getMessage());
+            logItem.setProcessingClaimedAt(null);
+            logItem.setProcessingClaimedBy(null);
             logItem.setLastModifiedDate(Instant.now());
             rollbackLogRepository.save(logItem);
             log.error("Airtime rollback leg execution failed for processId={} legKey={}", logItem.getProcessId(), logItem.getLegKey(), ex);
@@ -335,13 +371,59 @@ public class AirtimeRollbackService {
             logItem.setCompletedAt(now);
             logItem.setLastResponseCode(response.getStatusCode());
             logItem.setLastError(null);
+            logItem.setProcessingClaimedAt(null);
+            logItem.setProcessingClaimedBy(null);
         } else {
             logItem.setRetryCount(logItem.getRetryCount() + 1);
             logItem.setStatus(STATUS_FAILED);
             logItem.setLastResponseCode(response == null ? null : response.getStatusCode());
             logItem.setLastError(response == null ? "Rollback returned null response" : response.getDescription());
+            logItem.setProcessingClaimedAt(null);
+            logItem.setProcessingClaimedBy(null);
         }
         logItem.setLastModifiedDate(now);
+        rollbackLogRepository.save(logItem);
+    }
+
+    private boolean claim(AirtimeRollbackLog logItem, String claimedBy) {
+        int updated = rollbackLogRepository.claimForProcessing(logItem.getId(), Instant.now(), claimedBy, RETRYABLE_STATUSES);
+        if (updated == 1) {
+            logItem.setStatus(STATUS_PROCESSING);
+            logItem.setProcessingClaimedAt(Instant.now());
+            logItem.setProcessingClaimedBy(claimedBy);
+            return true;
+        }
+        return false;
+    }
+
+    private void releaseStaleProcessingClaims() {
+        long staleMinutes = Math.max(1L, rollbackProcessingStaleMinutes);
+        Instant now = Instant.now();
+        Instant cutoff = now.minusSeconds(staleMinutes * 60);
+        int released = rollbackLogRepository.releaseStaleProcessingClaims(
+                cutoff,
+                now,
+                "Released stale PROCESSING rollback claim after " + staleMinutes + " minutes");
+        if (released > 0) {
+            log.warn("Released {} stale airtime rollback PROCESSING claim(s)", released);
+        }
+    }
+
+    private boolean isReversalEligible(AirtimeRollbackLog logItem) {
+        if (logItem == null) {
+            return false;
+        }
+        String fulfilmentStatus = logItem.getFulfilmentStatus() == null ? "" : logItem.getFulfilmentStatus().trim();
+        return fulfilmentStatus.isEmpty()
+                || FULFILMENT_CONFIRMED_FAILED.equalsIgnoreCase(fulfilmentStatus)
+                || FULFILMENT_MANUAL_APPROVED.equalsIgnoreCase(fulfilmentStatus);
+    }
+
+    private void markNotEligible(AirtimeRollbackLog logItem) {
+        logItem.setStatus(STATUS_RECON_REQUIRED);
+        logItem.setReversalEligibility("BLOCKED_PENDING_FULFILMENT_CONFIRMATION");
+        logItem.setLastError("Reversal blocked: fulfilment failure has not been confirmed");
+        logItem.setLastModifiedDate(Instant.now());
         rollbackLogRepository.save(logItem);
     }
 

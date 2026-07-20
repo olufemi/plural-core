@@ -17,6 +17,7 @@ import com.finacial.wealth.backoffice.integrations.fxpeer.FxPeerExchangeClient;
 import com.finacial.wealth.backoffice.integrations.transactions.TransactionsClient;
 import com.finacial.wealth.backoffice.notification.entity.BackofficeNotificationSeverity;
 import com.finacial.wealth.backoffice.notification.service.BackofficeNotificationService;
+import com.finacial.wealth.backoffice.reversal.dto.ManualReversalRequest;
 import jakarta.servlet.http.HttpServletRequest;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -136,7 +137,7 @@ public class ReversalExceptionService {
     }
 
     @Transactional
-    public Map<String, Object> requestManualReversal(String source, String caseRef, String notes, Long actorAdminId, HttpServletRequest request) {
+    public Map<String, Object> requestManualReversal(String source, String caseRef, ManualReversalRequest body, Long actorAdminId, HttpServletRequest request) {
         if (source == null || source.isBlank()) {
             throw new IllegalArgumentException("source is required");
         }
@@ -149,15 +150,24 @@ public class ReversalExceptionService {
         ApprovalSubModule subModule = resolveSubModule(normalizedSource);
         Map<String, Object> caseSnapshot = fetchCaseSnapshot(normalizedSource, caseRef.trim(), request.getHeader("Authorization"));
         String caseStatus = stringValue(caseSnapshot.get("status"));
-        if (!"PENDING".equalsIgnoreCase(caseStatus) && !"FAILED".equalsIgnoreCase(caseStatus)) {
-            throw new IllegalArgumentException("Only FAILED or PENDING reversal cases can be submitted for manual reversal");
+        if (!"PENDING".equalsIgnoreCase(caseStatus)
+                && !"FAILED".equalsIgnoreCase(caseStatus)
+                && !"RECON_REQUIRED".equalsIgnoreCase(caseStatus)) {
+            throw new IllegalArgumentException("Only FAILED, PENDING, or RECON_REQUIRED reversal cases can be submitted for manual reversal request");
         }
+        if ("PROCESSING".equalsIgnoreCase(caseStatus) || "SUCCESS".equalsIgnoreCase(caseStatus)) {
+            throw new IllegalArgumentException("Processing or successful reversal cases cannot be submitted for manual reversal request");
+        }
+        Map<String, Object> evidence = buildManualReversalEvidence(body);
+        String notes = stringValue(evidence.get("notes"));
 
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("source", normalizedSource);
         payload.put("caseRef", caseRef.trim());
         payload.put("notes", trimToNull(notes));
         payload.put("requestedByAdminId", actorAdminId);
+        payload.put("manualReviewType", "MANUAL_REVERSAL_REQUEST");
+        payload.put("evidence", evidence);
         payload.put("caseSnapshot", caseSnapshot);
 
         BoApprovalRequest approvalRequest = approvalRequestRepository.save(
@@ -186,6 +196,7 @@ public class ReversalExceptionService {
         auditMetadata.put("source", normalizedSource);
         auditMetadata.put("caseRef", caseRef.trim());
         auditMetadata.put("notes", trimToNull(notes));
+        auditMetadata.put("evidence", evidence);
 
         adminAuditService.audit(
                 "REVERSAL_MANUAL_REQUEST",
@@ -219,7 +230,30 @@ public class ReversalExceptionService {
         response.put("source", normalizedSource);
         response.put("caseRef", caseRef.trim());
         response.put("notes", trimToNull(notes));
+        response.put("evidence", evidence);
         return response;
+    }
+
+    private Map<String, Object> buildManualReversalEvidence(ManualReversalRequest body) {
+        Map<String, Object> evidence = new LinkedHashMap<>();
+        if (body == null) {
+            evidence.put("notes", null);
+            evidence.put("reason", null);
+            evidence.put("evidenceReference", null);
+            evidence.put("endToEndTransactionId", null);
+            evidence.put("providerReference", null);
+            evidence.put("providerStatus", null);
+            evidence.put("providerStatusEvidence", null);
+            return evidence;
+        }
+        evidence.put("notes", trimToNull(body.notes()));
+        evidence.put("reason", trimToNull(body.reason()));
+        evidence.put("evidenceReference", trimToNull(body.evidenceReference()));
+        evidence.put("endToEndTransactionId", trimToNull(body.endToEndTransactionId()));
+        evidence.put("providerReference", trimToNull(body.providerReference()));
+        evidence.put("providerStatus", trimToNull(body.providerStatus()));
+        evidence.put("providerStatusEvidence", trimToNull(body.providerStatusEvidence()));
+        return evidence;
     }
 
     private Map<String, Object> normalizeSummary(String source, Map<String, Object> rawResponse, Map<String, Object> rawData) {
@@ -266,6 +300,8 @@ public class ReversalExceptionService {
         item.put("sourceGroup", ownerSource(source));
         item.put("caseRef", caseRef);
         item.put("status", stringValue(raw.get("status")));
+        item.put("reversalControlStatus", deriveReversalControlStatus(raw));
+        item.put("canSubmitManualReversalRequest", canSubmitManualReversalRequest(stringValue(raw.get("status"))));
         item.put("requestedAt", raw.get("requestedAt"));
         item.put("completedAt", raw.get("completedAt"));
         item.put("retryCount", raw.get("retryCount"));
@@ -278,6 +314,29 @@ public class ReversalExceptionService {
         item.put("raw", raw);
         item.put("openManualRequests", findOpenManualRequests(source, caseRef));
         return item;
+    }
+
+    private String deriveReversalControlStatus(Map<String, Object> raw) {
+        String status = stringValue(raw.get("status"));
+        if ("SUCCESS".equalsIgnoreCase(status)) {
+            return "REVERSED";
+        }
+        if ("PROCESSING".equalsIgnoreCase(status)) {
+            return "PROCESSING";
+        }
+        if ("RECON_REQUIRED".equalsIgnoreCase(status)) {
+            return "MANUAL_INVESTIGATION";
+        }
+        if ("FAILED".equalsIgnoreCase(status) || "PENDING".equalsIgnoreCase(status)) {
+            return "PENDING_MAKER_REVIEW";
+        }
+        return "DETECTED";
+    }
+
+    private boolean canSubmitManualReversalRequest(String status) {
+        return "PENDING".equalsIgnoreCase(status)
+                || "FAILED".equalsIgnoreCase(status)
+                || "RECON_REQUIRED".equalsIgnoreCase(status);
     }
 
     private List<Map<String, Object>> findOpenManualRequests(String source, String caseRef) {

@@ -24,6 +24,8 @@ import com.finacial.wealth.api.fxpeer.exchange.util.UttilityMethods;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -35,6 +37,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 
 /**
  *
@@ -46,6 +49,9 @@ public class FxOtherServicesController {
 
     @Value("${allow.crypto.graphy.for.pin}")
     private String allowCryptoGraphyForPin;
+
+    @Value("${backoffice.internal.auth-token:}")
+    private String backofficeInternalAuthToken;
 
     private final ProcSochitelServices procSochitelServices;
     private final UttilityMethods uttilityMethods;
@@ -179,9 +185,23 @@ public class FxOtherServicesController {
     )
     public ResponseEntity<ApiResponseModel> retryAirtimeReversal(
             @RequestHeader(name = "authorization", required = true) String auth,
+            @RequestHeader(name = "X-Backoffice-Internal-Token", required = false) String internalToken,
             @org.springframework.web.bind.annotation.PathVariable String processId
     ) {
+        requireBackofficeInternalToken(internalToken);
         return new ResponseEntity<>(airtimeRollbackService.retryCase(processId, auth), HttpStatus.OK);
+    }
+
+    private void requireBackofficeInternalToken(String suppliedToken) {
+        if (backofficeInternalAuthToken == null || backofficeInternalAuthToken.trim().isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Backoffice internal token is not configured");
+        }
+        if (suppliedToken == null || suppliedToken.trim().isEmpty()
+                || !MessageDigest.isEqual(
+                        backofficeInternalAuthToken.getBytes(StandardCharsets.UTF_8),
+                        suppliedToken.getBytes(StandardCharsets.UTF_8))) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Invalid backoffice internal token");
+        }
     }
 
     @GetMapping(

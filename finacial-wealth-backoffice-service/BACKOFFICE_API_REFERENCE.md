@@ -535,13 +535,58 @@ Rollback request:
 | `GET` | `/bo/backoffice/reversals/cases?source=TRANSACTIONS_INTERBANK&status=FAILED&page=0&size=20` | List reversal cases |
 | `POST` | `/bo/backoffice/reversals/cases/{source}/{caseRef}/manual-request` | Submit manual reversal approval request |
 
-Manual reversal request:
+Manual reversal request is a maker-checker submission. It does not directly move funds from the FE call. Operations should only submit it after confirming the original fulfilment really failed, using the original end-to-end transaction id and provider/status evidence.
 
 ```json
 {
-  "notes": "Auto reversal failed; please approve manual retry."
+  "notes": "Auto reversal failed; please approve manual retry.",
+  "reason": "Provider confirmed failed fulfilment after debit.",
+  "evidenceReference": "NIP-STATUS-CHECK-20260720-001",
+  "endToEndTransactionId": "TRX-178418900001",
+  "providerReference": "PROVIDER-REF-001",
+  "providerStatus": "FAILED",
+  "providerStatusEvidence": "Provider status enquiry returned FAILED for the original transaction."
 }
 ```
+
+Manual reversal requests are accepted only for cases currently in `PENDING`, `FAILED`, or `RECON_REQUIRED`. Cases already `PROCESSING` or `SUCCESS` must not be resubmitted from FE.
+
+When a checker approves the generated approval request, backoffice executes the reversal through an internal service-to-service call. Direct downstream retry execution is protected by `X-Backoffice-Internal-Token`; FE and Ops users should not call raw retry endpoints.
+
+Unified reversal case rows include control/eligibility fields for the operations screen:
+
+```json
+{
+  "source": "TRANSACTIONS_INTERBANK",
+  "caseRef": "TRX-178418900001",
+  "status": "RECON_REQUIRED",
+  "reversalControlStatus": "MANUAL_INVESTIGATION",
+  "canSubmitManualReversalRequest": true,
+  "fulfilmentStatus": "STATUS_UNKNOWN",
+  "reversalEligibility": "BLOCKED_PENDING_FULFILMENT_CONFIRMATION",
+  "reversalIdempotencyKey": "TRX-178418900001-RB",
+  "providerReference": "PROVIDER-REF-001",
+  "providerStatusCheckedAt": "2026-07-20T09:30:00Z",
+  "openManualRequests": 0
+}
+```
+
+Control statuses FE can display:
+
+| Value | Meaning |
+| --- | --- |
+| `DETECTED` | Exception detected, not yet classified. |
+| `PENDING_MAKER_REVIEW` | Auto retry failed or pending; maker can review. |
+| `MANUAL_INVESTIGATION` | Fulfilment is not confirmed failed yet; operations must verify provider status before maker request. |
+| `PROCESSING` | A scheduler/admin worker has claimed the reversal and is processing it. |
+| `REVERSED` | Reversal completed successfully. |
+
+Scheduler behavior:
+
+- Transaction reversals are picked by `pool.process.retry.success.debit.rollback.cron`, default every 2 minutes.
+- FxPeer airtime rollback legs are picked by `fx.airtime.rollback.retry.cron`, default every 2 minutes.
+- These are database-backed retry queues, not broker queues. FE should treat `PENDING`, `FAILED`, and `RECON_REQUIRED` as visible work items, and `PROCESSING` as temporarily locked by a backend worker.
+- If a worker dies while a case is `PROCESSING`, stale claims are released back to `FAILED` after the configured stale window: `pool.process.retry.success.debit.rollback.processing-stale-minutes` or `fx.airtime.rollback.processing-stale-minutes`, default 15 minutes.
 
 Supported `source` values currently include:
 
@@ -561,7 +606,7 @@ Product-specific wrappers still exist:
 | `GET` | `/bo/backoffice/fxpeer/services/airtime-reversals/summary` | Airtime reversal summary |
 | `GET` | `/bo/backoffice/fxpeer/services/airtime-reversals` | Airtime reversal cases |
 
-FE should prefer `/backoffice/reversals` for the unified module.
+FE should prefer `/backoffice/reversals` for the unified module. Direct VAS retry through `/backoffice/fxpeer/services/airtime-reversals/{processId}/retry` is disabled; use `/backoffice/reversals/cases/FXPEER_AIRTIME/{processId}/manual-request`.
 
 ---
 
@@ -845,7 +890,7 @@ Notes:
 | `POST` | `/bo/backoffice/fxpeer/services/products/by-country` | Lookup VAS products by country |
 | `GET` | `/bo/backoffice/fxpeer/services/airtime-reversals/summary` | Airtime reversal summary |
 | `GET` | `/bo/backoffice/fxpeer/services/airtime-reversals?status=PENDING` | Airtime reversal cases |
-| `POST` | `/bo/backoffice/fxpeer/services/airtime-reversals/{processId}/retry?reason=Provider%20timeout%20retry` | Retry an airtime reversal case |
+| `POST` | `/bo/backoffice/reversals/cases/FXPEER_AIRTIME/{processId}/manual-request` | Submit airtime reversal for maker-checker approval |
 
 Example VAS product lookup:
 

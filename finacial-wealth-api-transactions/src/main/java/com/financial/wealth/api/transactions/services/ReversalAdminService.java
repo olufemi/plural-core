@@ -24,7 +24,15 @@ import org.springframework.stereotype.Service;
 @Service
 public class ReversalAdminService {
 
-    private static final List<String> REVERSAL_STATUSES = Arrays.asList("PENDING", "FAILED", "SUCCESS", "RECON_REQUIRED");
+    private static final String STATUS_PENDING = "PENDING";
+    private static final String STATUS_FAILED = "FAILED";
+    private static final String STATUS_SUCCESS = "SUCCESS";
+    private static final String STATUS_RECON_REQUIRED = "RECON_REQUIRED";
+    private static final String STATUS_PROCESSING = "PROCESSING";
+    private static final String FULFILMENT_CONFIRMED_FAILED = "CONFIRMED_FAILED";
+    private static final String FULFILMENT_MANUAL_APPROVED = "MANUAL_APPROVED";
+    private static final List<String> REVERSAL_STATUSES = Arrays.asList(STATUS_PENDING, STATUS_FAILED, STATUS_SUCCESS, STATUS_RECON_REQUIRED, STATUS_PROCESSING);
+    private static final List<String> RETRYABLE_STATUSES = Arrays.asList(STATUS_PENDING, STATUS_FAILED);
 
     private final SuccessDebitLogRepo successDebitLogRepo;
     private final UttilityMethods utilMeth;
@@ -71,7 +79,7 @@ public class ReversalAdminService {
 
     public ApiResponseModel retryCase(String transactionId) {
         String rootTransactionId = rootTransactionId(transactionId);
-        List<SuccessDebitLog> logs = successDebitLogRepo.findByReversalStatusIn(Arrays.asList("PENDING", "FAILED"))
+        List<SuccessDebitLog> logs = successDebitLogRepo.findByReversalStatusIn(RETRYABLE_STATUSES)
                 .stream()
                 .filter(log -> rootTransactionId.equals(rootTransactionId(log.getTransactionId())))
                 .collect(Collectors.toList());
@@ -81,6 +89,13 @@ public class ReversalAdminService {
         }
 
         for (SuccessDebitLog log : logs) {
+            if (!isReversalEligible(log)) {
+                markNotEligible(log);
+                continue;
+            }
+            if (!claim(log, "ADMIN_RETRY")) {
+                continue;
+            }
             try {
                 DebitWalletCaller originalDebit = objectMapper.readValue(log.getRequestJson(), DebitWalletCaller.class);
                 CreditWalletCaller rollbackReq = buildCreditFromDebit(originalDebit, log);
@@ -89,7 +104,7 @@ public class ReversalAdminService {
             } catch (Exception ex) {
                 log.setRetryCount(log.getRetryCount() + 1);
                 log.setResolved(false);
-                log.setReversalStatus("FAILED");
+                log.setReversalStatus(STATUS_FAILED);
                 log.setReversalRequestedAt(log.getReversalRequestedAt() == null ? Instant.now() : log.getReversalRequestedAt());
                 log.setReversalLastError(ex.getMessage());
                 log.setLastModifiedDate(Instant.now());
@@ -113,15 +128,50 @@ public class ReversalAdminService {
         if (res != null && res.getStatusCode() == 200) {
             log.setMarkForRollBack(0);
             log.setResolved(true);
-            log.setReversalStatus("SUCCESS");
+            log.setReversalStatus(STATUS_SUCCESS);
             log.setReversalCompletedAt(Instant.now());
             log.setReversalLastError(null);
+            log.setProcessingClaimedAt(null);
+            log.setProcessingClaimedBy(null);
         } else {
             log.setRetryCount(log.getRetryCount() + 1);
             log.setResolved(false);
-            log.setReversalStatus("FAILED");
+            log.setReversalStatus(STATUS_FAILED);
             log.setReversalLastError(res == null ? "Rollback credit returned null response" : res.getDescription());
+            log.setProcessingClaimedAt(null);
+            log.setProcessingClaimedBy(null);
         }
+        log.setLastModifiedDate(Instant.now());
+        successDebitLogRepo.save(log);
+    }
+
+    private boolean claim(SuccessDebitLog log, String claimedBy) {
+        int updated = successDebitLogRepo.claimForReversalProcessing(log.getId(), Instant.now(), claimedBy, RETRYABLE_STATUSES);
+        if (updated == 1) {
+            log.setReversalStatus(STATUS_PROCESSING);
+            log.setProcessingClaimedAt(Instant.now());
+            log.setProcessingClaimedBy(claimedBy);
+            return true;
+        }
+        return false;
+    }
+
+    private boolean isReversalEligible(SuccessDebitLog log) {
+        if (log == null || log.getMarkForRollBack() != 1) {
+            return false;
+        }
+        String fulfilmentStatus = nz(log.getFulfilmentStatus()).trim();
+        return fulfilmentStatus.isEmpty()
+                || FULFILMENT_CONFIRMED_FAILED.equalsIgnoreCase(fulfilmentStatus)
+                || FULFILMENT_MANUAL_APPROVED.equalsIgnoreCase(fulfilmentStatus);
+    }
+
+    private void markNotEligible(SuccessDebitLog log) {
+        log.setResolved(false);
+        log.setMarkForRollBack(0);
+        log.setReversalStatus(STATUS_RECON_REQUIRED);
+        log.setReversalEligibility("BLOCKED_PENDING_FULFILMENT_CONFIRMATION");
+        log.setReversalLastError("Reversal blocked: fulfilment failure has not been confirmed");
         log.setLastModifiedDate(Instant.now());
         successDebitLogRepo.save(log);
     }
@@ -136,7 +186,8 @@ public class ReversalAdminService {
         c.setTransAmount(nz(d.getTransAmount()));
         c.setNarration(nz(d.getNarration()));
         String baseId = log.getTransactionId() != null ? log.getTransactionId() : d.getTransactionId();
-        c.setTransactionId((baseId == null ? "" : baseId) + "-RB");
+        String rollbackId = nz(log.getReversalIdempotencyKey()).isEmpty() ? (baseId == null ? "" : baseId) + "-RB" : log.getReversalIdempotencyKey();
+        c.setTransactionId(rollbackId);
         return c;
     }
 
@@ -191,6 +242,11 @@ public class ReversalAdminService {
         leg.put("payloadType", log.getPayloadType());
         leg.put("narration", log.getNarration());
         leg.put("status", log.getReversalStatus());
+        leg.put("fulfilmentStatus", log.getFulfilmentStatus());
+        leg.put("reversalEligibility", log.getReversalEligibility());
+        leg.put("reversalIdempotencyKey", log.getReversalIdempotencyKey());
+        leg.put("providerReference", log.getProviderReference());
+        leg.put("providerStatusCheckedAt", log.getProviderStatusCheckedAt());
         leg.put("retryCount", log.getRetryCount());
         leg.put("requestedAt", log.getReversalRequestedAt());
         leg.put("completedAt", log.getReversalCompletedAt());
@@ -219,19 +275,22 @@ public class ReversalAdminService {
                 .filter(Objects::nonNull)
                 .collect(Collectors.toCollection(LinkedHashSet::new));
 
-        if (statuses.contains("PENDING")) {
-            return "PENDING";
+        if (statuses.contains(STATUS_PROCESSING)) {
+            return STATUS_PROCESSING;
         }
-        if (statuses.contains("RECON_REQUIRED")) {
-            return "RECON_REQUIRED";
+        if (statuses.contains(STATUS_PENDING)) {
+            return STATUS_PENDING;
         }
-        if (statuses.contains("FAILED")) {
-            return "FAILED";
+        if (statuses.contains(STATUS_RECON_REQUIRED)) {
+            return STATUS_RECON_REQUIRED;
         }
-        if (!statuses.isEmpty() && Collections.singleton("SUCCESS").equals(statuses)) {
-            return "SUCCESS";
+        if (statuses.contains(STATUS_FAILED)) {
+            return STATUS_FAILED;
         }
-        return "PENDING";
+        if (!statuses.isEmpty() && Collections.singleton(STATUS_SUCCESS).equals(statuses)) {
+            return STATUS_SUCCESS;
+        }
+        return STATUS_PENDING;
     }
 
     private String rootTransactionId(String transactionId) {

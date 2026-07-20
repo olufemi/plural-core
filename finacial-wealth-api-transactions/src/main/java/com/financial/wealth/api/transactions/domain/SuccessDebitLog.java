@@ -56,6 +56,16 @@ public class SuccessDebitLog implements Serializable {
     private int markForRollBack = 0;
     private boolean resolved;
     private String reversalStatus = "NONE";
+    private String fulfilmentStatus;
+    private String reversalEligibility;
+    private String reversalIdempotencyKey;
+    private String providerReference;
+    private Instant providerStatusCheckedAt;
+    @Column(length = 2000)
+    private String providerStatusResponse;
+    private Instant processingClaimedAt;
+    private String processingClaimedBy;
+    private Long manualOverrideApprovalId;
     private Instant reversalRequestedAt;
     private Instant reversalCompletedAt;
     @Column(length = 1000)

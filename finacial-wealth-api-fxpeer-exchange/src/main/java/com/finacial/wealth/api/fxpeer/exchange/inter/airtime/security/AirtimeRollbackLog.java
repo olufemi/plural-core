@@ -64,6 +64,17 @@ public class AirtimeRollbackLog implements Serializable {
     @Column(length = 1000)
     private String providerError;
 
+    @Column(length = 100)
+    private String fulfilmentStatus;
+
+    @Column(length = 255)
+    private String reversalEligibility;
+
+    @Column(length = 1000)
+    private String providerStatusResponse;
+
+    private Instant providerStatusCheckedAt;
+
     @Column(nullable = false, length = 50)
     private String status = "PENDING";
 
@@ -71,6 +82,10 @@ public class AirtimeRollbackLog implements Serializable {
     private int retryCount;
     private Instant requestedAt;
     private Instant completedAt;
+    private Instant processingClaimedAt;
+
+    @Column(length = 100)
+    private String processingClaimedBy;
 
     @Column(length = 1000)
     private String lastError;

@@ -56,7 +56,6 @@ public class BoReversalController {
             @RequestBody(required = false) ManualReversalRequest body,
             HttpServletRequest request
     ) {
-        String notes = body == null ? null : body.notes();
-        return reversalExceptionService.requestManualReversal(source, caseRef, notes, actorAdminId, request);
+        return reversalExceptionService.requestManualReversal(source, caseRef, body, actorAdminId, request);
     }
 }

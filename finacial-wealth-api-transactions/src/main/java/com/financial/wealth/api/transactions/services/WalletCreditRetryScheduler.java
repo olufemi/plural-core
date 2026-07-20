@@ -27,6 +27,7 @@ import com.financial.wealth.api.transactions.utils.UttilityMethods;
 import java.math.BigDecimal;
 
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
@@ -40,6 +41,15 @@ import java.util.List;
 @Service
 public class WalletCreditRetryScheduler {
 
+    private static final String STATUS_PENDING = "PENDING";
+    private static final String STATUS_FAILED = "FAILED";
+    private static final String STATUS_SUCCESS = "SUCCESS";
+    private static final String STATUS_RECON_REQUIRED = "RECON_REQUIRED";
+    private static final String STATUS_PROCESSING = "PROCESSING";
+    private static final String FULFILMENT_CONFIRMED_FAILED = "CONFIRMED_FAILED";
+    private static final String FULFILMENT_MANUAL_APPROVED = "MANUAL_APPROVED";
+    private static final java.util.List<String> RETRYABLE_STATUSES = java.util.Arrays.asList(STATUS_PENDING, STATUS_FAILED);
+
     private final FailedCreditLogRepo failedCreditLogRepository;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -50,6 +60,9 @@ public class WalletCreditRetryScheduler {
     private final SuccessDebitLogRepo successDebitLogRepo;
     private final CreateDebitLogRepository createDebitLogRepository;
     private final CreateCreditLogRepository ceateCreditLogRepository;
+
+    @Value("${pool.process.retry.success.debit.rollback.processing-stale-minutes:15}")
+    private long rollbackProcessingStaleMinutes;
 
     public WalletCreditRetryScheduler(FailedCreditLogRepo failedCreditLogRepository,
             UttilityMethods utilMeth,
@@ -155,9 +168,20 @@ public class WalletCreditRetryScheduler {
     @SchedulerLock(name = "WalletCreditRetryScheduler.retrySuccessfulDebitsMarkForRoolBack", lockAtMostFor = "10m", lockAtLeastFor = "30s")
     public void retrySuccessfulDebitsMarkForRoolBack() {
         System.out.println("schedule retrySuccessfulDebitsMarkForRoolBack ::::::::::::::::  %S");
+        releaseStaleProcessingClaims();
         List<SuccessDebitLog> markForRollBackLogs = successDebitLogRepo.findByMarkForRollBack(1);
 
         for (SuccessDebitLog log : markForRollBackLogs) {
+            if (!RETRYABLE_STATUSES.contains(log.getReversalStatus())) {
+                continue;
+            }
+            if (!isReversalEligible(log)) {
+                markNotEligible(log);
+                continue;
+            }
+            if (!claim(log, "ROLLBACK_SCHEDULER")) {
+                continue;
+            }
             try {
                 // We stored a DEBIT payload; read it as DebitWalletCaller
                 DebitWalletCaller originalDebit = objectMapper.readValue(log.getRequestJson(), DebitWalletCaller.class);
@@ -170,15 +194,19 @@ public class WalletCreditRetryScheduler {
                 if (res != null && res.getStatusCode() == 200) {
                     log.setMarkForRollBack(0);
                     log.setResolved(true);
-                    log.setReversalStatus("SUCCESS");
+                    log.setReversalStatus(STATUS_SUCCESS);
                     log.setReversalCompletedAt(Instant.now());
                     log.setReversalLastError(null);
+                    log.setProcessingClaimedAt(null);
+                    log.setProcessingClaimedBy(null);
                     log.setLastModifiedDate(Instant.now());
                 } else {
                     log.setRetryCount(log.getRetryCount() + 1);
                     log.setResolved(false);
-                    log.setReversalStatus("FAILED");
+                    log.setReversalStatus(STATUS_FAILED);
                     log.setReversalLastError(res == null ? "Rollback credit returned null response" : res.getDescription());
+                    log.setProcessingClaimedAt(null);
+                    log.setProcessingClaimedBy(null);
                     log.setLastModifiedDate(Instant.now());
                 }
 
@@ -187,13 +215,59 @@ public class WalletCreditRetryScheduler {
                 // bump retry and persist so the job can try again later
                 log.setRetryCount(log.getRetryCount() + 1);
                 log.setResolved(false);
-                log.setReversalStatus("FAILED");
+                log.setReversalStatus(STATUS_FAILED);
                 log.setReversalLastError(ex.getMessage());
+                log.setProcessingClaimedAt(null);
+                log.setProcessingClaimedBy(null);
                 log.setLastModifiedDate(Instant.now());
                 successDebitLogRepo.save(log);
                 ex.printStackTrace();
             }
         }
+    }
+
+    private boolean claim(SuccessDebitLog log, String claimedBy) {
+        int updated = successDebitLogRepo.claimForReversalProcessing(log.getId(), Instant.now(), claimedBy, RETRYABLE_STATUSES);
+        if (updated == 1) {
+            log.setReversalStatus(STATUS_PROCESSING);
+            log.setProcessingClaimedAt(Instant.now());
+            log.setProcessingClaimedBy(claimedBy);
+            return true;
+        }
+        return false;
+    }
+
+    private void releaseStaleProcessingClaims() {
+        long staleMinutes = Math.max(1L, rollbackProcessingStaleMinutes);
+        Instant now = Instant.now();
+        Instant cutoff = now.minusSeconds(staleMinutes * 60);
+        int released = successDebitLogRepo.releaseStaleProcessingClaims(
+                cutoff,
+                now,
+                "Released stale PROCESSING reversal claim after " + staleMinutes + " minutes");
+        if (released > 0) {
+            System.out.println("Released stale rollback PROCESSING claims ::::::::::::::::  %S  " + released);
+        }
+    }
+
+    private boolean isReversalEligible(SuccessDebitLog log) {
+        if (log == null || log.getMarkForRollBack() != 1) {
+            return false;
+        }
+        String fulfilmentStatus = nz(log.getFulfilmentStatus()).trim();
+        return fulfilmentStatus.isEmpty()
+                || FULFILMENT_CONFIRMED_FAILED.equalsIgnoreCase(fulfilmentStatus)
+                || FULFILMENT_MANUAL_APPROVED.equalsIgnoreCase(fulfilmentStatus);
+    }
+
+    private void markNotEligible(SuccessDebitLog log) {
+        log.setResolved(false);
+        log.setMarkForRollBack(0);
+        log.setReversalStatus(STATUS_RECON_REQUIRED);
+        log.setReversalEligibility("BLOCKED_PENDING_FULFILMENT_CONFIRMATION");
+        log.setReversalLastError("Reversal blocked: fulfilment failure has not been confirmed");
+        log.setLastModifiedDate(Instant.now());
+        successDebitLogRepo.save(log);
     }
 
     // helper: build a credit (rollback) request from an original debit request
@@ -211,7 +285,8 @@ public class WalletCreditRetryScheduler {
         c.setNarration(nz(d.getNarration())); // e.g., nz(d.getNarration()) + "_ROLLBACK"
         // avoid duplicate IDs on the core by suffixing
         String baseId = log.getTransactionId() != null ? log.getTransactionId() : d.getTransactionId();
-        c.setTransactionId((baseId == null ? "" : baseId) + "-RB");
+        String rollbackId = nz(log.getReversalIdempotencyKey()).isEmpty() ? (baseId == null ? "" : baseId) + "-RB" : log.getReversalIdempotencyKey();
+        c.setTransactionId(rollbackId);
         return c;
     }
 

@@ -21,7 +21,10 @@ public interface TransactionsClient {
   Map<String, Object> getReversalCases(@RequestParam(required = false) String status);
 
   @PostMapping("/api/transactions/admin/reversals/{transactionId}/retry")
-  Map<String, Object> retryReversal(@PathVariable("transactionId") String transactionId);
+  Map<String, Object> retryReversal(
+      @RequestHeader("X-Backoffice-Internal-Token") String internalToken,
+      @PathVariable("transactionId") String transactionId
+  );
 
   @GetMapping("/api/transactions/admin/group-savings/contribution-payout-monitoring")
   Map<String, Object> getContributionPayoutMonitoring(

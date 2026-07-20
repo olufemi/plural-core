@@ -366,6 +366,15 @@ public class UttilityMethods {
         log.setCountryCode(countryCode);
         log.setMarkForRollBack(0);
         log.setReversalStatus("NONE");
+        log.setFulfilmentStatus(null);
+        log.setReversalEligibility(null);
+        log.setReversalIdempotencyKey(null);
+        log.setProviderReference(null);
+        log.setProviderStatusCheckedAt(null);
+        log.setProviderStatusResponse(null);
+        log.setProcessingClaimedAt(null);
+        log.setProcessingClaimedBy(null);
+        log.setManualOverrideApprovalId(null);
         log.setReversalRequestedAt(null);
         log.setReversalCompletedAt(null);
         log.setReversalLastError(null);

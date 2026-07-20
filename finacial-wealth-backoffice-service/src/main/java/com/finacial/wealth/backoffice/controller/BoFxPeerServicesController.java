@@ -4,6 +4,7 @@ import com.finacial.wealth.backoffice.audit.AuditAspect.Audited;
 import com.finacial.wealth.backoffice.integrations.fxpeer.FxPeerExchangeClient;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -11,6 +12,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.Map;
 
@@ -74,10 +76,8 @@ public class BoFxPeerServicesController {
             @org.springframework.web.bind.annotation.PathVariable String processId,
             @RequestParam String reason
     ) {
-        if (reason == null || reason.trim().isEmpty()) {
-            throw new IllegalArgumentException("reason is required");
-        }
-        return fxPeerClient.retryAirtimeReversal(auth(req), processId);
+        throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                "Direct VAS reversal retry is disabled. Submit /backoffice/reversals/cases/FXPEER_AIRTIME/{processId}/manual-request for maker-checker approval.");
     }
 
     private String auth(HttpServletRequest req) {

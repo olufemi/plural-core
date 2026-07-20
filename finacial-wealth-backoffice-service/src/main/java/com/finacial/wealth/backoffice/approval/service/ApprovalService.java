@@ -45,6 +45,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -69,6 +70,9 @@ public class ApprovalService {
     private final ObjectMapper objectMapper;
     private final AdminAuditService adminAuditService;
     private final BackofficeNotificationService notificationService;
+
+    @Value("${bo.downstream.internal-token:}")
+    private String downstreamInternalToken;
 
     @Transactional
     public Map<String, Object> submitInvestmentProductCreate(InvestmentProductUpsertRequest payload,
@@ -423,12 +427,19 @@ public class ApprovalService {
 
     private Map<String, Object> approveFxpeerAirtimeReversal(BoApprovalRequest approval, String auth) {
         String caseRef = extractCaseRef(approval);
-        return fxPeerExchangeClient.retryAirtimeReversal(auth, caseRef);
+        return fxPeerExchangeClient.retryAirtimeReversal(auth, requireDownstreamInternalToken(), caseRef);
     }
 
     private Map<String, Object> approveTransactionsReversal(BoApprovalRequest approval) {
         String caseRef = extractCaseRef(approval);
-        return transactionsClient.retryReversal(caseRef);
+        return transactionsClient.retryReversal(requireDownstreamInternalToken(), caseRef);
+    }
+
+    private String requireDownstreamInternalToken() {
+        if (downstreamInternalToken == null || downstreamInternalToken.trim().isEmpty()) {
+            throw new IllegalStateException("bo.downstream.internal-token is required for approved reversal execution");
+        }
+        return downstreamInternalToken;
     }
 
     private Map<String, Object> approveInvestmentProduct(BoApprovalRequest approval) {

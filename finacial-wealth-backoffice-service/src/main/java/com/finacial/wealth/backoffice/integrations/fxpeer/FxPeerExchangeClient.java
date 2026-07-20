@@ -156,6 +156,7 @@ public interface FxPeerExchangeClient {
     @PostMapping(value = "/fxothers/admin/airtime-reversals/{processId}/retry", produces = MediaType.APPLICATION_JSON_VALUE)
     Map<String, Object> retryAirtimeReversal(
             @RequestHeader("authorization") String auth,
+            @RequestHeader("X-Backoffice-Internal-Token") String internalToken,
             @PathVariable("processId") String processId
     );
 

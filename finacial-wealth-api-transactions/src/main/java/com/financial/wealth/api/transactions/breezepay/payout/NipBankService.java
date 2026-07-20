@@ -255,6 +255,11 @@ public class NipBankService {
         log.setMarkForRollBack(1);
         log.setResolved(false);
         log.setReversalStatus("PENDING");
+        log.setFulfilmentStatus("CONFIRMED_FAILED");
+        log.setReversalEligibility("AUTO_ELIGIBLE_CONFIRMED_FAILED");
+        log.setReversalIdempotencyKey(transactionId + "-RB");
+        log.setProviderStatusCheckedAt(Instant.now());
+        log.setProviderStatusResponse(errorMessage);
         log.setReversalRequestedAt(Instant.now());
         log.setReversalCompletedAt(null);
         log.setReversalLastError(errorMessage);
@@ -271,6 +276,10 @@ public class NipBankService {
         log.setMarkForRollBack(0);
         log.setResolved(false);
         log.setReversalStatus("RECON_REQUIRED");
+        log.setFulfilmentStatus("STATUS_UNKNOWN");
+        log.setReversalEligibility("BLOCKED_PENDING_FULFILMENT_CONFIRMATION");
+        log.setProviderStatusCheckedAt(Instant.now());
+        log.setProviderStatusResponse(errorMessage);
         log.setReversalRequestedAt(Instant.now());
         log.setReversalCompletedAt(null);
         log.setReversalLastError(errorMessage);

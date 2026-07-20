@@ -11,6 +11,7 @@ import com.finacial.wealth.api.utility.models.DebitWallet;
 import com.finacial.wealth.api.utility.models.DebitWalletCaller;
 import com.finacial.wealth.api.utility.models.GetAcctBalWallet;
 import com.finacial.wealth.api.utility.repository.AppConfigRepo;
+import com.finacial.wealth.api.utility.repository.FinWealthPaymentTransactionRepo;
 import com.finacial.wealth.api.utility.response.BaseResponse;
 import com.finacial.wealth.api.utility.utils.DecodedJWTToken;
 import com.finacial.wealth.api.utility.utils.StrongAES;
@@ -56,6 +57,7 @@ public class WalletSystemProxyService {
     private final UttilityMethods utilMethod;
     // @Autowired
     private final AppConfigRepo appConfigRepo;
+    private final FinWealthPaymentTransactionRepo finWealthPaymentTransactionRepo;
     String appConfigValue = "finWealthCreatedSuccessfullyOnWalletService";
 
     @Value("${fin.wealth.otp.encrypt.key}")
@@ -68,10 +70,12 @@ public class WalletSystemProxyService {
 
     @Autowired
     public WalletSystemProxyService(UttilityMethods utilMethod,
-            WebClient webClient, AppConfigRepo appConfigRepo) {
+            WebClient webClient, AppConfigRepo appConfigRepo,
+            FinWealthPaymentTransactionRepo finWealthPaymentTransactionRepo) {
         this.utilMethod = utilMethod;
         this.webClient = webClient;
         this.appConfigRepo = appConfigRepo;
+        this.finWealthPaymentTransactionRepo = finWealthPaymentTransactionRepo;
     }
 
     private final String CREATE_AS_WALLET_USER = "/profilings/usermgt/create-user";
@@ -84,6 +88,19 @@ public class WalletSystemProxyService {
     Gson gson = new Gson();
 
     Consumer<HttpHeaders> headers;
+
+    private BaseResponse idempotentDuplicateResponse(String transactionId) {
+        BaseResponse responseModel = new BaseResponse();
+        responseModel.setStatusCode(200);
+        responseModel.setDescription("Transaction already processed for transactionId=" + transactionId);
+        return responseModel;
+    }
+
+    private boolean hasProcessedTransaction(String transactionId) {
+        return transactionId != null
+                && !transactionId.trim().isEmpty()
+                && finWealthPaymentTransactionRepo.existsByTransactionId(transactionId);
+    }
 
     @PostConstruct
     public void init() throws NoSuchAlgorithmException, NoSuchPaddingException, InvalidKeyException, IllegalBlockSizeException, BadPaddingException {
@@ -436,6 +453,9 @@ public class WalletSystemProxyService {
         int statusCode = 500;
         try {
             statusCode = 400;
+            if (hasProcessedTransaction(rq.getTransactionId())) {
+                return idempotentDuplicateResponse(rq.getTransactionId());
+            }
             //  String phoneNumber = getDecoded.phoneNumber;
             DecodedJWTToken getDecoded = DecodedJWTToken.getDecoded(rq.getAuth());
 
@@ -533,6 +553,9 @@ public class WalletSystemProxyService {
         int statusCode = 500;
         try {
             statusCode = 400;
+            if (hasProcessedTransaction(rq.getTransactionId())) {
+                return idempotentDuplicateResponse(rq.getTransactionId());
+            }
 
             AuthUserRequest authUserRequest = new AuthUserRequest();
             authUserRequest.setEmailAddress(utilMethod.getWALLET_SYSTEM_EMAIL());
@@ -687,6 +710,9 @@ public class WalletSystemProxyService {
         int statusCode = 500;
         try {
             statusCode = 400;
+            if (hasProcessedTransaction(rq.getTransactionId())) {
+                return idempotentDuplicateResponse(rq.getTransactionId());
+            }
             //  String phoneNumber = getDecoded.phoneNumber;
             DecodedJWTToken getDecoded = DecodedJWTToken.getDecoded(rq.getAuth());
 
@@ -779,6 +805,9 @@ public class WalletSystemProxyService {
         int statusCode = 500;
         try {
             statusCode = 400;
+            if (hasProcessedTransaction(rq.getTransactionId())) {
+                return idempotentDuplicateResponse(rq.getTransactionId());
+            }
             //  String phoneNumber = getDecoded.phoneNumber;
 
             AuthUserRequest authUserRequest = new AuthUserRequest();

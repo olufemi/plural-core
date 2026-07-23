@@ -9,6 +9,27 @@ public final class DefaultPermissionCatalog {
 
     public static List<PermissionSpec> all() {
         return List.of(
+                new PermissionSpec("TRANSACTIONS", "TRANSACTIONS", "VIEW", "transactions.view", "View transactions"),
+                new PermissionSpec("TRANSACTIONS", "TRANSACTIONS", "FILTER", "transactions.filter", "Filter transactions"),
+                new PermissionSpec("TRANSACTIONS", "TRANSACTIONS", "VIEW_DETAILS", "transactions.viewDetails", "View transaction details"),
+                new PermissionSpec("TRANSACTIONS", "FEES", "VIEW", "transactions.viewFees", "View transaction fees"),
+                new PermissionSpec("TRANSACTIONS", "CUTOFF", "VIEW_PRE", "transactions.viewPreCutoff", "View pre-cutoff transactions"),
+                new PermissionSpec("TRANSACTIONS", "CUTOFF", "VIEW_POST", "transactions.viewPostCutoff", "View post-cutoff transactions"),
+                new PermissionSpec("TRANSACTIONS", "PLACEMENT", "PLACE", "transactions.place", "Place transactions"),
+                new PermissionSpec("TRANSACTIONS", "PLACEMENT", "CONFIRM", "transactions.confirmPlacement", "Confirm transaction placement"),
+                new PermissionSpec("TRANSACTIONS", "STATUS", "UPDATE", "transactions.updateStatus", "Update transaction status"),
+                new PermissionSpec("TRANSACTIONS", "STATUS", "BULK_UPDATE", "transactions.bulkUpdate", "Bulk update transactions"),
+                new PermissionSpec("TRANSACTIONS", "ROLLOVER", "ROLLOVER", "transactions.rollover", "Rollover transactions"),
+                new PermissionSpec("PRODUCTS", "PRODUCTS", "VIEW", "products.view", "View products"),
+                new PermissionSpec("PRODUCTS", "PRODUCTS", "MANAGE", "products.manage", "Manage products"),
+                new PermissionSpec("USER", "MANAGEMENT", "VIEW", "userManagement.view", "View backoffice users"),
+                new PermissionSpec("USER", "MANAGEMENT", "MANAGE", "userManagement.manage", "Manage backoffice users"),
+                new PermissionSpec("USER", "MANAGEMENT", "ASSIGN_ROLES", "userManagement.assignRoles", "Assign backoffice roles"),
+                new PermissionSpec("USER", "MANAGEMENT", "EDIT_SUPER_ADMIN", "userManagement.editSuperAdmin", "Edit super admin users"),
+                new PermissionSpec("REPORTS", "REPORTS", "VIEW", "reports.view", "View reports"),
+                new PermissionSpec("REPORTS", "REPORTS", "EXPORT", "reports.export", "Export reports"),
+                new PermissionSpec("SETTINGS", "SETTINGS", "MANAGE", "settings.manage", "Manage settings"),
+                new PermissionSpec("AUDIT", "LOG", "EXPORT", "audit.export", "Export audit logs"),
                 new PermissionSpec("INVESTMENT", "LIQUIDATION", "VIEW", "investment.liquidation.view", "View liquidation approval queues"),
                 new PermissionSpec("INVESTMENT", "LIQUIDATION", "APPROVE", "investment.liquidation.approve", "Approve or reject liquidation approvals"),
                 new PermissionSpec("INVESTMENT", "LIQUIDATION", "REMEDIATE", "investment.liquidation.remediate", "Remediate and resubmit liquidation approvals"),
@@ -35,7 +56,9 @@ public final class DefaultPermissionCatalog {
                 new PermissionSpec("CAMPAIGN", "MARKETING", "APPROVE", "campaign.approve", "Approve campaigns"),
                 new PermissionSpec("ROLE", "MANAGEMENT", "MANAGE", "role.manage", "Create roles and manage permissions"),
                 new PermissionSpec("USER", "MANAGEMENT", "MANAGE", "user.manage", "Create and manage backoffice users"),
-                new PermissionSpec("AUDIT", "LOG", "VIEW", "audit.view", "View audit logs")
+                new PermissionSpec("AUDIT", "LOG", "VIEW", "audit.view", "View audit logs"),
+                new PermissionSpec("APPROVAL", "DECISION", "MANAGE", "approval.decision.manage", "Approve or reject approval requests"),
+                new PermissionSpec("INTERBANK", "NAME_ENQUIRY", "EXECUTE", "interbank.nameEnquiry.execute", "Execute interbank name enquiry")
         );
     }
 

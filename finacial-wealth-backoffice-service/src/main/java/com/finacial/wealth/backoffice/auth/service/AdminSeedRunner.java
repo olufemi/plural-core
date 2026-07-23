@@ -67,7 +67,8 @@ public class AdminSeedRunner implements ApplicationRunner {
         if (superAdminRole.getPermissions() == null) {
             superAdminRole.setPermissions(new HashSet<>());
         }
-        if (superAdminRole.getPermissions().size() != permissions.size()) {
+        if (!superAdminRole.getPermissions().containsAll(permissions)
+                || superAdminRole.getPermissions().size() != permissions.size()) {
             superAdminRole.setPermissions(new HashSet<>(permissions));
             roleRepo.saveAndFlush(superAdminRole);
         }

@@ -1,11 +1,19 @@
 package com.finacial.wealth.backoffice.controller;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finacial.wealth.backoffice.approval.policy.service.ApprovalPolicyService;
 import com.finacial.wealth.backoffice.approval.service.ApprovalService;
 import com.finacial.wealth.backoffice.integrations.fxpeer.FxPeerExchangeClient;
 import com.finacial.wealth.backoffice.integrations.fxpeer.model.FeaturedServicesConfigRequest;
+import com.finacial.wealth.backoffice.integrations.fxpeer.model.InterestAccrueType;
+import com.finacial.wealth.backoffice.integrations.fxpeer.model.InterestCapitalization;
+import com.finacial.wealth.backoffice.integrations.fxpeer.model.InvestmentType;
 import com.finacial.wealth.backoffice.integrations.fxpeer.model.InvestmentProductUpsertRequest;
 import com.finacial.wealth.backoffice.integrations.fxpeer.model.LiquidationApprovalRequest;
+import com.finacial.wealth.backoffice.integrations.fxpeer.model.LiquidationFeeAppliedTo;
+import com.finacial.wealth.backoffice.integrations.fxpeer.model.LiquidationFeeType;
+import com.finacial.wealth.backoffice.integrations.fxpeer.model.ScheduleMode;
+import com.finacial.wealth.backoffice.integrations.fxpeer.model.ValuationMethod;
 import com.finacial.wealth.backoffice.notification.entity.BackofficeNotificationSeverity;
 import com.finacial.wealth.backoffice.notification.service.BackofficeNotificationService;
 import com.finacial.wealth.backoffice.reports.CsvWriter;
@@ -32,8 +40,10 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.time.YearMonth;
 import java.util.*;
+import org.springframework.web.server.ResponseStatusException;
 
 @RestController
 @RequestMapping({"/backoffice/investments", "/bo/backoffice/investments"})
@@ -45,6 +55,7 @@ public class BoInvestmentController {
     private final BackofficeNotificationService notificationService;
     private final ApprovalPolicyService approvalPolicyService;
     private final ApprovalService approvalService;
+    private final ObjectMapper objectMapper;
 
     @GetMapping("/products")
     @PreAuthorize("hasAnyRole('SUPER_ADMIN','ADMIN','OPERATIONS','FINANCE')")
@@ -353,11 +364,11 @@ public class BoInvestmentController {
     )
     public ResponseEntity<Map<String, Object>> updateProduct(
             @PathVariable String productCode,
-            @Valid @RequestBody InvestmentProductUpsertRequest req,
+            @RequestBody InvestmentProductUpsertRequest req,
             @RequestAttribute("boAdminUserId") Long adminUserId,
             HttpServletRequest httpRequest
     ) {
-        req.setProductCode(productCode); // path wins
+        req = mergeProductUpdate(productCode, req);
         if (approvalPolicyService.requiresApproval("INVESTMENT_PRODUCT_UPDATE")) {
             return ResponseEntity.status(HttpStatus.ACCEPTED)
                     .body(approvalService.submitInvestmentProductUpdate(productCode, req, adminUserId, httpRequest));
@@ -368,6 +379,209 @@ public class BoInvestmentController {
             notifyIntegrationFailure("Investment product update failed", "INVESTMENT_PRODUCT", productCode, ex);
             throw ex;
         }
+    }
+
+    private InvestmentProductUpsertRequest mergeProductUpdate(String productCode, InvestmentProductUpsertRequest patch) {
+        if (patch == null) {
+            patch = new InvestmentProductUpsertRequest();
+        }
+
+        Map<String, Object> response = fxPeerClient.getInvestmentProduct(productCode);
+        Integer statusCode = intValue(response == null ? null : response.get("statusCode"));
+        if (statusCode != null && statusCode >= 400) {
+            HttpStatus status = HttpStatus.resolve(statusCode);
+            throw new ResponseStatusException(status == null ? HttpStatus.BAD_GATEWAY : status,
+                    stringValue(response.getOrDefault("description", "Unable to fetch current investment product")));
+        }
+
+        Map<String, Object> current = objectMap(response == null ? null : response.get("data"));
+        if (current.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Product not found: " + productCode);
+        }
+
+        InvestmentProductUpsertRequest merged = fromCurrentProduct(productCode, current);
+        overlayProductPatch(merged, patch);
+        merged.setProductCode(productCode);
+        return merged;
+    }
+
+    private InvestmentProductUpsertRequest fromCurrentProduct(String productCode, Map<String, Object> current) {
+        InvestmentProductUpsertRequest req = new InvestmentProductUpsertRequest();
+        req.setProductCode(firstString(current, "productCode", productCode));
+        req.setName(firstString(current, "name", null));
+        req.setType(enumValue(InvestmentType.class, firstObject(current, "type", "investmentType", "InvestmentType")));
+        req.setCurrency(firstString(current, "currency", null));
+        req.setMinimumInvestmentAmount(decimalValue(current.get("minimumInvestmentAmount")));
+        req.setValuationMethod(enumValue(ValuationMethod.class, current.get("valuationMethod")));
+        req.setUnitPrice(decimalValue(current.get("unitPrice")));
+        req.setYieldPa(decimalValue(current.get("yieldPa")));
+        req.setYieldYtd(decimalValue(current.get("yieldYtd")));
+        req.setTenorDays(intValue(current.get("tenorDays")));
+        req.setActive(booleanValue(current.get("active")));
+        req.setLiquidationFeeAppliedTo(enumValue(LiquidationFeeAppliedTo.class, current.get("liquidationFeeAppliedTo")));
+        req.setLiquidationFeeType(enumValue(LiquidationFeeType.class, current.get("liquidationFeeType")));
+        req.setLiquidationFeeRate(decimalValue(current.get("liquidationFeeRate")));
+        req.setMinLiquidationFee(decimalValue(current.get("minLiquidationFee")));
+        req.setLiquidationFeeCap(decimalValue(current.get("liquidationFeeCap")));
+        req.setLockEnabled(booleanValue(current.get("lockEnabled")));
+        req.setLockDays(intValue(current.get("lockDays")));
+        req.setEarlyLiquidationFeeAppliedTo(enumValue(LiquidationFeeAppliedTo.class, current.get("earlyLiquidationFeeAppliedTo")));
+        req.setEarlyLiquidationFeeType(enumValue(LiquidationFeeType.class, current.get("earlyLiquidationFeeType")));
+        req.setEarlyLiquidationFeeRate(decimalValue(current.get("earlyLiquidationFeeRate")));
+        req.setEarlyLiquidationFeeCap(decimalValue(current.get("earlyLiquidationFeeCap")));
+        req.setPartnerProductCode(firstString(current, "partnerProductCode", null));
+        req.setProspectusUrl(firstString(current, "prospectusUrl", null));
+        req.setMetaJson(firstString(current, "metaJson", null));
+        req.setEnableProduct(firstString(current, "enableProduct", null));
+        req.setPercentageCurrValue(decimalValue(current.get("percentageCurrValue")));
+        req.setScheduleMode(enumValue(ScheduleMode.class, current.get("scheduleMode")));
+        req.setInterestAccrueType(enumValue(InterestAccrueType.class, current.get("interestAccrueType")));
+        req.setInterestCapitalization(enumValue(InterestCapitalization.class, current.get("interestCapitalization")));
+        req.setSettlementDelayMinutes(longValue(current.get("settlementDelayMinutes")));
+        req.setTenorMinutes(longValue(current.get("tenorMinutes")));
+        req.setMaturityAtEndOfDay(booleanValue(current.get("maturityAtEndOfDay")));
+        req.setSettlementAt(instantValue(current.get("settlementAt")));
+        req.setMaturityAt(instantValue(current.get("maturityAt")));
+        req.setSubscriptionCutOffTime(localTimeValue(current.get("subscriptionCutOffTime")));
+        return req;
+    }
+
+    private void overlayProductPatch(InvestmentProductUpsertRequest target, InvestmentProductUpsertRequest patch) {
+        if (patch.getName() != null) target.setName(patch.getName());
+        if (patch.getType() != null) target.setType(patch.getType());
+        if (patch.getCurrency() != null) target.setCurrency(patch.getCurrency());
+        if (patch.getMinimumInvestmentAmount() != null) target.setMinimumInvestmentAmount(patch.getMinimumInvestmentAmount());
+        if (patch.getValuationMethod() != null) target.setValuationMethod(patch.getValuationMethod());
+        if (patch.getUnitPrice() != null) target.setUnitPrice(patch.getUnitPrice());
+        if (patch.getYieldPa() != null) target.setYieldPa(patch.getYieldPa());
+        if (patch.getYieldYtd() != null) target.setYieldYtd(patch.getYieldYtd());
+        if (patch.getTenorDays() != null) target.setTenorDays(patch.getTenorDays());
+        if (patch.getActive() != null) target.setActive(patch.getActive());
+        if (patch.getLiquidationFeeAppliedTo() != null) target.setLiquidationFeeAppliedTo(patch.getLiquidationFeeAppliedTo());
+        if (patch.getLiquidationFeeType() != null) target.setLiquidationFeeType(patch.getLiquidationFeeType());
+        if (patch.getLiquidationFeeRate() != null) target.setLiquidationFeeRate(patch.getLiquidationFeeRate());
+        if (patch.getMinLiquidationFee() != null) target.setMinLiquidationFee(patch.getMinLiquidationFee());
+        if (patch.getLiquidationFeeCap() != null) target.setLiquidationFeeCap(patch.getLiquidationFeeCap());
+        if (patch.getLockEnabled() != null) target.setLockEnabled(patch.getLockEnabled());
+        if (patch.getLockDays() != null) target.setLockDays(patch.getLockDays());
+        if (patch.getEarlyLiquidationFeeAppliedTo() != null) target.setEarlyLiquidationFeeAppliedTo(patch.getEarlyLiquidationFeeAppliedTo());
+        if (patch.getEarlyLiquidationFeeType() != null) target.setEarlyLiquidationFeeType(patch.getEarlyLiquidationFeeType());
+        if (patch.getEarlyLiquidationFeeRate() != null) target.setEarlyLiquidationFeeRate(patch.getEarlyLiquidationFeeRate());
+        if (patch.getEarlyLiquidationFeeCap() != null) target.setEarlyLiquidationFeeCap(patch.getEarlyLiquidationFeeCap());
+        if (patch.getPartnerProductCode() != null) target.setPartnerProductCode(patch.getPartnerProductCode());
+        if (patch.getProspectusUrl() != null) target.setProspectusUrl(patch.getProspectusUrl());
+        if (patch.getMetaJson() != null) target.setMetaJson(patch.getMetaJson());
+        if (patch.getEnableProduct() != null) target.setEnableProduct(patch.getEnableProduct());
+        if (patch.getPercentageCurrValue() != null) target.setPercentageCurrValue(patch.getPercentageCurrValue());
+        if (patch.getScheduleMode() != null) target.setScheduleMode(patch.getScheduleMode());
+        if (patch.getInterestAccrueType() != null) target.setInterestAccrueType(patch.getInterestAccrueType());
+        if (patch.getInterestCapitalization() != null) target.setInterestCapitalization(patch.getInterestCapitalization());
+        if (patch.getSettlementDelayMinutes() != null) target.setSettlementDelayMinutes(patch.getSettlementDelayMinutes());
+        if (patch.getTenorMinutes() != null) target.setTenorMinutes(patch.getTenorMinutes());
+        if (patch.getMaturityAtEndOfDay() != null) target.setMaturityAtEndOfDay(patch.getMaturityAtEndOfDay());
+        if (patch.getSettlementAt() != null) target.setSettlementAt(patch.getSettlementAt());
+        if (patch.getMaturityAt() != null) target.setMaturityAt(patch.getMaturityAt());
+        if (patch.getSubscriptionCutOffTime() != null) target.setSubscriptionCutOffTime(patch.getSubscriptionCutOffTime());
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> objectMap(Object value) {
+        if (value instanceof Map<?, ?> map) {
+            return (Map<String, Object>) map;
+        }
+        if (value == null) {
+            return Collections.emptyMap();
+        }
+        return objectMapper.convertValue(value, Map.class);
+    }
+
+    private Object firstObject(Map<String, Object> source, String... keys) {
+        for (String key : keys) {
+            if (source.containsKey(key) && source.get(key) != null) {
+                return source.get(key);
+            }
+        }
+        return null;
+    }
+
+    private String firstString(Map<String, Object> source, String key, String fallback) {
+        String value = stringValue(source.get(key));
+        return value == null || value.isBlank() ? fallback : value;
+    }
+
+    private String stringValue(Object value) {
+        return value == null ? null : String.valueOf(value);
+    }
+
+    private BigDecimal decimalValue(Object value) {
+        if (value instanceof BigDecimal decimal) {
+            return decimal;
+        }
+        if (value instanceof Number number) {
+            return BigDecimal.valueOf(number.doubleValue());
+        }
+        if (value instanceof String text && !text.isBlank()) {
+            return new BigDecimal(text.trim());
+        }
+        return null;
+    }
+
+    private Integer intValue(Object value) {
+        if (value instanceof Number number) {
+            return number.intValue();
+        }
+        if (value instanceof String text && !text.isBlank()) {
+            return Integer.valueOf(text.trim());
+        }
+        return null;
+    }
+
+    private Long longValue(Object value) {
+        if (value instanceof Number number) {
+            return number.longValue();
+        }
+        if (value instanceof String text && !text.isBlank()) {
+            return Long.valueOf(text.trim());
+        }
+        return null;
+    }
+
+    private Boolean booleanValue(Object value) {
+        if (value instanceof Boolean bool) {
+            return bool;
+        }
+        if (value instanceof String text && !text.isBlank()) {
+            return Boolean.valueOf(text.trim());
+        }
+        return null;
+    }
+
+    private Instant instantValue(Object value) {
+        if (value instanceof Instant instant) {
+            return instant;
+        }
+        if (value instanceof String text && !text.isBlank()) {
+            return Instant.parse(text.trim());
+        }
+        return null;
+    }
+
+    private LocalTime localTimeValue(Object value) {
+        if (value instanceof LocalTime localTime) {
+            return localTime;
+        }
+        if (value instanceof String text && !text.isBlank()) {
+            return LocalTime.parse(text.trim());
+        }
+        return null;
+    }
+
+    private <E extends Enum<E>> E enumValue(Class<E> type, Object value) {
+        String text = stringValue(value);
+        if (text == null || text.isBlank()) {
+            return null;
+        }
+        return Enum.valueOf(type, text.trim().toUpperCase(Locale.ROOT));
     }
 
     @GetMapping(value = "/products/export.csv", produces = "text/csv")

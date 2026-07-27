@@ -358,6 +358,18 @@ Block/unblock request:
 | `PUT` | `/bo/backoffice/investments/products/{productCode}` | Update product, maker-checker enabled |
 | `GET` | `/bo/backoffice/investments/products/export.csv` | Download product CSV |
 
+Partial status update:
+
+`PUT /bo/backoffice/investments/products/{productCode}` accepts a partial body for product activation/deactivation. Backoffice fetches the current product, overlays the non-null submitted fields, and routes the result through the normal maker-checker/downstream update flow.
+
+```json
+{
+  "active": false
+}
+```
+
+A `401 Unauthorized` response means the admin JWT is missing, expired, or invalid. The FE should send `Authorization: Bearer <fresh accessToken>` on this PUT request; a valid token without enough role/permission should return `403 Forbidden`.
+
 Create/update product request:
 
 ```json

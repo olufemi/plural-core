@@ -37,41 +37,41 @@ WHERE r.name = 'SUPER_ADMIN'
   );
 
 INSERT INTO bo_approval_policy
-  (action_code, module, sub_module, description, approval_required, checker_permission, sla_hours, active)
-SELECT 'INVESTMENT_PRODUCT_CREATE', 'INVESTMENT', 'PRODUCT', 'Create investment product', TRUE, 'investment.product.approve', 24, TRUE
+  (action_code, module, sub_module, description, approval_required, checker_permission, sla_hours, active, created_at, updated_at)
+SELECT 'INVESTMENT_PRODUCT_CREATE', 'INVESTMENT', 'PRODUCT', 'Create investment product', TRUE, 'investment.product.approve', 24, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
 WHERE NOT EXISTS (SELECT 1 FROM bo_approval_policy WHERE action_code = 'INVESTMENT_PRODUCT_CREATE');
 
 INSERT INTO bo_approval_policy
-  (action_code, module, sub_module, description, approval_required, checker_permission, sla_hours, active)
-SELECT 'INVESTMENT_PRODUCT_UPDATE', 'INVESTMENT', 'PRODUCT', 'Update investment product', TRUE, 'investment.product.approve', 24, TRUE
+  (action_code, module, sub_module, description, approval_required, checker_permission, sla_hours, active, created_at, updated_at)
+SELECT 'INVESTMENT_PRODUCT_UPDATE', 'INVESTMENT', 'PRODUCT', 'Update investment product', TRUE, 'investment.product.approve', 24, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
 WHERE NOT EXISTS (SELECT 1 FROM bo_approval_policy WHERE action_code = 'INVESTMENT_PRODUCT_UPDATE');
 
 INSERT INTO bo_approval_policy
-  (action_code, module, sub_module, description, approval_required, checker_permission, sla_hours, active)
-SELECT 'REFERRAL_PROGRAM_CHANGE', 'REFERRAL', 'PROGRAM', 'Create or update referral program', FALSE, 'referral.program.manage', 24, TRUE
+  (action_code, module, sub_module, description, approval_required, checker_permission, sla_hours, active, created_at, updated_at)
+SELECT 'REFERRAL_PROGRAM_CHANGE', 'REFERRAL', 'PROGRAM', 'Create or update referral program', FALSE, 'referral.program.manage', 24, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
 WHERE NOT EXISTS (SELECT 1 FROM bo_approval_policy WHERE action_code = 'REFERRAL_PROGRAM_CHANGE');
 
 INSERT INTO bo_approval_policy
-  (action_code, module, sub_module, description, approval_required, checker_permission, sla_hours, active)
-SELECT 'CAMPAIGN_CHANGE', 'CAMPAIGN', 'MARKETING', 'Create, update, stop, cancel, or restart campaign', FALSE, 'campaign.approve', 24, TRUE
+  (action_code, module, sub_module, description, approval_required, checker_permission, sla_hours, active, created_at, updated_at)
+SELECT 'CAMPAIGN_CHANGE', 'CAMPAIGN', 'MARKETING', 'Create, update, stop, cancel, or restart campaign', FALSE, 'campaign.approve', 24, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
 WHERE NOT EXISTS (SELECT 1 FROM bo_approval_policy WHERE action_code = 'CAMPAIGN_CHANGE');
 
 INSERT INTO bo_approval_policy
-  (action_code, module, sub_module, description, approval_required, checker_permission, sla_hours, active)
-SELECT 'CUSTOMER_BLOCK_UNBLOCK', 'CUSTOMER', 'PROFILE', 'Block or unblock customer', FALSE, 'customer.profile.manage', 24, TRUE
+  (action_code, module, sub_module, description, approval_required, checker_permission, sla_hours, active, created_at, updated_at)
+SELECT 'CUSTOMER_BLOCK_UNBLOCK', 'CUSTOMER', 'PROFILE', 'Block or unblock customer', FALSE, 'customer.profile.manage', 24, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
 WHERE NOT EXISTS (SELECT 1 FROM bo_approval_policy WHERE action_code = 'CUSTOMER_BLOCK_UNBLOCK');
 
 INSERT INTO bo_approval_policy
-  (action_code, module, sub_module, description, approval_required, checker_permission, sla_hours, active)
-SELECT 'APP_CONFIG_UPDATE', 'CONFIG', 'APP_CONFIG', 'Update governed app_config value', FALSE, 'app_config.manage', 24, TRUE
+  (action_code, module, sub_module, description, approval_required, checker_permission, sla_hours, active, created_at, updated_at)
+SELECT 'APP_CONFIG_UPDATE', 'CONFIG', 'APP_CONFIG', 'Update governed app_config value', FALSE, 'app_config.manage', 24, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
 WHERE NOT EXISTS (SELECT 1 FROM bo_approval_policy WHERE action_code = 'APP_CONFIG_UPDATE');
 
 INSERT INTO bo_approval_policy
-  (action_code, module, sub_module, description, approval_required, checker_permission, sla_hours, active)
-SELECT 'REVERSAL_MANUAL_REQUEST', 'REVERSAL', 'MANUAL', 'Submit manual reversal approval request', TRUE, 'reversal.manual.approve', 4, TRUE
+  (action_code, module, sub_module, description, approval_required, checker_permission, sla_hours, active, created_at, updated_at)
+SELECT 'REVERSAL_MANUAL_REQUEST', 'REVERSAL', 'MANUAL', 'Submit manual reversal approval request', TRUE, 'reversal.manual.approve', 4, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
 WHERE NOT EXISTS (SELECT 1 FROM bo_approval_policy WHERE action_code = 'REVERSAL_MANUAL_REQUEST');
 
 INSERT INTO bo_approval_policy
-  (action_code, module, sub_module, description, approval_required, checker_permission, sla_hours, active)
-SELECT 'LIQUIDATION_APPROVAL', 'INVESTMENT', 'LIQUIDATION', 'Approve liquidation request', TRUE, 'investment.liquidation.approve', 8, TRUE
+  (action_code, module, sub_module, description, approval_required, checker_permission, sla_hours, active, created_at, updated_at)
+SELECT 'LIQUIDATION_APPROVAL', 'INVESTMENT', 'LIQUIDATION', 'Approve liquidation request', TRUE, 'investment.liquidation.approve', 8, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
 WHERE NOT EXISTS (SELECT 1 FROM bo_approval_policy WHERE action_code = 'LIQUIDATION_APPROVAL');

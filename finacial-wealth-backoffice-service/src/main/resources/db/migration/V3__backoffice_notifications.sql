@@ -1,4 +1,4 @@
-CREATE TABLE bo_backoffice_notification (
+CREATE TABLE IF NOT EXISTS bo_backoffice_notification (
   id BIGINT PRIMARY KEY AUTO_INCREMENT,
   recipient_admin_id BIGINT NOT NULL,
   category VARCHAR(64) NOT NULL,

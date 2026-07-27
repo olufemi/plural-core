@@ -1,4 +1,4 @@
-CREATE TABLE bo_permission (
+CREATE TABLE IF NOT EXISTS bo_permission (
   id BIGINT PRIMARY KEY AUTO_INCREMENT,
   module VARCHAR(64) NOT NULL,
   sub_module VARCHAR(64) NOT NULL,
@@ -7,7 +7,7 @@ CREATE TABLE bo_permission (
   description VARCHAR(255) NULL
 );
 
-CREATE TABLE bo_role_permission (
+CREATE TABLE IF NOT EXISTS bo_role_permission (
   role_id BIGINT NOT NULL,
   permission_id BIGINT NOT NULL,
   PRIMARY KEY(role_id, permission_id),
@@ -15,7 +15,7 @@ CREATE TABLE bo_role_permission (
   CONSTRAINT fk_bo_role_permission_permission FOREIGN KEY(permission_id) REFERENCES bo_permission(id)
 );
 
-CREATE TABLE bo_approval_request (
+CREATE TABLE IF NOT EXISTS bo_approval_request (
   id BIGINT PRIMARY KEY AUTO_INCREMENT,
   module VARCHAR(32) NOT NULL,
   sub_module VARCHAR(32) NOT NULL,
@@ -41,7 +41,7 @@ CREATE TABLE bo_approval_request (
   INDEX idx_bo_approval_module (module, sub_module, status)
 );
 
-CREATE TABLE bo_approval_event (
+CREATE TABLE IF NOT EXISTS bo_approval_event (
   id BIGINT PRIMARY KEY AUTO_INCREMENT,
   approval_request_id BIGINT NOT NULL,
   event_type VARCHAR(32) NOT NULL,
@@ -53,7 +53,7 @@ CREATE TABLE bo_approval_event (
   INDEX idx_bo_approval_event_request (approval_request_id, created_at)
 );
 
-INSERT INTO bo_permission(module, sub_module, action, code, description) VALUES
+INSERT IGNORE INTO bo_permission(module, sub_module, action, code, description) VALUES
  ('INVESTMENT', 'LIQUIDATION', 'VIEW', 'investment.liquidation.view', 'View liquidation approval queues'),
  ('INVESTMENT', 'LIQUIDATION', 'APPROVE', 'investment.liquidation.approve', 'Approve or reject liquidation approvals'),
  ('INVESTMENT', 'LIQUIDATION', 'REMEDIATE', 'investment.liquidation.remediate', 'Remediate and resubmit liquidation approvals'),
@@ -64,7 +64,7 @@ INSERT INTO bo_permission(module, sub_module, action, code, description) VALUES
  ('USER', 'MANAGEMENT', 'MANAGE', 'user.manage', 'Create and manage backoffice users'),
  ('AUDIT', 'LOG', 'VIEW', 'audit.view', 'View audit logs');
 
-INSERT INTO bo_role_permission(role_id, permission_id)
+INSERT IGNORE INTO bo_role_permission(role_id, permission_id)
 SELECT r.id, p.id
 FROM bo_admin_role r
 JOIN bo_permission p

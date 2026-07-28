@@ -6,7 +6,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
-import java.util.UUID;
+
 @Component
 public class BackofficeRequestIdFilter implements Filter {
 
@@ -23,16 +23,24 @@ public class BackofficeRequestIdFilter implements Filter {
     }
     w.setHeader("X-Request-Id", requestId);
 
-    // --- DEBUG: check Authorization header presence ---
+    // Keep this deliberately non-sensitive: it helps trace gateway/body/header issues
+    // without writing tokens or credentials to logs.
     String auth = r.getHeader("Authorization");
-    boolean hasBearer = auth != null && auth.startsWith("Bearer ");
+    boolean hasBearer = auth != null && auth.trim().regionMatches(true, 0, "Bearer ", 0, 7);
     System.out.println("BackofficeRequestIdFilter :: " + r.getMethod() + " " + r.getRequestURI()
         + " | requestId=" + requestId
+        + " | contentType=" + nullSafe(r.getContentType())
+        + " | contentLength=" + r.getContentLengthLong()
         + " | AuthorizationPresent=" + (auth != null)
-        + " | Bearer=" + hasBearer);
-    // --------------------------------------------------
+        + " | Bearer=" + hasBearer
+        + " | xForwardedFor=" + nullSafe(r.getHeader("X-Forwarded-For"))
+        + " | xForwardedProto=" + nullSafe(r.getHeader("X-Forwarded-Proto"))
+        + " | userAgent=" + nullSafe(r.getHeader("User-Agent")));
 
     chain.doFilter(req, res);
   }
-}
 
+  private String nullSafe(String value) {
+    return value == null || value.trim().isEmpty() ? "-" : value;
+  }
+}

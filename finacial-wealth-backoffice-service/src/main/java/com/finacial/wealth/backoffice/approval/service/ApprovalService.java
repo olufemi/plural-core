@@ -49,6 +49,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -632,10 +634,20 @@ public class ApprovalService {
         if (!(approval.getStatus() == ApprovalStatus.PENDING || approval.getStatus() == ApprovalStatus.RESUBMITTED)) {
             throw new IllegalArgumentException("Approval is not awaiting decision");
         }
-        if (approval.getMakerAdminId() != null && approval.getMakerAdminId().equals(actorAdminId)) {
+        if (approval.getMakerAdminId() != null
+                && approval.getMakerAdminId().equals(actorAdminId)
+                && !currentUserIsSuperAdmin()) {
             throw new IllegalArgumentException("Maker cannot approve or reject their own request");
         }
         return approval;
+    }
+
+    private boolean currentUserIsSuperAdmin() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        return authentication != null
+                && authentication.getAuthorities() != null
+                && authentication.getAuthorities().stream()
+                        .anyMatch(authority -> "ROLE_SUPER_ADMIN".equals(authority.getAuthority()));
     }
 
     private List<ApprovalStatus> resolveStatuses(String status) {

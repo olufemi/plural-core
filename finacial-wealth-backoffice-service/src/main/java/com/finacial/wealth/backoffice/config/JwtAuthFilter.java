@@ -63,6 +63,11 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
         String token = auth.substring(7).trim();
 
+        if ((token.startsWith("\"") && token.endsWith("\""))
+                || (token.startsWith("'") && token.endsWith("'"))) {
+            token = token.substring(1, token.length() - 1).trim();
+        }
+
 // Defensive: strip anything appended after the JWT (comma/space)
         int comma = token.indexOf(',');
         if (comma > 0) {
@@ -74,7 +79,20 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             token = token.substring(0, space).trim();
         }
 
-        if (token.isEmpty() || token.contains("\"") || token.contains("\n")) {
+        if (token.isEmpty()) {
+            log.warn("JWT ignored: empty bearer token uri={}", request.getRequestURI());
+            filterChain.doFilter(request, response);
+            return;
+        }
+
+        if (token.contains("\"") || token.contains("'") || token.contains("\n") || token.contains("\r")) {
+            log.warn("JWT ignored: malformed bearer token uri={} segments={}", request.getRequestURI(), countJwtSegments(token));
+            filterChain.doFilter(request, response);
+            return;
+        }
+
+        if (countJwtSegments(token) != 3) {
+            log.warn("JWT ignored: invalid JWT segment count uri={} segments={}", request.getRequestURI(), countJwtSegments(token));
             filterChain.doFilter(request, response);
             return;
         }
@@ -126,6 +144,8 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                     = new UsernamePasswordAuthenticationToken(email, null, authorities);
 
             SecurityContextHolder.getContext().setAuthentication(authentication);
+            log.info("JWT authenticated: uri={} subject={} email={} authorities={}",
+                    request.getRequestURI(), userId, email, authorities.size());
 
         } catch (Exception e) {
             log.warn("JWT parse failed: uri={} msg={}", request.getRequestURI(), e.getMessage());
@@ -163,6 +183,13 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         }
 
         return false;
+    }
+
+    private int countJwtSegments(String token) {
+        if (token == null || token.isEmpty()) {
+            return 0;
+        }
+        return token.split("\\.", -1).length;
     }
 
 }

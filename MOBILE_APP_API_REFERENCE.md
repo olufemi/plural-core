@@ -1145,11 +1145,13 @@ Behavior:
 - Existing `marketValue` remains the gross investment value for backward compatibility.
 - A pending redemption can appear before the wallet is credited; wallet credit happens only after automatic or backoffice approval settles the redemption.
 
-Deployment policy:
+Redemption policy:
 
-- `INVESTMENT_REDEMPTION_APPROVAL_MODE=AUTO` settles all pending redemptions from the scheduler.
-- `INVESTMENT_REDEMPTION_APPROVAL_MODE=MANUAL` leaves pending redemptions for backoffice approval.
-- `INVESTMENT_REDEMPTION_APPROVAL_MODE=THRESHOLD` auto-settles redemptions up to `INVESTMENT_REDEMPTION_AUTO_APPROVAL_THRESHOLD` and leaves higher amounts pending.
+- Backoffice governs settlement behavior through maker-checker protected `app_config` keys.
+- `investment.redemption.approval-mode=AUTO` settles all pending redemptions from the scheduler.
+- `investment.redemption.approval-mode=MANUAL` leaves pending redemptions for backoffice approval.
+- `investment.redemption.approval-mode=THRESHOLD` auto-settles redemptions up to `investment.redemption.auto-approval-threshold` and leaves higher amounts pending.
+- Environment variables remain fallback values only if these `app_config` keys are absent.
 
 ### POST `/investments/request-top-up`
 

@@ -5,6 +5,8 @@
 package com.finacial.wealth.api.fxpeer.exchange.investment.service;
 
 import com.finacial.wealth.api.fxpeer.exchange.common.NotFoundException;
+import com.finacial.wealth.api.fxpeer.exchange.domain.AppConfig;
+import com.finacial.wealth.api.fxpeer.exchange.domain.AppConfigRepo;
 import com.finacial.wealth.api.fxpeer.exchange.investment.domain.InvestmentOrder;
 import com.finacial.wealth.api.fxpeer.exchange.investment.domain.InvestmentPosition;
 import com.finacial.wealth.api.fxpeer.exchange.investment.ennum.InvestmentOrderStatus;
@@ -32,8 +34,12 @@ import org.springframework.stereotype.Service;
 @Service
 public class LiquidationActionService {
     private static final Logger log = LoggerFactory.getLogger(LiquidationActionService.class);
+    private static final String REDEMPTION_APPROVAL_MODE_CONFIG = "investment.redemption.approval-mode";
+    private static final String REDEMPTION_AUTO_APPROVAL_THRESHOLD_CONFIG = "investment.redemption.auto-approval-threshold";
+    private static final String REDEMPTION_SCHEDULER_ENABLED_CONFIG = "investment.redemption.scheduler-enabled";
 
     private final InvestmentOrderRepository orderRepo;
+    private final AppConfigRepo appConfigRepo;
     private final UttilityMethods utilService; // your JWT claim extractor
     private final ActivityService activityService;
     private final InvestmentOrderService investmentService;
@@ -43,6 +49,7 @@ public class LiquidationActionService {
     // or inject the class where onLiquidationSettled lives
 
     public LiquidationActionService(InvestmentOrderRepository orderRepo,
+            AppConfigRepo appConfigRepo,
             UttilityMethods utilService,
             ActivityService activityService,
             InvestmentOrderService investmentService,
@@ -50,6 +57,7 @@ public class LiquidationActionService {
             @Value("${investment.redemption.approval-mode:${fx.investment.liquidation.approval-mode:AUTO}}") String redemptionApprovalMode,
             @Value("${investment.redemption.auto-approval-threshold:${fx.investment.liquidation.auto-approval-threshold:0}}") String autoApprovalThreshold) {
         this.orderRepo = orderRepo;
+        this.appConfigRepo = appConfigRepo;
         this.utilService = utilService;
         this.activityService = activityService;
         this.investmentService = investmentService;
@@ -119,6 +127,11 @@ public class LiquidationActionService {
                 // leave in PROCESSING for retry
             }
         }
+    }
+
+    public boolean isRedemptionSchedulerEnabled(boolean propertyFallback) {
+        String configuredValue = appConfigValue(REDEMPTION_SCHEDULER_ENABLED_CONFIG, Boolean.toString(propertyFallback));
+        return !"false".equalsIgnoreCase(configuredValue == null ? null : configuredValue.trim());
     }
 
     @Transactional
@@ -255,22 +268,37 @@ public class LiquidationActionService {
     }
 
     private String normalizedApprovalMode() {
-        if (redemptionApprovalMode == null || redemptionApprovalMode.trim().isEmpty()) {
+        String configuredMode = appConfigValue(REDEMPTION_APPROVAL_MODE_CONFIG, redemptionApprovalMode);
+        if (configuredMode == null || configuredMode.trim().isEmpty()) {
             return "AUTO";
         }
-        String mode = redemptionApprovalMode.trim().toUpperCase(Locale.ROOT);
+        String mode = configuredMode.trim().toUpperCase(Locale.ROOT);
         return ("MANUAL".equals(mode) || "THRESHOLD".equals(mode) || "AUTO".equals(mode)) ? mode : "AUTO";
     }
 
     private BigDecimal autoApprovalThresholdAmount() {
-        if (autoApprovalThreshold == null || autoApprovalThreshold.trim().isEmpty()) {
+        String configuredThreshold = appConfigValue(REDEMPTION_AUTO_APPROVAL_THRESHOLD_CONFIG, autoApprovalThreshold);
+        if (configuredThreshold == null || configuredThreshold.trim().isEmpty()) {
             return BigDecimal.ZERO;
         }
         try {
-            return new BigDecimal(autoApprovalThreshold.trim());
+            return new BigDecimal(configuredThreshold.trim());
         } catch (NumberFormatException ex) {
-            log.warn("Invalid redemption auto approval threshold '{}'; defaulting to 0", autoApprovalThreshold);
+            log.warn("Invalid redemption auto approval threshold '{}'; defaulting to 0", configuredThreshold);
             return BigDecimal.ZERO;
         }
+    }
+
+    private String appConfigValue(String configName, String fallback) {
+        try {
+            List<AppConfig> configs = appConfigRepo.findByConfigName(configName);
+            if (configs != null && !configs.isEmpty() && configs.get(0).getConfigValue() != null
+                    && !configs.get(0).getConfigValue().trim().isEmpty()) {
+                return configs.get(0).getConfigValue();
+            }
+        } catch (Exception ex) {
+            log.warn("Unable to read app_config {} for redemption policy; using property fallback", configName);
+        }
+        return fallback;
     }
 }

@@ -30,7 +30,7 @@ public class LiquidationScheduler {
 
     @Scheduled(cron = "${investment.redemption.scheduler-cron:${liquidation.scheduler.cron:${fx.investment.run.liquidation.scheduler.cron:0 */5 * * * *}}}")
     public void runLiquidationJob() {
-        if (!schedulerEnabled) {
+        if (!liquidationService.isRedemptionSchedulerEnabled(schedulerEnabled)) {
             log.debug("Liquidation batch job skipped because scheduler is disabled.");
             return;
         }

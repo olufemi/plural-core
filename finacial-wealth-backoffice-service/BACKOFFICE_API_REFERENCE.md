@@ -489,14 +489,32 @@ Redemption/liquidation balance behavior:
   - legacy alias still present: `reservedLiquidationAmount`
 - Backoffice should use `availableInvestmentAmount` when showing what remains after pending redemption holds.
 
-Approval policy deployment knobs:
+Redemption policy controls:
 
-| Env var | Meaning |
+The operational source of truth is `app_config`, governed through Backoffice maker-checker. FxPeer reads these values at runtime. Environment variables remain as deployment fallback values only when the `app_config` rows are absent.
+
+| app_config key | Allowed value | Meaning |
 | --- | --- |
-| `INVESTMENT_REDEMPTION_APPROVAL_MODE` | `AUTO`, `MANUAL`, or `THRESHOLD` |
-| `INVESTMENT_REDEMPTION_AUTO_APPROVAL_THRESHOLD` | Maximum amount auto-settled when mode is `THRESHOLD` |
-| `INVESTMENT_REDEMPTION_SCHEDULER_ENABLED` | Enables/disables the liquidation scheduler |
-| `INVESTMENT_REDEMPTION_SCHEDULER_CRON` | Scheduler cron expression |
+| `investment.redemption.approval-mode` | `AUTO`, `MANUAL`, `THRESHOLD` | Controls whether pending redemptions are auto-settled, held for backoffice approval, or auto-settled only up to a limit |
+| `investment.redemption.auto-approval-threshold` | Numeric amount, for example `50000` | Maximum amount auto-settled when mode is `THRESHOLD` |
+| `investment.redemption.scheduler-enabled` | `true` or `false` | Enables/disables the liquidation scheduler without a restart |
+| `investment.redemption.scheduler-cron` | Cron expression | Scheduler cron expression; effective after service restart because Spring schedules cron at startup |
+
+Backoffice change flow:
+
+1. Maker calls `PATCH /bo/backoffice/app-config/{configName}` with the proposed value and reason.
+2. If `APP_CONFIG_UPDATE` approval policy is enabled, the API returns `202 Accepted` with an approval request.
+3. Checker approves from `/bo/backoffice/approvals/{approvalId}/approve`.
+4. The value is written to `app_config`; FxPeer uses the approved value on subsequent liquidation scheduler runs.
+
+Example threshold update request:
+
+```json
+{
+  "configValue": "50000",
+  "reason": "Allow automatic redemption settlement up to 50k during pilot liquidity window"
+}
+```
 
 Recommended pilot-to-prod setup: use `THRESHOLD` once liquidity limits are agreed, so lower redemptions keep the fast customer experience while high-value redemptions remain pending for backoffice approval.
 

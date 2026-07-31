@@ -1144,6 +1144,13 @@ Behavior:
 - The customer-facing available value should use `availableInvestmentAmount`.
 - Existing `marketValue` remains the gross investment value for backward compatibility.
 - A pending redemption can appear before the wallet is credited; wallet credit happens only after automatic or backoffice approval settles the redemption.
+- No mobile request/response shape change is required for notifications. FxPeer now emits redemption lifecycle events internally and Utility sends email/push where configured.
+
+Customer notifications:
+
+- Request received: sent after the redemption request is accepted and reserved.
+- Redemption completed: sent after settlement completes and the wallet is credited.
+- Redemption cancelled: sent after a pending/processing redemption is cancelled and the reserved amount is released.
 
 Redemption policy:
 

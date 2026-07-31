@@ -488,6 +488,7 @@ Redemption/liquidation balance behavior:
   - `settledRedemptionAmount`
   - legacy alias still present: `reservedLiquidationAmount`
 - Backoffice should use `availableInvestmentAmount` when showing what remains after pending redemption holds.
+- Customer email/push notifications are emitted by FxPeer and delivered by Utility for request received, redemption completed, and redemption cancelled events. Backoffice does not need to call a notification endpoint after approve/deny.
 
 Redemption policy controls:
 

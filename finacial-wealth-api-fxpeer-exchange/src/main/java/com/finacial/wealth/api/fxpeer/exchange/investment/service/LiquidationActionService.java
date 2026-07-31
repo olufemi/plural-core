@@ -44,6 +44,7 @@ public class LiquidationActionService {
     private final ActivityService activityService;
     private final InvestmentOrderService investmentService;
     private final InvestmentPositionRepository positionRepo;
+    private final InvestmentRedemptionNotificationPublisher redemptionNotificationPublisher;
     private final String redemptionApprovalMode;
     private final String autoApprovalThreshold;
     // or inject the class where onLiquidationSettled lives
@@ -54,6 +55,7 @@ public class LiquidationActionService {
             ActivityService activityService,
             InvestmentOrderService investmentService,
             InvestmentPositionRepository positionRepo,
+            InvestmentRedemptionNotificationPublisher redemptionNotificationPublisher,
             @Value("${investment.redemption.approval-mode:${fx.investment.liquidation.approval-mode:AUTO}}") String redemptionApprovalMode,
             @Value("${investment.redemption.auto-approval-threshold:${fx.investment.liquidation.auto-approval-threshold:0}}") String autoApprovalThreshold) {
         this.orderRepo = orderRepo;
@@ -62,6 +64,7 @@ public class LiquidationActionService {
         this.activityService = activityService;
         this.investmentService = investmentService;
         this.positionRepo = positionRepo;
+        this.redemptionNotificationPublisher = redemptionNotificationPublisher;
         this.redemptionApprovalMode = redemptionApprovalMode;
         this.autoApprovalThreshold = autoApprovalThreshold;
     }
@@ -238,6 +241,7 @@ public class LiquidationActionService {
             order.setStatus(InvestmentOrderStatus.CANCELLED);
             order.setUpdatedAt(Instant.now());
             orderRepo.save(order);
+            redemptionNotificationPublisher.redemptionCancelled(order);
 
             //activityService.logInvestmentLiquidationCancelled(order);
             res.setStatusCode(200);

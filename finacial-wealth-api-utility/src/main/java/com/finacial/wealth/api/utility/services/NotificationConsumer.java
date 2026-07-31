@@ -20,13 +20,12 @@ import java.util.Set;
 public class NotificationConsumer {
 
     private final EmailSender emailSender;
-    // private final PushSender pushSender; // your FCM sender wrapper
+    private final PushSender pushSender;
 
-    public NotificationConsumer(EmailSender emailSender
-       //   ,  PushSender pushSender
-    ) {
+    public NotificationConsumer(EmailSender emailSender,
+            PushSender pushSender) {
         this.emailSender = emailSender;
-        //  this.pushSender = pushSender;
+        this.pushSender = pushSender;
     }
 
     @RabbitListener(queues = RabbitConfig.NOTIF_QUEUE, containerFactory = "rabbitListenerContainerFactory")
@@ -46,7 +45,7 @@ public class NotificationConsumer {
         // PUSH
         if (channels.contains(NotificationChannel.PUSH)) {
             if (evt.getPushToken() != null && !evt.getPushToken().trim().isEmpty()) {
-                //pushSender.send(evt.getPushToken(), evt.getTitle(), evt.getMessage(), evt.getData());
+                pushSender.send(evt.getPushToken(), evt.getTitle(), evt.getMessage(), evt.getData());
             }
         }
     }

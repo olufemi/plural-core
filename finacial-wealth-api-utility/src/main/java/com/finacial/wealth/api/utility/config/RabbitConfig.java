@@ -190,6 +190,12 @@ public class RabbitConfig {
                 com.finacial.wealth.api.utility.domains.TransactionHistoryEvent.class
         );
 
+        // ✅ notification events published by fxpeer and other services
+        map.put(
+                "com.finacial.wealth.api.utility.models.NotificationEvent",
+                com.finacial.wealth.api.utility.models.NotificationEvent.class
+        );
+
         typeMapper.setIdClassMapping(map);
         converter.setJavaTypeMapper(typeMapper);
 

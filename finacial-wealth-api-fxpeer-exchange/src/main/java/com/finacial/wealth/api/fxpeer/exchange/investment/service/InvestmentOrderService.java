@@ -149,6 +149,7 @@ public class InvestmentOrderService {
     private final InvestmentHistoryService investmentHistoryService;
     private final InvestmentPositionHistoryRepository historyRepo;
     private final InvestmentRequestGuardRepository guardRepo;
+    private final InvestmentRedemptionNotificationPublisher redemptionNotificationPublisher;
     private static final ZoneId ZONE = ZoneId.of("Africa/Lagos");
 
     public InvestmentOrderService(AppConfigRepo appConfigRepo,
@@ -166,6 +167,7 @@ public class InvestmentOrderService {
             InvestmentHistoryService investmentHistoryService,
             InvestmentPositionHistoryRepository historyRepo,
             InvestmentRequestGuardRepository guardRepo,
+            InvestmentRedemptionNotificationPublisher redemptionNotificationPublisher,
             TransactionHistoryClientLocalT transactionHistoryClientLocalT
     ) {
         this.appConfigRepo = appConfigRepo;
@@ -184,6 +186,7 @@ public class InvestmentOrderService {
         this.investmentHistoryService = investmentHistoryService;
         this.historyRepo = historyRepo;
         this.guardRepo = guardRepo;
+        this.redemptionNotificationPublisher = redemptionNotificationPublisher;
         this.transactionHistoryClientLocalT = transactionHistoryClientLocalT;
 
     }
@@ -1228,6 +1231,7 @@ public class InvestmentOrderService {
             liqOrder.setUpdatedAt(Instant.now());
 
             orderRepo.save(liqOrder);
+            redemptionNotificationPublisher.redemptionRequested(liqOrder);
 
             res.setStatusCode(200);
             res.setDescription("Liquidation request created and pending approval.");
@@ -1344,7 +1348,7 @@ public class InvestmentOrderService {
             orderIdm.setAmount(BigDecimal.ZERO);
             orderIdm.setAmountBalance(BigDecimal.ZERO);
             orderIdm.setUnits(BigDecimal.ZERO);
-            orderRepo.save(order);
+            orderRepo.save(orderIdm);
 
         } else {
             if (liquidationAmount.compareTo(investedAmount) > 0) {
@@ -1378,7 +1382,7 @@ public class InvestmentOrderService {
             orderIdm.setUpdatedAt(Instant.now());
             orderIdm.setAmount(newInvested);
             orderIdm.setAmountBalance(newInvested);
-            orderRepo.save(order);
+            orderRepo.save(orderIdm);
         }
 
         position.setUpdatedAt(Instant.now());
@@ -1391,6 +1395,7 @@ public class InvestmentOrderService {
 
         // 5) audit/activity
         activityService.logInvestmentLiquidation(order, position);
+        redemptionNotificationPublisher.redemptionCompleted(order);
 
         res.setStatusCode(200);
         res.setDescription("Liquidation completed successfully.");

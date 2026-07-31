@@ -253,10 +253,20 @@ public class InvestmentValuationScheduler {
 
         pojo.setUnits(position.getUnits());
         pojo.setInvestedAmount(position.getInvestedAmount());
-        pojo.setMarketValue(position.getCurrentValue());
+        BigDecimal grossInvestmentAmount = nvl(position.getCurrentValue());
+        BigDecimal reservedRedemptionAmount = nvl(position.getReservedLiquidationAmount());
+        BigDecimal availableInvestmentAmount = grossInvestmentAmount.subtract(reservedRedemptionAmount);
+        if (availableInvestmentAmount.compareTo(BigDecimal.ZERO) < 0) {
+            availableInvestmentAmount = BigDecimal.ZERO;
+        }
+        pojo.setMarketValue(grossInvestmentAmount);
+        pojo.setGrossInvestmentAmount(grossInvestmentAmount);
+        pojo.setReservedRedemptionAmount(reservedRedemptionAmount);
+        pojo.setAvailableInvestmentAmount(availableInvestmentAmount);
+        pojo.setSettledRedemptionAmount(BigDecimal.ZERO);
         pojo.setAccruedInterest(position.getAccruedInterest());
         pojo.setTotalAccruedInterest(position.getTotalAccruedInterest());
-        pojo.setReservedLiquidationAmount(position.getReservedLiquidationAmount());
+        pojo.setReservedLiquidationAmount(reservedRedemptionAmount);
 
         pojo.setStatus(position.getStatus() != null ? position.getStatus().name() : null);
 
@@ -769,5 +779,9 @@ public class InvestmentValuationScheduler {
         dto.setProductName(h.getProductName());
          */
         return dto;
+    }
+
+    private static BigDecimal nvl(BigDecimal value) {
+        return value == null ? BigDecimal.ZERO : value;
     }
 }

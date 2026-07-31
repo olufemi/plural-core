@@ -1138,6 +1138,19 @@ Request liquidation/redemption.
 
 Request DTO: `LiquidateInvestmentRequest`.
 
+Behavior:
+
+- When a redemption is requested, the requested amount is reserved immediately against the investment position.
+- The customer-facing available value should use `availableInvestmentAmount`.
+- Existing `marketValue` remains the gross investment value for backward compatibility.
+- A pending redemption can appear before the wallet is credited; wallet credit happens only after automatic or backoffice approval settles the redemption.
+
+Deployment policy:
+
+- `INVESTMENT_REDEMPTION_APPROVAL_MODE=AUTO` settles all pending redemptions from the scheduler.
+- `INVESTMENT_REDEMPTION_APPROVAL_MODE=MANUAL` leaves pending redemptions for backoffice approval.
+- `INVESTMENT_REDEMPTION_APPROVAL_MODE=THRESHOLD` auto-settles redemptions up to `INVESTMENT_REDEMPTION_AUTO_APPROVAL_THRESHOLD` and leaves higher amounts pending.
+
 ### POST `/investments/request-top-up`
 
 Top up existing investment.
@@ -1151,6 +1164,25 @@ Get logged-in customer investment history.
 ### GET `/investments/get-customer-investment-position`
 
 Get logged-in customer current investment positions.
+
+Important response fields:
+
+```json
+{
+  "marketValue": 155000,
+  "grossInvestmentAmount": 155000,
+  "reservedRedemptionAmount": 55000,
+  "reservedLiquidationAmount": 55000,
+  "availableInvestmentAmount": 100000,
+  "settledRedemptionAmount": 0
+}
+```
+
+Display guidance:
+
+- Use `availableInvestmentAmount` for customer-facing “available investment” or “redeemable balance”.
+- Use `grossInvestmentAmount` or existing `marketValue` only where the UI intentionally wants to show the total gross position before pending redemption holds.
+- Show pending redemption history from the liquidation/redemption endpoints while status is `LIQUIDATION_PENDING_APPROVAL` or `LIQUIDATION_PROCESSING`.
 
 ### GET `/investments/orders/all-liquidation-settled`
 

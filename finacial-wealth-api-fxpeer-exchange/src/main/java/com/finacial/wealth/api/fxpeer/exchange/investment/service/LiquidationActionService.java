@@ -19,6 +19,10 @@ import java.time.Instant;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 /**
@@ -27,24 +31,31 @@ import org.springframework.stereotype.Service;
  */
 @Service
 public class LiquidationActionService {
+    private static final Logger log = LoggerFactory.getLogger(LiquidationActionService.class);
 
     private final InvestmentOrderRepository orderRepo;
     private final UttilityMethods utilService; // your JWT claim extractor
     private final ActivityService activityService;
     private final InvestmentOrderService investmentService;
     private final InvestmentPositionRepository positionRepo;
+    private final String redemptionApprovalMode;
+    private final String autoApprovalThreshold;
     // or inject the class where onLiquidationSettled lives
 
     public LiquidationActionService(InvestmentOrderRepository orderRepo,
             UttilityMethods utilService,
             ActivityService activityService,
             InvestmentOrderService investmentService,
-            InvestmentPositionRepository positionRepo) {
+            InvestmentPositionRepository positionRepo,
+            @Value("${investment.redemption.approval-mode:${fx.investment.liquidation.approval-mode:AUTO}}") String redemptionApprovalMode,
+            @Value("${investment.redemption.auto-approval-threshold:${fx.investment.liquidation.auto-approval-threshold:0}}") String autoApprovalThreshold) {
         this.orderRepo = orderRepo;
         this.utilService = utilService;
         this.activityService = activityService;
         this.investmentService = investmentService;
         this.positionRepo = positionRepo;
+        this.redemptionApprovalMode = redemptionApprovalMode;
+        this.autoApprovalThreshold = autoApprovalThreshold;
     }
     
 
@@ -83,6 +94,13 @@ public class LiquidationActionService {
                 // Only process allowed states
                 if (lockedOrder.getStatus() != InvestmentOrderStatus.LIQUIDATION_PENDING_APPROVAL
                         && lockedOrder.getStatus() != InvestmentOrderStatus.LIQUIDATION_PROCESSING) {
+                    continue;
+                }
+
+                if (lockedOrder.getStatus() == InvestmentOrderStatus.LIQUIDATION_PENDING_APPROVAL
+                        && !shouldAutoProcess(lockedOrder)) {
+                    log.info("Liquidation orderRef={} left pending approval by approvalMode={}",
+                            lockedOrder.getOrderRef(), normalizedApprovalMode());
                     continue;
                 }
 
@@ -223,5 +241,36 @@ public class LiquidationActionService {
 
     private static BigDecimal nvl(BigDecimal value) {
         return value == null ? BigDecimal.ZERO : value;
+    }
+
+    private boolean shouldAutoProcess(InvestmentOrder order) {
+        String mode = normalizedApprovalMode();
+        if ("MANUAL".equals(mode)) {
+            return false;
+        }
+        if ("THRESHOLD".equals(mode)) {
+            return nvl(order.getAmount()).compareTo(autoApprovalThresholdAmount()) <= 0;
+        }
+        return true;
+    }
+
+    private String normalizedApprovalMode() {
+        if (redemptionApprovalMode == null || redemptionApprovalMode.trim().isEmpty()) {
+            return "AUTO";
+        }
+        String mode = redemptionApprovalMode.trim().toUpperCase(Locale.ROOT);
+        return ("MANUAL".equals(mode) || "THRESHOLD".equals(mode) || "AUTO".equals(mode)) ? mode : "AUTO";
+    }
+
+    private BigDecimal autoApprovalThresholdAmount() {
+        if (autoApprovalThreshold == null || autoApprovalThreshold.trim().isEmpty()) {
+            return BigDecimal.ZERO;
+        }
+        try {
+            return new BigDecimal(autoApprovalThreshold.trim());
+        } catch (NumberFormatException ex) {
+            log.warn("Invalid redemption auto approval threshold '{}'; defaulting to 0", autoApprovalThreshold);
+            return BigDecimal.ZERO;
+        }
     }
 }

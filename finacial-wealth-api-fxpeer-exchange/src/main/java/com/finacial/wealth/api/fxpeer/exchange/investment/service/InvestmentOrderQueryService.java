@@ -24,6 +24,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -362,10 +363,17 @@ public class InvestmentOrderQueryService {
         item.put("walletId", position.getWalletId());
         item.put("units", position.getUnits());
         item.put("investedAmount", position.getInvestedAmount());
-        item.put("currentValue", position.getCurrentValue());
+        BigDecimal grossInvestmentAmount = money(position.getCurrentValue());
+        BigDecimal reservedRedemptionAmount = money(position.getReservedLiquidationAmount());
+        BigDecimal availableInvestmentAmount = availableAmount(grossInvestmentAmount, reservedRedemptionAmount);
+        item.put("currentValue", grossInvestmentAmount);
+        item.put("grossInvestmentAmount", grossInvestmentAmount);
+        item.put("reservedRedemptionAmount", reservedRedemptionAmount);
+        item.put("availableInvestmentAmount", availableInvestmentAmount);
+        item.put("settledRedemptionAmount", BigDecimal.ZERO);
         item.put("accruedInterest", position.getAccruedInterest());
         item.put("totalAccruedInterest", position.getTotalAccruedInterest());
-        item.put("reservedLiquidationAmount", position.getReservedLiquidationAmount());
+        item.put("reservedLiquidationAmount", reservedRedemptionAmount);
         item.put("status", position.getStatus() != null ? position.getStatus().name() : null);
         item.put("interestStartDate", position.getInterestStartDate());
         item.put("createdAt", position.getCreatedAt());
@@ -523,6 +531,15 @@ public class InvestmentOrderQueryService {
             throw new IllegalArgumentException("Customer email is required.");
         }
         return normalized;
+    }
+
+    private BigDecimal money(BigDecimal value) {
+        return value == null ? BigDecimal.ZERO : value;
+    }
+
+    private BigDecimal availableAmount(BigDecimal gross, BigDecimal reserved) {
+        BigDecimal available = money(gross).subtract(money(reserved));
+        return available.compareTo(BigDecimal.ZERO) < 0 ? BigDecimal.ZERO : available;
     }
 
     private Instant toStartOfDay(LocalDate date) {

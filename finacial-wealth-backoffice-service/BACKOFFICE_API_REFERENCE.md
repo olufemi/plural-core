@@ -477,6 +477,29 @@ Product history response now includes approval history where available:
 | `POST` | `/bo/backoffice/investments/approve-liquidation-request` | Approve liquidation directly |
 | `POST` | `/bo/backoffice/investments/deny-customer-liquidation-request` | Deny/cancel liquidation |
 
+Redemption/liquidation balance behavior:
+
+- FxPeer reserves the requested redemption amount immediately on the investment position.
+- `currentValue` remains the gross position value for backward compatibility.
+- New balance fields are returned where position rows are exposed:
+  - `grossInvestmentAmount`
+  - `reservedRedemptionAmount`
+  - `availableInvestmentAmount`
+  - `settledRedemptionAmount`
+  - legacy alias still present: `reservedLiquidationAmount`
+- Backoffice should use `availableInvestmentAmount` when showing what remains after pending redemption holds.
+
+Approval policy deployment knobs:
+
+| Env var | Meaning |
+| --- | --- |
+| `INVESTMENT_REDEMPTION_APPROVAL_MODE` | `AUTO`, `MANUAL`, or `THRESHOLD` |
+| `INVESTMENT_REDEMPTION_AUTO_APPROVAL_THRESHOLD` | Maximum amount auto-settled when mode is `THRESHOLD` |
+| `INVESTMENT_REDEMPTION_SCHEDULER_ENABLED` | Enables/disables the liquidation scheduler |
+| `INVESTMENT_REDEMPTION_SCHEDULER_CRON` | Scheduler cron expression |
+
+Recommended pilot-to-prod setup: use `THRESHOLD` once liquidity limits are agreed, so lower redemptions keep the fast customer experience while high-value redemptions remain pending for backoffice approval.
+
 Liquidation decision request shape is proxied to FxPeer. Typical fields include:
 
 ```json

@@ -27,6 +27,10 @@ public class InvestmentPositionPojo {
     private BigDecimal units;
     private BigDecimal investedAmount;
     private BigDecimal marketValue;
+    private BigDecimal grossInvestmentAmount;
+    private BigDecimal reservedRedemptionAmount;
+    private BigDecimal availableInvestmentAmount;
+    private BigDecimal settledRedemptionAmount;
     private BigDecimal accruedInterest;
     private BigDecimal totalAccruedInterest;
     private BigDecimal reservedLiquidationAmount;

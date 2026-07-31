@@ -12,6 +12,10 @@ It is meant to answer:
 - which config values must be prepared per environment
 - which smoke tests must pass in pilot before production
 
+Deployment-day runbook:
+
+- `PLURAL_PILOT_PROD_DEPLOYMENT_RUNBOOK.md`
+
 ## Release Baseline
 
 - Stable rollout branch: `feature/after-first-user-experience-test-on-dev`
@@ -158,6 +162,37 @@ The backoffice pilot is expected to become production, so these controls must be
 - [ ] Confirm WAF, Route 53, and Secrets Manager are included in business cost communication
 - [ ] Confirm taxes, support plan, data egress, backups, snapshots, and log growth may increase actual monthly spend
 
+## Redemption Policy Runtime Controls
+
+The redemption experience is now controlled through backoffice-governed `app_config` keys. Dev may fall back to FxPeer AUTO behavior if the rows are not configured yet, but pilot/prod must be explicit.
+
+Required keys:
+
+- `investment.redemption.approval-mode`: `AUTO`, `MANUAL`, or `THRESHOLD`
+- `investment.redemption.auto-approval-threshold`: numeric amount used when mode is `THRESHOLD`
+- `investment.redemption.scheduler-enabled`: `true` or `false`
+- `investment.redemption.scheduler-cron`: scheduler cron expression
+
+Pilot/prod rules:
+
+- [ ] Confirm Flyway migration `V12__redemption_app_config_governance.sql` ran successfully
+- [ ] Confirm all four redemption rows exist in `app_config`
+- [ ] Confirm all four redemption rows exist in `bo_app_config_registry`
+- [ ] Confirm `APP_CONFIG_UPDATE` maker-checker policy is active before pilot/prod changes
+- [ ] Confirm finance/ops owner signs off the pilot/prod approval mode
+- [ ] Confirm finance/ops owner signs off the auto-approval threshold
+- [ ] Confirm one below-threshold redemption auto-settles
+- [ ] Confirm one above-threshold redemption remains pending for backoffice approval
+- [ ] Confirm backoffice approval credits wallet and marks redemption completed
+- [ ] Confirm backoffice denial/cancellation releases the reserved investment amount
+- [ ] Confirm customer email/push notification is emitted for request, completion, and cancellation
+
+Go / No-Go:
+
+- GO for dev if fallback AUTO behavior is acceptable for testing
+- NO-GO for pilot/prod if the redemption mode and threshold are only implicit env/property fallbacks
+- NO-GO for production if finance/ops have not approved the threshold and liquidity exposure
+
 Pilot / Production decision points:
 
 - [ ] Confirm whether pilot uses Single-AZ RDS and production uses Multi-AZ RDS
@@ -260,6 +295,9 @@ Channels in scope:
 - [ ] Confirm transfer notification email send success/failure is logged with provider response
 - [ ] Confirm OTP SMS send success/failure is logged with provider response
 - [ ] Confirm push notification token update works on login and device change
+- [ ] Confirm redemption request/completion/cancellation email is delivered
+- [ ] Confirm redemption request/completion/cancellation push is delivered when `FCM_PUSH_ENABLED=true`
+- [ ] Confirm Utility has `FCM_PROJECT_ID` and `FCM_SERVICE_ACCOUNT_FILE` set before enabling push in pilot/prod
 - [ ] Confirm ops alerts are wired for service down, ALB 5xx, RDS pressure, queue pressure, Redis pressure, and high application error rate
 
 ## Pre-Freeze Hygiene

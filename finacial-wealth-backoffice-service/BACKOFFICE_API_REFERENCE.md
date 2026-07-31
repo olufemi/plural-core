@@ -492,7 +492,7 @@ Redemption/liquidation balance behavior:
 
 Redemption policy controls:
 
-The operational source of truth is `app_config`, governed through Backoffice maker-checker. FxPeer reads these values at runtime. Environment variables remain as deployment fallback values only when the `app_config` rows are absent.
+The operational source of truth is `app_config`, governed through Backoffice maker-checker. FxPeer reads these values at runtime. Environment variables remain as deployment fallback values only when the `app_config` rows are absent. Dev can fall back to FxPeer AUTO behavior while backoffice setup is incomplete; pilot/prod must explicitly set and approve these values.
 
 | app_config key | Allowed value | Meaning |
 | --- | --- |

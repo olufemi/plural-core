@@ -206,7 +206,6 @@ public class FxOtherServicesController {
 
     @GetMapping(
             path = "/int-utilities-get-categories",
-            consumes = MediaType.APPLICATION_JSON_VALUE,
             produces = MediaType.APPLICATION_JSON_VALUE
     )
     public ResponseEntity<ApiResponseModel> validatePhoneNumber(

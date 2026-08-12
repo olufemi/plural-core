@@ -22,6 +22,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.domain.Page;
@@ -72,6 +73,26 @@ public interface InvestmentOrderRepository extends JpaRepository<InvestmentOrder
     List<InvestmentOrder> findByProductAndStatus(
             InvestmentProduct product,
             InvestmentOrderStatus status
+    );
+
+    @Query("""
+        select coalesce(sum(o.amount), 0) from InvestmentOrder o
+        where o.product = :product
+          and o.type = :type
+          and o.status in :statuses
+        """)
+    BigDecimal sumAmountByProductAndTypeAndStatusIn(
+            @Param("product") InvestmentProduct product,
+            @Param("type") InvestmentOrderType type,
+            @Param("statuses") List<InvestmentOrderStatus> statuses
+    );
+
+    long countByEmailAddressAndProductAndTypeAndCreatedAtGreaterThanEqualAndStatusIn(
+            String emailAddress,
+            InvestmentProduct product,
+            InvestmentOrderType type,
+            Instant createdAt,
+            List<InvestmentOrderStatus> statuses
     );
 
     List<InvestmentOrder> findByEmailAddressAndStatusOrderByUpdatedAtDesc(String emailAddress,

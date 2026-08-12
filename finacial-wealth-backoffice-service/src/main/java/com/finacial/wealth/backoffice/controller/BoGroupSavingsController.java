@@ -20,7 +20,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/backoffice/group-savings")
+@RequestMapping({"/backoffice/group-savings", "/bo/backoffice/group-savings"})
 @RequiredArgsConstructor
 @Tag(name = "Group Savings", description = "Backoffice monitoring and operational endpoints for contribution, payout, and slot tracking.")
 public class BoGroupSavingsController {

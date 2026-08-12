@@ -702,6 +702,64 @@ public class UttilityMethods {
         return response.getBody();
     }
 
+    public BaseResponse getCumulativeBalances(String productCode, String currency, List<String> accountNumbers,
+            String channel, String authorization) {
+        BaseResponse baseResponse = new BaseResponse();
+        if (accountNumbers == null || accountNumbers.isEmpty()) {
+            return new BaseResponse(HttpServletResponse.SC_BAD_REQUEST, "At least one account number is required");
+        }
+
+        try {
+            String authHeader = resolveWalletSystemAuthorization(authorization);
+            String resolvedProductCode = StringUtils.hasText(productCode) ? productCode.trim() : getClaimFromJwt(authHeader, "productCode");
+            if (!StringUtils.hasText(resolvedProductCode)) {
+                return new BaseResponse(HttpServletResponse.SC_BAD_REQUEST, "Unable to resolve product code for cumulative balance request");
+            }
+
+            Map<String, Object> payload = new LinkedHashMap<>();
+            payload.put("productCode", resolvedProductCode);
+            payload.put("currency", StringUtils.hasText(currency) ? currency.trim().toUpperCase(Locale.ROOT) : "NGN");
+            payload.put("accountNumbers", accountNumbers);
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            headers.setAccept(Collections.singletonList(MediaType.APPLICATION_JSON));
+            headers.add("channel", StringUtils.hasText(channel) ? channel : "API");
+            headers.set("Authorization", authHeader);
+
+            HttpEntity<Map<String, Object>> entity = new HttpEntity<>(payload, headers);
+            ResponseEntity<BaseResponse> response = externalRestTemplate.exchange(
+                    getWALLET_SYSTEM_BASE_URL() + "/v2/balances/cumulative",
+                    HttpMethod.POST,
+                    entity,
+                    BaseResponse.class);
+
+            if (response.getBody() != null) {
+                return response.getBody();
+            }
+
+            baseResponse.setStatusCode(HttpServletResponse.SC_BAD_GATEWAY);
+            baseResponse.setDescription("Core banking returned an empty cumulative balance response");
+            return baseResponse;
+        } catch (HttpStatusCodeException ex) {
+            try {
+                BaseResponse response = objectMapper.readValue(ex.getResponseBodyAsString(), BaseResponse.class);
+                if (response != null) {
+                    return response;
+                }
+            } catch (Exception ignored) {
+            }
+            baseResponse.setStatusCode(ex.getStatusCode().value());
+            baseResponse.setDescription(StringUtils.hasText(ex.getResponseBodyAsString())
+                    ? ex.getResponseBodyAsString() : "Core banking cumulative balance request failed");
+            return baseResponse;
+        } catch (Exception ex) {
+            baseResponse.setStatusCode(HttpServletResponse.SC_BAD_GATEWAY);
+            baseResponse.setDescription("Core banking cumulative balance request failed");
+            return baseResponse;
+        }
+    }
+
     private String decryptData(String data) throws NoSuchAlgorithmException, NoSuchPaddingException, InvalidKeyException, IllegalBlockSizeException, BadPaddingException {
 
         String decryptData = StrongAES.decrypt(data, encryptionKey);

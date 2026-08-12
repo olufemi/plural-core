@@ -26,6 +26,47 @@ public interface TransactionsClient {
       @PathVariable("transactionId") String transactionId
   );
 
+  @GetMapping("/api/transactions/admin/transactions/ngn")
+  Map<String, Object> getNgnTransactions(
+      @RequestHeader("X-Backoffice-Internal-Token") String internalToken,
+      @RequestParam(required = false) String customer,
+      @RequestParam(required = false) String walletId,
+      @RequestParam(required = false) String transactionId,
+      @RequestParam(required = false) String type,
+      @RequestParam(required = false) String status,
+      @RequestParam(required = false) String q,
+      @RequestParam(required = false) String fromDate,
+      @RequestParam(required = false) String toDate,
+      @RequestParam(defaultValue = "true") Boolean includeLegacyNullCurrency,
+      @RequestParam(defaultValue = "0") Integer page,
+      @RequestParam(defaultValue = "20") Integer size
+  );
+
+  @GetMapping("/api/transactions/admin/transactions/ngn/{transactionId}")
+  Map<String, Object> getNgnTransactionDetails(
+      @RequestHeader("X-Backoffice-Internal-Token") String internalToken,
+      @PathVariable("transactionId") String transactionId,
+      @RequestParam(defaultValue = "true") Boolean includeLegacyNullCurrency
+  );
+
+  @GetMapping("/api/transactions/admin/accounts/ngn/balances/cumulative")
+  Map<String, Object> getNgnCumulativeAccountBalances(
+      @RequestHeader("X-Backoffice-Internal-Token") String internalToken,
+      @RequestParam(required = false) String productCode,
+      @RequestParam(required = false) String keyword,
+      @RequestParam(required = false) java.util.List<String> accountNumbers,
+      @RequestParam(defaultValue = "API") String channel
+  );
+
+  @GetMapping("/api/transactions/admin/accounts/ngn/balances/cumulative/summary")
+  Map<String, Object> getNgnCumulativeAccountBalanceSummary(
+      @RequestHeader("X-Backoffice-Internal-Token") String internalToken,
+      @RequestParam(required = false) String productCode,
+      @RequestParam(required = false) String keyword,
+      @RequestParam(required = false) java.util.List<String> accountNumbers,
+      @RequestParam(defaultValue = "API") String channel
+  );
+
   @GetMapping("/api/transactions/admin/group-savings/contribution-payout-monitoring")
   Map<String, Object> getContributionPayoutMonitoring(
       @RequestParam(required = false) String period,

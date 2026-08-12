@@ -33,6 +33,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import java.io.IOException;
 import java.time.LocalDate;
+import java.util.Map;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 
@@ -130,6 +131,9 @@ public class InvestmentServicesController {
             @PathVariable String productCode,
             @RequestBody InvestmentProductUpsertRequest req
     ) {
+        if (req == null) {
+            req = new InvestmentProductUpsertRequest();
+        }
         req.setProductCode(productCode); // path wins
         return productService.update(req);
     }
@@ -256,6 +260,41 @@ public class InvestmentServicesController {
                         request.getOrderRef()
                 )
         );
+    }
+
+
+    @PostMapping("/orders/liquidation/retry")
+    public ResponseEntity<BaseResponse> retryLiquidation(
+            @RequestBody LiquidationApprovalRequest request
+    ) {
+        String reason = request == null ? null : request.getReason();
+        return ResponseEntity.ok(
+                liquidationActionService.retryFailedLiquidation(
+                        request == null ? null : request.getOrderRef(),
+                        reason
+                )
+        );
+    }
+
+    @PostMapping("/admin/customers/{email}/investment-freeze")
+    public ResponseEntity<BaseResponse> setCustomerInvestmentFreeze(
+            @PathVariable String email,
+            @RequestBody Map<String, Object> request
+    ) {
+        Boolean frozen = request == null ? null : asBoolean(request.get("frozen"));
+        String productCode = request == null || request.get("productCode") == null ? null : request.get("productCode").toString();
+        String reason = request == null || request.get("reason") == null ? null : request.get("reason").toString();
+        return ResponseEntity.ok(liquidationActionService.setCustomerInvestmentFreeze(email, frozen, productCode, reason));
+    }
+
+    private Boolean asBoolean(Object value) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof Boolean) {
+            return (Boolean) value;
+        }
+        return Boolean.parseBoolean(value.toString());
     }
 
     @GetMapping(

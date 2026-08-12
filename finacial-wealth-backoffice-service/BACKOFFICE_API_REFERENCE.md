@@ -1,6 +1,6 @@
 # Plural Backoffice FE API Reference
 
-Updated: 2026-07-16  
+Updated: 2026-08-11  
 Service: `finacial-wealth-backoffice-service`  
 Audience: Backoffice frontend developers
 
@@ -476,6 +476,78 @@ Product history response now includes approval history where available:
 | `GET` | `/bo/backoffice/investments/liquidations/history?status=APPROVED&page=0&size=20` | List liquidation history |
 | `POST` | `/bo/backoffice/investments/approve-liquidation-request` | Approve liquidation directly |
 | `POST` | `/bo/backoffice/investments/deny-customer-liquidation-request` | Deny/cancel liquidation |
+| `POST` | `/bo/backoffice/investments/liquidations/{orderRef}/retry` | Retry only failed liquidation requests after ops review |
+| `POST` | `/bo/backoffice/investments/customers/{email}/investment-freeze` | Freeze/unfreeze customer investment top-up and redemption activity |
+
+### Investment Product Create/Update Governance Fields
+
+Product create/update is maker-checker aware. If `INVESTMENT_PRODUCT_CREATE` or `INVESTMENT_PRODUCT_UPDATE` is enabled, FE should expect `202 Accepted`; otherwise the change is applied immediately. New product creation now requires product governance metadata so incomplete products do not silently go live.
+
+Create:
+
+```http
+POST /bo/backoffice/investments/products
+```
+
+Update:
+
+```http
+PUT /bo/backoffice/investments/products/{productCode}
+```
+
+Required on create:
+
+```json
+{
+  "productCode": "MF_BAL001",
+  "name": "Nigeria Prime Money Market Fund",
+  "type": "MUTUAL_FUND",
+  "currency": "NGN",
+  "minimumInvestmentAmount": 5000,
+  "valuationMethod": "RATE",
+  "yieldPa": 18.5,
+  "subscriptionCutOffTime": "15:00:00",
+  "description": "Low-risk NGN money market product",
+  "issuerName": "Plural",
+  "fundManager": "Plural Investment Desk",
+  "riskRating": "LOW",
+  "minimumHoldingDays": 0,
+  "maturityDefaultAction": "REDEEM_TO_WALLET"
+}
+```
+
+Optional product governance fields:
+
+| Field | Meaning |
+| --- | --- |
+| `maximumHoldingDays` | Maximum intended holding period in days |
+| `maximumTotalRaise` | Product capacity limit; FE can display capacity/progress from this |
+| `autoCloseAtCapacity` | Whether the product should be closed to new subscriptions when capacity is reached |
+| `liquidationFrequencyLimit` | Number of liquidations allowed per period; must be sent with `liquidationFrequencyPeriod` |
+| `liquidationFrequencyPeriod` | `MONTH`, `QUARTER`, or `YEAR` |
+| `maturityDefaultAction` | `REDEEM_TO_WALLET`, `ROLLOVER_PRINCIPAL`, or `ROLLOVER_PRINCIPAL_AND_INTEREST` |
+
+Validation failures return a normal `400` payload:
+
+```json
+{
+  "status": 400,
+  "code": "BAD_REQUEST",
+  "message": "issuerName is required",
+  "requestId": "REQ-ID",
+  "path": "/backoffice/investments/products"
+}
+```
+
+Product list/detail/history responses now return the governance fields as normal top-level product fields. Internally FxPeer stores them inside `metaJson.productGovernance`, but FE does not need to parse `metaJson`.
+
+Runtime enforcement now handled by FxPeer:
+
+- New subscriptions are rejected when `maximumTotalRaise` would be exceeded by active or in-flight subscription volume plus the requested amount.
+- If `autoCloseAtCapacity=true`, the rejection message tells FE the product is closed because the capacity limit has been reached.
+- Redemption requests are rejected before `minimumHoldingDays` has elapsed from the subscription/position creation date.
+- Redemption requests are rejected when `liquidationFrequencyLimit` has already been used for the configured `liquidationFrequencyPeriod`.
+- `maturityDefaultAction` is accepted, validated, stored, and returned for FE/config visibility; maturity scheduler execution is still a separate future automation step if the business wants automatic maturity processing.
 
 Redemption/liquidation balance behavior:
 
@@ -497,9 +569,13 @@ The operational source of truth is `app_config`, governed through Backoffice mak
 | app_config key | Allowed value | Meaning |
 | --- | --- |
 | `investment.redemption.approval-mode` | `AUTO`, `MANUAL`, `THRESHOLD` | Controls whether pending redemptions are auto-settled, held for backoffice approval, or auto-settled only up to a limit |
-| `investment.redemption.auto-approval-threshold` | Numeric amount, for example `50000` | Maximum amount auto-settled when mode is `THRESHOLD` |
+| `investment.redemption.auto-approval-threshold.NGN` | Numeric amount, for example `50000` | Maximum NGN redemption amount auto-settled when mode is `THRESHOLD` |
+| `investment.redemption.auto-approval-threshold.CAD` | Numeric amount, for example `1000` | Maximum CAD redemption amount auto-settled when mode is `THRESHOLD` |
+| `investment.redemption.auto-approval-threshold` | Numeric amount, for example `50000` | Fallback maximum amount used only when no currency-specific key exists |
 | `investment.redemption.scheduler-enabled` | `true` or `false` | Enables/disables the liquidation scheduler without a restart |
 | `investment.redemption.scheduler-cron` | Cron expression | Scheduler cron expression; effective after service restart because Spring schedules cron at startup |
+
+FxPeer resolves the threshold from the redemption investment product currency. For example, NGN redemptions use `investment.redemption.auto-approval-threshold.NGN`; CAD redemptions use `investment.redemption.auto-approval-threshold.CAD`. The generic threshold remains only for backward compatibility and as a fallback.
 
 Backoffice change flow:
 
@@ -527,6 +603,52 @@ Liquidation decision request shape is proxied to FxPeer. Typical fields include:
   "reason": "Approved after review"
 }
 ```
+
+Liquidation retry request:
+
+```http
+POST /bo/backoffice/investments/liquidations/{orderRef}/retry
+```
+
+```json
+{
+  "reason": "Provider timeout cleared; retry after confirming no duplicate settlement"
+}
+```
+
+Retry is accepted only when the liquidation order is `FAILED` or `LIQUIDATION_FAILED`. FxPeer locks the order/position, confirms enough unreserved investment value remains, re-reserves the redemption amount, moves the order back to `LIQUIDATION_PENDING_APPROVAL`, and emits the normal redemption-request notification. Non-failed liquidations return `409`.
+
+Investment freeze request:
+
+```http
+POST /bo/backoffice/investments/customers/{email}/investment-freeze
+```
+
+```json
+{
+  "frozen": true,
+  "productCode": "MF_BAL001",
+  "reason": "Compliance review pending"
+}
+```
+
+`productCode` is optional. If omitted, all investment top-up and redemption activity for that customer is blocked. If present, only that product is blocked. The mobile API contract does not change; blocked top-up/redemption calls return `423` with `Investment activity is currently frozen for this customer.`
+
+Liquidation list/history rows now include these ops fields:
+
+```json
+{
+  "grossInvestmentAmount": 155000,
+  "reservedRedemptionAmount": 55000,
+  "availableInvestmentAmount": 100000,
+  "reserveStatus": "HELD",
+  "retryEligible": false,
+  "correctionMode": "REVERSAL_ONLY",
+  "notificationStatus": "REQUESTED_SENT",
+  "failureReason": null
+}
+```
+
 
 ## Featured Services
 
@@ -578,6 +700,328 @@ Rollback request:
   "reason": "Rollback after failed pilot validation"
 }
 ```
+
+---
+
+# NGN Customer Transactions
+
+This endpoint gives backoffice one operational view of customer NGN wallet movements from the transaction service and FxPeer service. FE calls only backoffice with the admin bearer token; backoffice then calls downstream services using the internal service token.
+
+| Method | Gateway path | Purpose |
+| --- | --- | --- |
+| `GET` | `/bo/backoffice/transactions/ngn` | List/search NGN customer transactions across transaction and FxPeer sources |
+| `GET` | `/bo/backoffice/transactions/ngn/{transactionId}` | Get full sanitized NGN transaction detail across transaction and FxPeer sources |
+| `GET` | `/bo/backoffice/transactions/ngn/export.csv` | Download filtered NGN customer transactions as an Excel-compatible CSV |
+| `GET` | `/bo/backoffice/transactions/ngn/export.pdf` | Download filtered NGN customer transactions as a PDF summary |
+
+Summary endpoint permission: one of `transactions.view`, `transactions.filter`, `ROLE_SUPER_ADMIN`, `ROLE_ADMIN`, `ROLE_OPERATIONS`, or `ROLE_FINANCE`.
+
+Detail endpoint permission: `ROLE_SUPER_ADMIN` only for now, because it exposes matched customer accounts/account numbers and may include per-account balance detail from core banking.
+
+Export endpoints also accept `reports.export`. For a restricted ops/reporting user who should only see cumulative NGN balances, NGN customer transactions, and export them, assign:
+
+- `transactions.view`
+- `transactions.filter`
+- `reports.export`
+
+Query parameters:
+
+| Param | Required | Example | Notes |
+| --- | --- | --- | --- |
+| `source` | No | `ALL` | `ALL`, `TRANSACTIONS`, or `FXPEER`. Default is `ALL`. |
+| `customer` | No | `customer@email.com` | Searches customer email, createdBy, wallet, sender/receiver, and customer names. |
+| `walletId` | No | `9354185507` | Exact wallet/account number filter. |
+| `transactionId` | No | `TRX-178418900001` | Exact transaction id filter. |
+| `type` | No | `TRANSFER` | Matches transaction/payment/request type fields. |
+| `status` | No | `SUCCESS` | Matches status-like fields available in legacy rows. |
+| `q` | No | `Access Bank` | General search across wallet, parties, transaction id, narration, email, and bank name. |
+| `fromDate` | No | `2026-07-01` | Inclusive UTC date filter. |
+| `toDate` | No | `2026-07-31` | Inclusive UTC date filter. |
+| `includeLegacyNullCurrency` | No | `true` | Default `true` so older NGN rows without `currencyCode` are still visible. |
+| `page` | No | `0` | Zero-based page. |
+| `size` | No | `20` | Max `200`. |
+
+Example:
+
+```http
+GET /bo/backoffice/transactions/ngn?source=ALL&customer=customer@email.com&fromDate=2026-07-01&toDate=2026-07-31&page=0&size=20
+Authorization: Bearer {{accessToken}}
+```
+
+Sample response:
+
+```json
+{
+  "statusCode": 200,
+  "description": "NGN transactions pulled successfully.",
+  "data": {
+    "content": [
+      {
+        "id": 3001,
+        "sourceService": "TRANSACTIONS",
+        "walletNo": "9354185507",
+        "customerReference": "customer@email.com",
+        "emailAddress": "customer@email.com",
+        "transactionId": "TRX-178418900001",
+        "transactionType": "DEBIT",
+        "paymentType": "INTERBANK_TRANSFER",
+        "requestType": "SUCCESS",
+        "status": "SUCCESS",
+        "amount": 25000,
+        "sentAmount": "25000",
+        "fees": 10,
+        "sender": "9354185507",
+        "senderName": "Jane Customer",
+        "receiver": "0123456789",
+        "receiverName": "John Receiver",
+        "counterparty": "John Receiver",
+        "receiverBankName": "Access Bank",
+        "receiverBankCode": "044",
+        "narration": "Transfer",
+        "currencyCode": "NGN",
+        "createdDate": "2026-07-31T10:15:00Z",
+        "lastModifiedDate": "2026-07-31T10:15:00Z"
+      }
+    ],
+    "page": 0,
+    "size": 20,
+    "totalElements": 1,
+    "totalPages": 1,
+    "currencyCode": "NGN",
+    "source": "ALL",
+    "sourceTotals": {
+      "TRANSACTIONS": 1,
+      "FXPEER": 0
+    },
+    "warnings": []
+  }
+}
+```
+
+If `source=ALL` and one downstream source is temporarily unavailable, backoffice returns the available source rows plus a warning. If FE selects one explicit source and that source is unavailable, backoffice returns `502`.
+
+Export examples:
+
+```http
+GET /bo/backoffice/transactions/ngn/export.csv?source=ALL&fromDate=2026-07-01&toDate=2026-07-31&size=1000
+Authorization: Bearer {{accessToken}}
+```
+
+```http
+GET /bo/backoffice/transactions/ngn/export.pdf?source=ALL&fromDate=2026-07-01&toDate=2026-07-31&size=200
+Authorization: Bearer {{accessToken}}
+```
+
+CSV is the recommended Excel download format for full operational exports. PDF is intended for a readable summary and is capped lower than CSV.
+
+### NGN Transaction Detail
+
+Use this when an Ops user clicks a transaction row and needs the full available transaction detail without FE calling downstream services directly.
+
+Query parameters:
+
+| Param | Required | Example | Notes |
+| --- | --- | --- | --- |
+| `source` | No | `ALL` | `ALL`, `TRANSACTIONS`, or `FXPEER`. Default is `ALL`. |
+| `includeLegacyNullCurrency` | No | `true` | Default `true` so older NGN rows without `currencyCode` are still visible. |
+
+Example:
+
+```http
+GET /bo/backoffice/transactions/ngn/TRX-178418900001?source=ALL
+Authorization: Bearer {{accessToken}}
+```
+
+Sample response:
+
+```json
+{
+  "statusCode": 200,
+  "description": "NGN transaction details pulled successfully.",
+  "data": {
+    "transactionId": "TRX-178418900001",
+    "source": "ALL",
+    "currencyCode": "NGN",
+    "primary": {
+      "id": 3001,
+      "sourceService": "TRANSACTIONS",
+      "walletNo": "9354185507",
+      "customerReference": "customer@email.com",
+      "emailAddress": "customer@email.com",
+      "transactionId": "TRX-178418900001",
+      "transactionType": "DEBIT",
+      "paymentType": "INTERBANK_TRANSFER",
+      "requestType": "SUCCESS",
+      "status": "SUCCESS",
+      "amount": 25000,
+      "sentAmount": "25000",
+      "fees": 10,
+      "sender": "9354185507",
+      "senderName": "Jane Customer",
+      "receiver": "0123456789",
+      "receiverName": "John Receiver",
+      "counterparty": "John Receiver",
+      "receiverBankName": "Access Bank",
+      "receiverBankCode": "044",
+      "narration": "Transfer",
+      "currencyCode": "NGN",
+      "createdDate": "2026-07-31T10:15:00Z",
+      "lastModifiedDate": "2026-07-31T10:15:00Z"
+    },
+    "entryCount": 1,
+    "entries": [
+      {
+        "id": 3001,
+        "sourceService": "TRANSACTIONS",
+        "walletNo": "9354185507",
+        "customerReference": "customer@email.com",
+        "transactionId": "TRX-178418900001",
+        "status": "SUCCESS",
+        "amount": 25000,
+        "currencyCode": "NGN",
+        "createdDate": "2026-07-31T10:15:00Z"
+      }
+    ],
+    "sources": {
+      "TRANSACTIONS": {
+        "sourceService": "TRANSACTIONS",
+        "entryCount": 1
+      },
+      "FXPEER": {
+        "sourceService": "FXPEER",
+        "entryCount": 0
+      }
+    },
+    "warnings": []
+  }
+}
+```
+
+If `source=ALL` and the transaction is absent in one source, backoffice still returns the source where the transaction exists. If it is absent in all selected sources, backoffice returns `404`.
+
+---
+
+# NGN Account Balances
+
+This endpoint gives backoffice a cumulative NGN account balance view. FE calls backoffice with the admin bearer token. Backoffice resolves local Plural NGN accounts from `add_account_details`, calls the transaction service with the internal service token, and the transaction service calls SmartCore/core banking:
+
+```http
+POST /v2/balances/cumulative
+Authorization: Bearer <wallet-system-token>
+channel: API
+```
+
+| Method | Gateway path | Purpose |
+| --- | --- | --- |
+| `GET` | `/bo/backoffice/accounts/ngn/balances/cumulative/summary` | FE-facing aggregate NGN balance total with no per-customer/account balances |
+| `GET` | `/bo/backoffice/accounts/ngn/balances/cumulative` | Support/investigation detail view for matched local accounts and core response |
+
+Required permission: one of `transactions.view`, `transactions.filter`, `ROLE_SUPER_ADMIN`, `ROLE_ADMIN`, `ROLE_OPERATIONS`, or `ROLE_FINANCE`.
+
+## FE-facing summary endpoint
+
+Use this for the backoffice regulatory/dashboard total. FE should call it with no parameters by default:
+
+```http
+GET /bo/backoffice/accounts/ngn/balances/cumulative/summary
+Authorization: Bearer {{accessToken}}
+```
+
+Optional search/filter:
+
+```http
+GET /bo/backoffice/accounts/ngn/balances/cumulative/summary?keyword=oluwayemisi.oshin@gmail.com
+Authorization: Bearer {{accessToken}}
+```
+
+FE-facing query parameters for the summary endpoint:
+
+| Param | Required | Example | Notes |
+| --- | --- | --- | --- |
+| `keyword` | No | `customer@email.com` | Filters NGN accounts by email, phone, wallet id, account number, or virtual account number before calling core. |
+
+FE should show only one search field for this lookup:
+
+- Label: `Customer or account keyword`
+- Placeholder: `Email, phone, wallet, account, or virtual account`
+- Leave `keyword` empty when Ops wants the cumulative balance across all local NGN accounts.
+
+Do not expose `productCode`, `accountNumbers`, or `channel` in the normal backoffice UI. Those are backend/support-level controls. Backoffice/transaction service handles product-code resolution internally from the SmartCore wallet-system token, defaults `channel` to `API`, and resolves account numbers from local NGN accounts.
+
+Summary sample response:
+
+```json
+{
+  "statusCode": 200,
+  "description": "Successful",
+  "data": {
+    "currency": "NGN",
+    "accountCount": 250,
+    "totalBalance": 125000000,
+    "totalAvailableBalance": 125000000,
+    "totalLedgerBalance": 125000000,
+    "coreStatusCode": 200,
+    "coreDescription": "Successful"
+  }
+}
+```
+
+The summary response must not expose individual customer accounts, account numbers, or per-account balances. It is the endpoint FE should use for the normal cumulative NGN balance card.
+
+## Support detail endpoint
+
+Use this only for controlled operations/support investigation where a Super Admin needs to see matched local accounts and the raw core response shape. `EXTERNAL_COMPLIANCE` users should not call this endpoint; they should use `/summary`.
+
+```http
+GET /bo/backoffice/accounts/ngn/balances/cumulative?keyword=customer@email.com
+Authorization: Bearer {{accessToken}}
+```
+
+Detail sample response:
+
+```json
+{
+  "statusCode": 200,
+  "description": "Successful",
+  "data": {
+    "currency": "NGN",
+    "accountCount": 2,
+    "accounts": [
+      {
+        "id": 301,
+        "accountNumber": "100001",
+        "walletId": "9354185507",
+        "emailAddress": "customer@email.com",
+        "phoneNumber": "2348012345678",
+        "currencyCode": "NGN",
+        "countryCode": "NG",
+        "virtualAccountNumber": "100001",
+        "virtualAccountName": "Jane Customer"
+      }
+    ],
+    "accountNumbers": ["100001", "100002"],
+    "coreBankingResponse": {
+      "statusCode": 200,
+      "description": "Successful",
+      "data": {
+        "currency": "NGN",
+        "totalBalance": 150000,
+        "balances": []
+      }
+    }
+  }
+}
+```
+
+The `accounts` list is the local Plural NGN account set used for the request. The `accountNumbers` array in the response is informational only so Ops can see what was submitted to core banking; FE does not need to collect account numbers from the user. The `coreBankingResponse` is the SmartCore/core banking response from `/v2/balances/cumulative`.
+
+Support-only query parameters, not for the normal FE screen:
+
+| Param | Required | Notes |
+| --- | --- | --- |
+| `productCode` | No | Optional backend override for support/testing only. If omitted, transaction service resolves product code from the SmartCore wallet-system token. |
+| `accountNumbers` | No | Optional repeated backend override for support/testing only. If omitted, transaction service resolves account numbers from local NGN accounts using `keyword`, or all NGN accounts when `keyword` is empty. |
+| `channel` | No | Optional backend override. Defaults to `API`. |
 
 ---
 
@@ -744,31 +1188,216 @@ Create referral program request:
 
 # Group Savings
 
-| Method | Path | Purpose |
-|---|---|---|
-| `POST` | `/bo/backoffice/group-savings/groups/{groupId}/deletion-request` | Typed alias for requesting/admin-triggering group savings deletion. Body may include `reason`. |
-
-Deletion request:
-
-```json
-{
-  "reason": "Duplicate test group created during migration",
-  "expectedStatus": "DRAFT"
-}
-```
-
+These endpoints support the Group Savings visibility MVP for Backoffice FE. FE calls only Backoffice with the admin JWT; Backoffice proxies to the transaction service.
 
 | Method | Gateway path | Purpose |
 | --- | --- | --- |
-| `GET` | `/bo/backoffice/group-savings/groups?page=0&size=20&status=ACTIVE` | List groups |
-| `GET` | `/bo/backoffice/group-savings/groups/{groupId}` | Get group detail |
-| `POST` | `/bo/backoffice/group-savings/groups/{groupId}/close` | Close group |
+| `GET` | `/bo/backoffice/group-savings/groups?page=0&size=20&status=ACTIVE&search=July` | List groups for the group management table |
+| `GET` | `/bo/backoffice/group-savings/groups/{groupId}` | Get group detail with members and cycles |
+| `GET` | `/bo/backoffice/group-savings/contribution-payout-monitoring?period=DAILY&fromDate=2026-07-01&toDate=2026-07-31` | Contribution/payout dashboard |
+| `GET` | `/bo/backoffice/group-savings/slot-assignment-tracking?status=UPCOMING` | Slot schedule, payout history, and alerts |
 | `GET` | `/bo/backoffice/group-savings/groups/{groupId}/cycle-health` | Per-cycle contribution/payout health for one group |
 | `GET` | `/bo/backoffice/group-savings/cycles/{cycleId}/health` | Contribution/payout health for one cycle |
 | `POST` | `/bo/backoffice/group-savings/cycles/{cycleId}/retry-failed` | Requeue failed contribution/payout records for a cycle after ops review |
-| `GET` | `/bo/backoffice/group-savings/contribution-payout-monitoring?page=0&size=20` | Contribution/payout monitoring |
-| `GET` | `/bo/backoffice/group-savings/slot-assignment-tracking?page=0&size=20` | Slot assignment tracking |
-| `POST` | `/bo/backoffice/group-savings/delete` | Delete group saving |
+| `POST` | `/bo/backoffice/group-savings/groups/{groupId}/close` | Close group. Admin/Super Admin only |
+| `POST` | `/bo/backoffice/group-savings/groups/{groupId}/deletion-request` | Typed alias for requesting/admin-triggering group savings deletion. Body may include `reason` |
+| `POST` | `/bo/backoffice/group-savings/delete` | Legacy delete group saving bridge |
+
+List permissions: roles `SUPER_ADMIN`, `ADMIN`, `OPERATIONS`, or `FINANCE`.
+
+Close/delete permissions: roles `SUPER_ADMIN` or `ADMIN`; typed deletion alias also accepts `groupSavings.group.delete`.
+
+## Group List
+
+Query parameters:
+
+| Param | Required | Example | Notes |
+| --- | --- | --- | --- |
+| `status` | No | `ACTIVE` | Supported normalized statuses: `ALL`, `INITIATED`, `CREATED`, `ACTIVE`, `IN_PROGRESS`, `COMPLETED`, `CLOSED`. Omit or use `ALL` for all. |
+| `search` | No | `July` | Searches group name, invite code, owner email, phone, wallet id, and transaction references. |
+| `page` | No | `0` | Zero-based page. |
+| `size` | No | `20` | Page size. |
+
+Sample list response:
+
+```json
+{
+  "statusCode": 200,
+  "description": "Group savings groups fetched successfully.",
+  "data": {
+    "content": [
+      {
+        "groupId": 12,
+        "groupName": "July Staff Group",
+        "inviteCode": "GS-ABCD12",
+        "transactionId": "178500000001",
+        "transactionIdLink": "GS-LINK-178500000001",
+        "ownerName": "Jane Customer",
+        "ownerEmailAddress": "jane@example.com",
+        "ownerPhoneNumber": "2348012345678",
+        "ownerWalletId": "9354185507",
+        "members": 5,
+        "configuredMembers": "5",
+        "cycle": "Monthly",
+        "nextPayout": "2026-08-31",
+        "volume": 250000,
+        "status": "ACTIVE",
+        "transactionStatus": "3",
+        "transactionStatusDesc": "Active",
+        "createdDate": "2026-07-01T09:00:00Z",
+        "lastModifiedDate": "2026-07-31T09:00:00Z"
+      }
+    ],
+    "page": 0,
+    "size": 20,
+    "totalElements": 1,
+    "totalPages": 1,
+    "statusOptions": ["ALL", "INITIATED", "CREATED", "ACTIVE", "IN_PROGRESS", "COMPLETED", "CLOSED"]
+  }
+}
+```
+
+## Group Detail
+
+Sample detail response:
+
+```json
+{
+  "statusCode": 200,
+  "description": "Group savings group fetched successfully.",
+  "data": {
+    "groupId": 12,
+    "groupName": "July Staff Group",
+    "status": "ACTIVE",
+    "description": "Staff contribution circle",
+    "allowPublicToJoin": "false",
+    "adminPayOutSlot": "1",
+    "availablePayOutSlot": "2,3,4,5",
+    "contributionDate": "2026-07-01",
+    "contributionWindowEnd": "2026-07-05",
+    "payoutDate": "2026-07-31",
+    "payoutPolicy": "ORDERED",
+    "contributionFrequency": "MONTHLY",
+    "membersList": [
+      {
+        "memberName": "Jane Customer",
+        "memberEmailAddress": "jane@example.com",
+        "memberId": "9354185507",
+        "payOutSlot": "1"
+      }
+    ],
+    "cycles": [
+      {
+        "cycleNumber": 1,
+        "contributionDate": "2026-07-01",
+        "contributionWindowEnd": "2026-07-05",
+        "payoutDate": "2026-07-31",
+        "status": "PAID"
+      }
+    ]
+  }
+}
+```
+
+## Contribution And Payout Monitoring
+
+Query parameters:
+
+| Param | Required | Example | Notes |
+| --- | --- | --- | --- |
+| `period` | No | `DAILY` | Supported: `DAILY`, `WEEKLY`, `MONTHLY`. |
+| `fromDate` | No | `2026-07-01` | Defaults by selected period when omitted. |
+| `toDate` | No | `2026-07-31` | Defaults to current Lagos date when omitted. |
+| `groupId` | No | `12` | Restrict dashboard to one group. |
+
+Sample monitoring response:
+
+```json
+{
+  "statusCode": 200,
+  "description": "Contribution and payout monitoring fetched successfully.",
+  "data": {
+    "filters": {
+      "period": "DAILY",
+      "fromDate": "2026-07-01",
+      "toDate": "2026-07-31",
+      "groupId": null
+    },
+    "summary": {
+      "totalContributions": 250000,
+      "totalPayouts": 200000,
+      "netFlow": 50000,
+      "activeGroups": 8,
+      "lastUpdatedAt": "2026-08-11T10:00:00Z"
+    },
+    "trend": [
+      {
+        "key": "2026-07-01",
+        "label": "Tue",
+        "periodStart": "2026-07-01",
+        "periodEnd": "2026-07-01",
+        "contributionAmount": 50000,
+        "payoutAmount": 0,
+        "contributionCount": 5,
+        "payoutCount": 0
+      }
+    ],
+    "alerts": [
+      {
+        "severity": "HIGH",
+        "category": "PAYOUT",
+        "status": "FAILED",
+        "reference": "TX-12-3",
+        "message": "Payout TX-12-3 failed - retrigger required.",
+        "groupId": 12,
+        "groupName": "July Staff Group"
+      }
+    ],
+    "groupOptions": [
+      {"groupId": 12, "groupName": "July Staff Group", "inviteCode": "GS-ABCD12", "transactionId": "178500000001", "status": "3"}
+    ],
+    "periodOptions": ["DAILY", "WEEKLY", "MONTHLY"]
+  }
+}
+```
+
+## Slot Assignment Tracking
+
+Query parameters:
+
+| Param | Required | Example | Notes |
+| --- | --- | --- | --- |
+| `groupId` | No | `12` | Restrict to one group. |
+| `status` | No | `UPCOMING` | Supported: `UPCOMING`, `IN_PROGRESS`, `MISSED`, `COMPLETED`. |
+
+Sample slot response:
+
+```json
+{
+  "statusCode": 200,
+  "description": "Slot assignment and tracking fetched successfully.",
+  "data": {
+    "filters": {"groupId": null, "status": "UPCOMING"},
+    "slotSchedule": [
+      {
+        "groupId": 12,
+        "groupName": "July Staff Group",
+        "slotNumber": 3,
+        "memberName": "Jane Customer",
+        "memberWalletId": "9354185507",
+        "payoutDate": "2026-08-31",
+        "status": "UPCOMING",
+        "cycleStatus": "PENDING",
+        "reference": "GS-12-SLOT-3"
+      }
+    ],
+    "payoutHistory": [],
+    "alerts": [],
+    "groupOptions": [],
+    "statusOptions": ["UPCOMING", "IN_PROGRESS", "MISSED", "COMPLETED"]
+  }
+}
+```
 
 Cycle health response example:
 
@@ -846,6 +1475,15 @@ Retry failed cycle response example:
 ```
 
 Delete request is proxied to transactions service and follows the existing transaction service request shape.
+
+Deletion request:
+
+```json
+{
+  "reason": "Duplicate test group created during migration",
+  "expectedStatus": "DRAFT"
+}
+```
 
 ---
 
@@ -946,14 +1584,42 @@ Notes:
 | `GET` | `/bo/backoffice/fxpeer/services/airtime-reversals?status=PENDING` | Airtime reversal cases |
 | `POST` | `/bo/backoffice/reversals/cases/FXPEER_AIRTIME/{processId}/manual-request` | Submit airtime reversal for maker-checker approval |
 
-Example VAS product lookup:
+VAS product lookup request bodies:
+
+`POST /bo/backoffice/fxpeer/services/products`
 
 ```json
 {
-  "countryCode": "NG",
+  "currencyCode": "NGN"
+}
+```
+
+`countryCode` is also accepted as an alias for `currencyCode` for FE compatibility:
+
+```json
+{
+  "countryCode": "NGN"
+}
+```
+
+`POST /bo/backoffice/fxpeer/services/products/by-category`
+
+```json
+{
+  "currencyCode": "NGN",
   "categoryId": "AIRTIME"
 }
 ```
+
+`POST /bo/backoffice/fxpeer/services/products/by-country`
+
+```json
+{
+  "currencyCode": "NGN"
+}
+```
+
+`countryCode` is also accepted as an alias for `currencyCode`.
 
 Notes:
 
@@ -1042,6 +1708,83 @@ Sample create schedule request:
 # Global Search, Saved Views, And Ops Health
 
 These endpoints close the FE dependency for cross-module search, per-admin saved filters/views, and an operations dependency-health screen. They all require a valid backoffice JWT.
+
+## Global Dashboard
+
+| Method | Gateway path | Purpose |
+| --- | --- | --- |
+| `GET` | `/bo/backoffice/dashboard?range=TODAY` | Role-sensitive landing dashboard summary. |
+
+Optional query params: `range`, `fromDate`, `toDate`.
+
+The endpoint composes local approval/admin/notification counts with Profiling customer count, FxPeer investment performance, Transactions NGN cumulative balance summary, and dependency health. Each section carries its own `status`, so a temporary downstream issue should not blank the whole dashboard.
+
+Sample response:
+
+```json
+{
+  "status": 200,
+  "description": "Backoffice dashboard retrieved successfully",
+  "generatedAt": "2026-08-11T10:00:00Z",
+  "data": {
+    "range": "TODAY",
+    "fromDate": null,
+    "toDate": null,
+    "summaryCards": [
+      {
+        "key": "pendingApprovals",
+        "label": "Pending approvals",
+        "value": 12,
+        "valueType": "count",
+        "deepLink": "/approvals",
+        "status": "AVAILABLE"
+      },
+      {
+        "key": "unreadNotifications",
+        "label": "Unread notifications",
+        "value": 3,
+        "valueType": "count",
+        "deepLink": "/notifications",
+        "status": "AVAILABLE"
+      },
+      {
+        "key": "ngnCumulativeBalance",
+        "label": "NGN cumulative balance",
+        "value": 12500000,
+        "valueType": "amount",
+        "deepLink": "/operations/transactions",
+        "status": "AVAILABLE"
+      }
+    ],
+    "sections": {
+      "approvals": {
+        "name": "approvals",
+        "status": "AVAILABLE",
+        "data": {"pendingCount": 12},
+        "durationMs": 5
+      },
+      "ngnBalances": {
+        "name": "ngnBalances",
+        "status": "AVAILABLE",
+        "data": {
+          "status": 200,
+          "description": "NGN cumulative account balance summary retrieved successfully",
+          "data": {
+            "currency": "NGN",
+            "accountCount": 240,
+            "cumulativeBalance": 12500000
+          }
+        },
+        "durationMs": 210
+      }
+    },
+    "quickLinks": [
+      {"label": "Approvals", "path": "/approvals"},
+      {"label": "NGN Transactions", "path": "/operations/transactions"}
+    ]
+  }
+}
+```
 
 ## Global Search
 

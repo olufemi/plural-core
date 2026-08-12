@@ -1,6 +1,8 @@
 package com.finacial.wealth.backoffice.config;
 
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import java.io.IOException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -30,6 +32,12 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.disable())
                 .cors(Customizer.withDefaults())
                 .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .exceptionHandling(ex -> ex
+                .authenticationEntryPoint((req, res, e) -> writeSecurityError(req, res,
+                        HttpServletResponse.SC_UNAUTHORIZED, "UNAUTHORIZED", "Unauthorized"))
+                .accessDeniedHandler((req, res, e) -> writeSecurityError(req, res,
+                        HttpServletResponse.SC_FORBIDDEN, "FORBIDDEN", "Forbidden"))
+                )
                 .authorizeHttpRequests(auth -> auth
                 .requestMatchers(HttpMethod.POST,
                         "/auth/login", "/auth/mfa/verify", "/auth/refresh", "/auth/logout",
@@ -55,18 +63,10 @@ public class SecurityConfig {
                 .cors(Customizer.withDefaults())
                 .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .exceptionHandling(ex -> ex
-                .authenticationEntryPoint((req, res, e) -> {
-                    res.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-                    res.setContentType("application/json");
-                    res.setCharacterEncoding("UTF-8");
-                    res.getWriter().write("{\"status\":401,\"message\":\"Unauthorized\"}");
-                })
-                .accessDeniedHandler((req, res, e) -> {
-                    res.setStatus(HttpServletResponse.SC_FORBIDDEN);
-                    res.setContentType("application/json");
-                    res.setCharacterEncoding("UTF-8");
-                    res.getWriter().write("{\"status\":403,\"message\":\"Forbidden\"}");
-                })
+                .authenticationEntryPoint((req, res, e) -> writeSecurityError(req, res,
+                        HttpServletResponse.SC_UNAUTHORIZED, "UNAUTHORIZED", "Unauthorized"))
+                .accessDeniedHandler((req, res, e) -> writeSecurityError(req, res,
+                        HttpServletResponse.SC_FORBIDDEN, "FORBIDDEN", "Forbidden"))
                 )
                 .authorizeHttpRequests(auth -> auth
                 .requestMatchers(
@@ -88,5 +88,34 @@ public class SecurityConfig {
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
+    }
+
+    private void writeSecurityError(HttpServletRequest req, HttpServletResponse res, int status, String code,
+            String message) throws IOException {
+        String requestId = requestId(req);
+        res.setStatus(status);
+        res.setContentType("application/json");
+        res.setCharacterEncoding("UTF-8");
+        res.getWriter().write("{\"status\":" + status
+                + ",\"code\":\"" + code
+                + "\",\"message\":\"" + escape(message)
+                + "\",\"requestId\":\"" + escape(requestId)
+                + "\",\"path\":\"" + escape(req.getRequestURI()) + "\"}");
+    }
+
+    private String requestId(HttpServletRequest req) {
+        Object attr = req.getAttribute("requestId");
+        if (attr != null) {
+            return String.valueOf(attr);
+        }
+        String header = req.getHeader("X-Request-Id");
+        return header == null || header.trim().isEmpty() ? "-" : header;
+    }
+
+    private String escape(String value) {
+        if (value == null) {
+            return "";
+        }
+        return value.replace("\\", "\\\\").replace("\"", "\\\"");
     }
 }

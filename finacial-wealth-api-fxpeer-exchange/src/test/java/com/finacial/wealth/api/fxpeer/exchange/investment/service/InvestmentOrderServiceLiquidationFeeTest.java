@@ -175,6 +175,7 @@ class InvestmentOrderServiceLiquidationFeeTest {
                 mock(InvestmentHistoryService.class),
                 mock(InvestmentPositionHistoryRepository.class),
                 mock(InvestmentRequestGuardRepository.class),
+                mock(InvestmentRedemptionNotificationPublisher.class),
                 mock(TransactionHistoryClientLocalT.class)
         );
     }

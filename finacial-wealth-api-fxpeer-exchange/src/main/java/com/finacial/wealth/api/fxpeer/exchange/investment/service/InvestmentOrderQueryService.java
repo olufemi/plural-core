@@ -332,7 +332,33 @@ public class InvestmentOrderQueryService {
         item.put("liquidationType", determineLiquidationType(order));
         item.put("fees", order.getFees());
         item.put("netAmount", order.getNetAmount());
+        InvestmentPosition position = order.getPosition();
+        BigDecimal grossInvestmentAmount = position == null ? BigDecimal.ZERO : money(position.getCurrentValue());
+        BigDecimal reservedRedemptionAmount = position == null ? BigDecimal.ZERO : money(position.getReservedLiquidationAmount());
+        item.put("grossInvestmentAmount", grossInvestmentAmount);
+        item.put("reservedRedemptionAmount", reservedRedemptionAmount);
+        item.put("availableInvestmentAmount", availableAmount(grossInvestmentAmount, reservedRedemptionAmount));
+        item.put("reserveStatus", reservedRedemptionAmount.compareTo(BigDecimal.ZERO) > 0 ? "HELD" : "NOT_HELD");
+        item.put("retryEligible", order.getStatus() == InvestmentOrderStatus.LIQUIDATION_FAILED
+                || order.getStatus() == InvestmentOrderStatus.FAILED);
+        item.put("correctionMode", order.getStatus() == InvestmentOrderStatus.SETTLED ? "REVERSAL_ONLY" : null);
+        item.put("notificationStatus", liquidationNotificationStatus(order));
+        item.put("failureReason", order.getFailureReason());
         return item;
+    }
+
+    private String liquidationNotificationStatus(InvestmentOrder order) {
+        if (order == null || order.getStatus() == null) {
+            return "UNKNOWN";
+        }
+        return switch (order.getStatus()) {
+            case LIQUIDATION_PENDING_APPROVAL -> "REQUESTED_SENT";
+            case LIQUIDATION_PROCESSING -> "PROCESSING";
+            case SETTLED -> "COMPLETED_SENT";
+            case CANCELLED -> "CANCELLED_SENT";
+            case LIQUIDATION_FAILED, FAILED -> "FAILED_PENDING_RETRY";
+            default -> "NOT_APPLICABLE";
+        };
     }
 
     private Map<String, Object> toAdminOrderRow(InvestmentOrder order) {

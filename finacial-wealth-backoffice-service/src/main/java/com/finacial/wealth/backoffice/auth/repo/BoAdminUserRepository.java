@@ -18,4 +18,6 @@ public interface BoAdminUserRepository extends JpaRepository<BoAdminUser, Long>,
             String email, String fullName, Pageable pageable
     );
 
+    long countByStatus(BoAdminUser.Status status);
+
 }

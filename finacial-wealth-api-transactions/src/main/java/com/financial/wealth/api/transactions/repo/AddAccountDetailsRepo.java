@@ -38,4 +38,16 @@ public interface AddAccountDetailsRepo extends JpaRepository<AddAccountDetails, 
     @Query("select bs from AddAccountDetails bs where bs.accountNumber=:accountNumber")
     List<AddAccountDetails> findByAccountNumberList(String accountNumber);
 
+    @Query("select bs from AddAccountDetails bs where upper(bs.currencyCode)=upper(:currencyCode)")
+    List<AddAccountDetails> findByCurrencyCode(@Param("currencyCode") String currencyCode);
+
+    @Query("select bs from AddAccountDetails bs where upper(bs.currencyCode)=upper(:currencyCode) and "
+            + "(lower(bs.emailAddress) like lower(concat('%', :keyword, '%')) "
+            + "or lower(bs.phoneNumber) like lower(concat('%', :keyword, '%')) "
+            + "or lower(bs.walletId) like lower(concat('%', :keyword, '%')) "
+            + "or lower(bs.accountNumber) like lower(concat('%', :keyword, '%')) "
+            + "or lower(bs.virtualAccountNumber) like lower(concat('%', :keyword, '%')))")
+    List<AddAccountDetails> findByCurrencyCodeAndKeyword(@Param("currencyCode") String currencyCode,
+            @Param("keyword") String keyword);
+
 }

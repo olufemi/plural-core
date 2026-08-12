@@ -17,4 +17,5 @@ public class LiquidationApprovalRequest {
 
     @NotBlank
     private String orderRef;
+    private String reason;
 }

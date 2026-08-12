@@ -27,6 +27,8 @@ public interface BoApprovalRequestRepository extends JpaRepository<BoApprovalReq
 
     List<BoApprovalRequest> findByStatusIn(Collection<ApprovalStatus> statuses);
 
+    long countByStatusIn(Collection<ApprovalStatus> statuses);
+
     List<BoApprovalRequest> findTop100ByEntityTypeAndEntityRefContainingOrderByCreatedAtDesc(
             com.finacial.wealth.backoffice.approval.entity.ApprovalEntityType entityType,
             String entityRef

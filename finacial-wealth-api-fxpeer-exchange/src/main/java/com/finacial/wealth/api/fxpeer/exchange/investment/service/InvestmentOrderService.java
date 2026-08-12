@@ -117,6 +117,7 @@ import org.springframework.data.repository.query.Param;
 @Service
 @Transactional
 public class InvestmentOrderService {
+    private static final String INVESTMENT_FREEZE_CUSTOMER_PREFIX = "investment.freeze.customer.";
 
     private static final Logger log = LoggerFactory.getLogger(InvestmentOrderService.class);
 
@@ -592,6 +593,13 @@ public class InvestmentOrderService {
                 throw new BusinessException(
                         "Minimum for this investment is " + product.getMinimumInvestmentAmount()
                         + ". Please increase the amount.");
+            }
+
+            String capacityError = validateProductCapacity(product, amount);
+            if (capacityError != null) {
+                resp.setStatusCode(400);
+                resp.setDescription(capacityError);
+                return resp;
             }
 
 
@@ -1131,6 +1139,14 @@ public class InvestmentOrderService {
                 return res;
             }
 
+            String liquidationProductCode = subscriptionOrder.getProduct() == null ? null : subscriptionOrder.getProduct().getProductCode();
+            if (isInvestmentFrozen(emailAddress, liquidationProductCode)) {
+                res.setStatusCode(423);
+                res.setDescription("Investment activity is currently frozen for this customer.");
+                res.setData(Collections.emptyMap());
+                return res;
+            }
+
             // Load position (and lock it to prevent concurrent oversell)
             InvestmentPosition position = positionRepo.findByOrderRef(subscriptionOrder.getOrderRef())
                     .orElse(null);
@@ -1144,6 +1160,14 @@ public class InvestmentOrderService {
 
             position = positionRepo.lockById(position.getId())
                     .orElseThrow(() -> new IllegalStateException("Position lock failed"));
+
+            String liquidationPolicyError = validateLiquidationGovernance(subscriptionOrder, position, emailAddress);
+            if (liquidationPolicyError != null) {
+                res.setStatusCode(statusCode);
+                res.setDescription(liquidationPolicyError);
+                res.setData(Collections.emptyMap());
+                return res;
+            }
 
             boolean fullLiquidation = rq.fullLiquidation();
 
@@ -1611,6 +1635,13 @@ public class InvestmentOrderService {
                         + ". Please increase the amount.");
             }
 
+            String capacityError = validateProductCapacity(product, amount);
+            if (capacityError != null) {
+                resp.setStatusCode(400);
+                resp.setDescription(capacityError);
+                return resp;
+            }
+
 
             /*if (grossDebit.compareTo(available) > 0) {
                 throw new BusinessException(
@@ -1783,6 +1814,11 @@ public class InvestmentOrderService {
                 return error(resp, failCode, "Only subscription orders can be topped up.");
             }
 
+            String topupProductCode = order.getProduct() == null ? null : order.getProduct().getProductCode();
+            if (isInvestmentFrozen(email, topupProductCode)) {
+                return error(resp, 423, "Investment activity is currently frozen for this customer.");
+            }
+
             // ✅ 3) Load position
             InvestmentPosition pos = positionRepo.findByOrderRef(order.getOrderRef())
                     .orElseThrow(() -> new NotFoundException("Investment position not found"));
@@ -1892,6 +1928,156 @@ public class InvestmentOrderService {
             log.error("processTrnsaction error", ex);
             return error(resp, 500, "Service is currently unavailable. Please try again shortly.");
 
+        }
+    }
+
+    private String validateProductCapacity(InvestmentProduct product, BigDecimal requestedAmount) {
+        BigDecimal maximumTotalRaise = readGovernanceDecimal(product, "maximumTotalRaise");
+        Boolean autoCloseAtCapacity = readGovernanceBoolean(product, "autoCloseAtCapacity");
+        if (maximumTotalRaise == null || requestedAmount == null || requestedAmount.compareTo(BigDecimal.ZERO) <= 0) {
+            return null;
+        }
+
+        BigDecimal currentRaise = orderRepo.sumAmountByProductAndTypeAndStatusIn(
+                product,
+                InvestmentOrderType.SUBSCRIPTION,
+                List.of(
+                        InvestmentOrderStatus.PENDING,
+                        InvestmentOrderStatus.HOLD_PLACED,
+                        InvestmentOrderStatus.SENT_TO_PARTNER,
+                        InvestmentOrderStatus.ACTIVE
+                ));
+        currentRaise = currentRaise == null ? BigDecimal.ZERO : currentRaise;
+        if (currentRaise.add(requestedAmount).compareTo(maximumTotalRaise) > 0) {
+            return Boolean.TRUE.equals(autoCloseAtCapacity)
+                    ? "Product capacity has been reached and is closed to new subscriptions."
+                    : "Subscription exceeds product maximum total raise. Remaining capacity: "
+                    + maximumTotalRaise.subtract(currentRaise).max(BigDecimal.ZERO);
+        }
+        return null;
+    }
+
+    private String validateLiquidationGovernance(InvestmentOrder subscriptionOrder, InvestmentPosition position, String emailAddress) {
+        InvestmentProduct product = subscriptionOrder == null ? null : subscriptionOrder.getProduct();
+        Integer minimumHoldingDays = readGovernanceInteger(product, "minimumHoldingDays");
+        if (minimumHoldingDays != null && minimumHoldingDays > 0) {
+            Instant holdingStart = position != null && position.getCreatedAt() != null
+                    ? position.getCreatedAt()
+                    : subscriptionOrder.getCreatedAt();
+            if (holdingStart != null && Instant.now().isBefore(holdingStart.plus(Duration.ofDays(minimumHoldingDays)))) {
+                return "Investment cannot be liquidated before minimum holding period of " + minimumHoldingDays + " days.";
+            }
+        }
+
+        Integer frequencyLimit = readGovernanceInteger(product, "liquidationFrequencyLimit");
+        String frequencyPeriod = readGovernanceText(product, "liquidationFrequencyPeriod");
+        if (frequencyLimit != null && frequencyLimit > 0 && frequencyPeriod != null && !frequencyPeriod.isBlank()) {
+            Instant periodStart = liquidationFrequencyStart(frequencyPeriod);
+            long used = orderRepo.countByEmailAddressAndProductAndTypeAndCreatedAtGreaterThanEqualAndStatusIn(
+                    emailAddress,
+                    product,
+                    InvestmentOrderType.LIQUIDATION,
+                    periodStart,
+                    List.of(
+                            InvestmentOrderStatus.LIQUIDATION_PENDING_APPROVAL,
+                            InvestmentOrderStatus.LIQUIDATION_PROCESSING,
+                            InvestmentOrderStatus.SETTLED
+                    ));
+            if (used >= frequencyLimit) {
+                return "Liquidation frequency limit reached for this product. Limit: " + frequencyLimit + " per "
+                        + frequencyPeriod.trim().toUpperCase(Locale.ROOT);
+            }
+        }
+        return null;
+    }
+
+    private Instant liquidationFrequencyStart(String frequencyPeriod) {
+        String period = frequencyPeriod == null ? "" : frequencyPeriod.trim().toUpperCase(Locale.ROOT);
+        LocalDate today = LocalDate.now(ZONE);
+        return switch (period) {
+            case "YEAR" -> today.withDayOfYear(1).atStartOfDay(ZONE).toInstant();
+            case "QUARTER" -> {
+                int firstMonth = ((today.getMonthValue() - 1) / 3) * 3 + 1;
+                yield LocalDate.of(today.getYear(), firstMonth, 1).atStartOfDay(ZONE).toInstant();
+            }
+            default -> today.withDayOfMonth(1).atStartOfDay(ZONE).toInstant();
+        };
+    }
+
+    private BigDecimal readGovernanceDecimal(InvestmentProduct product, String fieldName) {
+        JsonNode value = readGovernanceNode(product, fieldName);
+        if (value == null || value.isMissingNode() || value.isNull() || value.asText().isBlank()) {
+            return null;
+        }
+        try {
+            return new BigDecimal(value.asText());
+        } catch (Exception ex) {
+            return null;
+        }
+    }
+
+    private Integer readGovernanceInteger(InvestmentProduct product, String fieldName) {
+        JsonNode value = readGovernanceNode(product, fieldName);
+        if (value == null || value.isMissingNode() || value.isNull() || value.asText().isBlank()) {
+            return null;
+        }
+        try {
+            return value.asInt();
+        } catch (Exception ex) {
+            return null;
+        }
+    }
+
+    private Boolean readGovernanceBoolean(InvestmentProduct product, String fieldName) {
+        JsonNode value = readGovernanceNode(product, fieldName);
+        if (value == null || value.isMissingNode() || value.isNull()) {
+            return null;
+        }
+        return value.asBoolean();
+    }
+
+    private String readGovernanceText(InvestmentProduct product, String fieldName) {
+        JsonNode value = readGovernanceNode(product, fieldName);
+        if (value == null || value.isMissingNode() || value.isNull()) {
+            return null;
+        }
+        return value.asText();
+    }
+
+    private JsonNode readGovernanceNode(InvestmentProduct product, String fieldName) {
+        try {
+            if (product == null || product.getMetaJson() == null || product.getMetaJson().isBlank()) {
+                return null;
+            }
+            return new ObjectMapper().readTree(product.getMetaJson()).path("productGovernance").path(fieldName);
+        } catch (Exception ex) {
+            return null;
+        }
+    }
+
+
+    private boolean isInvestmentFrozen(String emailAddress, String productCode) {
+        if (emailAddress == null || emailAddress.trim().isEmpty()) {
+            return false;
+        }
+        String normalizedEmail = emailAddress.trim().toLowerCase(Locale.ROOT);
+        if (isAppConfigTrue(INVESTMENT_FREEZE_CUSTOMER_PREFIX + normalizedEmail)) {
+            return true;
+        }
+        if (productCode != null && !productCode.trim().isEmpty()) {
+            return isAppConfigTrue(INVESTMENT_FREEZE_CUSTOMER_PREFIX + normalizedEmail + "."
+                    + productCode.trim().toUpperCase(Locale.ROOT));
+        }
+        return false;
+    }
+
+    private boolean isAppConfigTrue(String configName) {
+        try {
+            List<AppConfig> configs = appConfigRepo.findByConfigName(configName);
+            return configs != null && !configs.isEmpty()
+                    && "true".equalsIgnoreCase(configs.get(0).getConfigValue());
+        } catch (Exception ex) {
+            return false;
         }
     }
 

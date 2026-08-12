@@ -11,11 +11,12 @@ import com.finacial.wealth.backoffice.auth.repo.BoMfaChallengeRepository;
 import com.finacial.wealth.backoffice.auth.repo.BoRefreshTokenRepository;
 import com.finacial.wealth.backoffice.model.BaseResponse;
 import com.finacial.wealth.backoffice.util.CryptoBox;
-import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -176,6 +177,7 @@ public class BackofficeAuthService {
         auditService.audit("PASSWORD_RECOVERY_COMPLETE", null, user.getId(), ip, ua, Map.of("email", user.getEmail()));
     }
 
+    @Transactional(propagation = Propagation.REQUIRED)
     public String issueRefreshToken(BoAdminUser user) {
         String raw = UUID.randomUUID().toString() + "." + UUID.randomUUID();
         String hash = sha256Base64(raw);
@@ -190,6 +192,7 @@ public class BackofficeAuthService {
         return raw;
     }
 
+    @Transactional(propagation = Propagation.REQUIRED)
     public BoAdminUser validateRefreshOrThrow(String rawRefresh) {
         String hash = sha256Base64(rawRefresh);
         BoRefreshToken rt = refreshRepo.findByTokenHashAndRevokedFalse(hash)
@@ -205,7 +208,7 @@ public class BackofficeAuthService {
         return rt.getAdminUser();
     }
 
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public RefreshResult rotateRefreshOrThrow(String rawRefresh) {
         String hash = sha256Base64(rawRefresh);
         BoRefreshToken rt = refreshRepo.findByTokenHashAndRevokedFalse(hash)

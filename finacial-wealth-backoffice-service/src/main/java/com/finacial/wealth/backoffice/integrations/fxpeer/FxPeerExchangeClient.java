@@ -160,6 +160,29 @@ public interface FxPeerExchangeClient {
             @PathVariable("processId") String processId
     );
 
+    @GetMapping(value = "/admin/transactions/ngn", produces = MediaType.APPLICATION_JSON_VALUE)
+    Map<String, Object> getNgnTransactions(
+            @RequestHeader("X-Backoffice-Internal-Token") String internalToken,
+            @RequestParam(required = false) String customer,
+            @RequestParam(required = false) String walletId,
+            @RequestParam(required = false) String transactionId,
+            @RequestParam(required = false) String type,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String q,
+            @RequestParam(required = false) String fromDate,
+            @RequestParam(required = false) String toDate,
+            @RequestParam(defaultValue = "true") Boolean includeLegacyNullCurrency,
+            @RequestParam(defaultValue = "0") Integer page,
+            @RequestParam(defaultValue = "20") Integer size
+    );
+
+    @GetMapping(value = "/admin/transactions/ngn/{transactionId}", produces = MediaType.APPLICATION_JSON_VALUE)
+    Map<String, Object> getNgnTransactionDetails(
+            @RequestHeader("X-Backoffice-Internal-Token") String internalToken,
+            @PathVariable("transactionId") String transactionId,
+            @RequestParam(defaultValue = "true") Boolean includeLegacyNullCurrency
+    );
+
     @PostMapping(value = "/investments/create-product", consumes = "application/json")
     Map<String, Object> createInvestmentProduct(@RequestBody InvestmentProductUpsertRequest request);
 
@@ -260,5 +283,20 @@ public interface FxPeerExchangeClient {
             consumes = "application/json"
     )
     Map<String, Object> cancelLiquidation(@RequestBody LiquidationApprovalRequest request);
+
+    @PostMapping(
+            value = "/investments/orders/liquidation/retry",
+            consumes = "application/json"
+    )
+    Map<String, Object> retryLiquidation(@RequestBody Map<String, Object> request);
+
+    @PostMapping(
+            value = "/investments/admin/customers/{email}/investment-freeze",
+            consumes = "application/json"
+    )
+    Map<String, Object> setCustomerInvestmentFreeze(
+            @PathVariable("email") String email,
+            @RequestBody Map<String, Object> request
+    );
 
 }

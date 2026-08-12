@@ -24,6 +24,18 @@ public class InvestmentProductUpsertRequest {
     @NotNull private BigDecimal minimumInvestmentAmount;
     @NotNull private ValuationMethod valuationMethod;
 
+    private String description;
+    private String issuerName;
+    private String fundManager;
+    private String riskRating;
+    private Integer minimumHoldingDays;
+    private Integer maximumHoldingDays;
+    private BigDecimal maximumTotalRaise;
+    private Boolean autoCloseAtCapacity;
+    private Integer liquidationFrequencyLimit;
+    private String liquidationFrequencyPeriod;
+    private String maturityDefaultAction;
+
     private BigDecimal unitPrice;
     private BigDecimal yieldPa;
     private BigDecimal yieldYtd;

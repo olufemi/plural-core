@@ -13,6 +13,7 @@ public class TestCadOnboardingResponse {
     private String walletId;
     private boolean createdCustomer;
     private boolean createdCadAccount;
+    private String cadAccountProvisionMessage;
 
     public String getCustomerId() {
         return customerId;
@@ -100,5 +101,13 @@ public class TestCadOnboardingResponse {
 
     public void setCreatedCadAccount(boolean createdCadAccount) {
         this.createdCadAccount = createdCadAccount;
+    }
+
+    public String getCadAccountProvisionMessage() {
+        return cadAccountProvisionMessage;
+    }
+
+    public void setCadAccountProvisionMessage(String cadAccountProvisionMessage) {
+        this.cadAccountProvisionMessage = cadAccountProvisionMessage;
     }
 }

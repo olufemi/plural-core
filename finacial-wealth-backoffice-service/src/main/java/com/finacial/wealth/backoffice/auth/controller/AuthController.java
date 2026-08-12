@@ -150,7 +150,7 @@ public class AuthController {
         return ResponseEntity.ok(new TokenResponse(access, refreshToken, email, fullName, userRoleName, user.getId()));
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     @Operation(summary = "Refresh access token")
     @PostMapping("/refresh")
     public ResponseEntity<TokenResponse> refresh(@RequestParam("refreshToken") String refreshToken) {

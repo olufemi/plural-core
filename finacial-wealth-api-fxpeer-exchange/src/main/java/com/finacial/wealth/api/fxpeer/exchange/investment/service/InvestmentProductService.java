@@ -22,6 +22,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import org.springframework.stereotype.Service;
 
@@ -128,15 +129,15 @@ public class InvestmentProductService {
     @Transactional
     public ApiResponseModel create(InvestmentProductUpsertRequest req) {
         try {
+            String validationError = validate(req, null);
+            if (validationError != null) {
+                return resp(400, validationError, null);
+            }
             if (repo.existsByProductCode(req.getProductCode())) {
                 return resp(400, "Product code already exists: " + req.getProductCode(), null);
             }
 
             InvestmentProduct p = new InvestmentProduct();
-            String validationError = validate(req, null);
-            if (validationError != null) {
-                return resp(400, validationError, null);
-            }
 
             apply(p, req);
             repo.save(p);
@@ -152,6 +153,10 @@ public class InvestmentProductService {
     @Transactional
     public ApiResponseModel update(InvestmentProductUpsertRequest req) {
         try {
+            String requestValidationError = validateBasicProductReference(req);
+            if (requestValidationError != null) {
+                return resp(400, requestValidationError, null);
+            }
             InvestmentProduct p = repo.findByProductCode(req.getProductCode()).orElse(null);
             if (p == null) {
                 return resp(404, "Product not found: " + req.getProductCode(), null);
@@ -171,6 +176,16 @@ public class InvestmentProductService {
             ex.printStackTrace();
             return resp(500, "Unable to update product at the moment. Please try again.", null);
         }
+    }
+
+    private String validateBasicProductReference(InvestmentProductUpsertRequest req) {
+        if (req == null) {
+            return "request body is required";
+        }
+        if (isBlank(req.getProductCode())) {
+            return "productCode is required";
+        }
+        return null;
     }
 
     private void apply(InvestmentProduct p, InvestmentProductUpsertRequest r) {
@@ -211,6 +226,7 @@ public class InvestmentProductService {
         if (r.getEnableProduct() != null) {
             p.setEnableProduct(r.getEnableProduct());
         }
+        p.setMetaJson(mergeProductGovernanceConfig(r, p.getMetaJson()));
         p.setMetaJson(mergeLiquidationFeeConfig(r, p.getMetaJson()));
 
         if (r.getPercentageCurrValue() != null) {
@@ -256,6 +272,17 @@ public class InvestmentProductService {
         record.setInvestmentType(product.getType() != null ? product.getType().toString() : null);
         record.setMaturityAtEndOfDay(product.getMaturityAtEndOfDay());
         record.setMinimumInvestmentAmount(product.getMinimumInvestmentAmount());
+        record.setDescription(readTextFromMeta(product.getMetaJson(), "productGovernance", "description"));
+        record.setIssuerName(readTextFromMeta(product.getMetaJson(), "productGovernance", "issuerName"));
+        record.setFundManager(readTextFromMeta(product.getMetaJson(), "productGovernance", "fundManager"));
+        record.setRiskRating(readTextFromMeta(product.getMetaJson(), "productGovernance", "riskRating"));
+        record.setMinimumHoldingDays(readIntegerFromMeta(product.getMetaJson(), "productGovernance", "minimumHoldingDays"));
+        record.setMaximumHoldingDays(readIntegerFromMeta(product.getMetaJson(), "productGovernance", "maximumHoldingDays"));
+        record.setMaximumTotalRaise(readDecimalFromMeta(product.getMetaJson(), "productGovernance", "maximumTotalRaise"));
+        record.setAutoCloseAtCapacity(readBooleanFromMeta(product.getMetaJson(), "productGovernance", "autoCloseAtCapacity"));
+        record.setLiquidationFrequencyLimit(readIntegerFromMeta(product.getMetaJson(), "productGovernance", "liquidationFrequencyLimit"));
+        record.setLiquidationFrequencyPeriod(readTextFromMeta(product.getMetaJson(), "productGovernance", "liquidationFrequencyPeriod"));
+        record.setMaturityDefaultAction(readTextFromMeta(product.getMetaJson(), "productGovernance", "maturityDefaultAction"));
         record.setName(product.getName());
         record.setPartnerProductCode(product.getPartnerProductCode());
         record.setProspectusUrl(product.getProspectusUrl());
@@ -315,6 +342,32 @@ public class InvestmentProductService {
     }
 
     private String validate(InvestmentProductUpsertRequest req, InvestmentProduct existingProduct) {
+        if (req == null) {
+            return "request body is required";
+        }
+        if (isBlank(req.getProductCode())) {
+            return "productCode is required";
+        }
+        if (isBlank(req.getName())) {
+            return "name is required";
+        }
+        if (req.getType() == null) {
+            return "type is required";
+        }
+        if (isBlank(req.getCurrency())) {
+            return "currency is required";
+        }
+        if (req.getCurrency().trim().length() != 3) {
+            return "currency must be a 3-letter ISO currency code";
+        }
+        if (req.getMinimumInvestmentAmount() == null || req.getMinimumInvestmentAmount().compareTo(BigDecimal.ZERO) <= 0) {
+            return "minimumInvestmentAmount must be provided and greater than 0";
+        }
+        String governanceValidationError = validateProductGovernance(req, existingProduct);
+        if (governanceValidationError != null) {
+            return governanceValidationError;
+        }
+
         ValuationMethod valuationMethod = resolveValuationMethod(req, existingProduct);
         BigDecimal yieldPa = req.getYieldPa() != null
                 ? req.getYieldPa()
@@ -398,6 +451,67 @@ public class InvestmentProductService {
 
         if (anyLockField && req.getLockEnabled() == null && req.getLockDays() == null && existingProduct == null) {
             return "lockEnabled must be provided when lock configuration is supplied on product creation";
+        }
+
+        return null;
+    }
+
+    private String validateProductGovernance(InvestmentProductUpsertRequest req, InvestmentProduct existingProduct) {
+        boolean creating = existingProduct == null;
+
+        if (creating) {
+            if (isBlank(req.getDescription())) {
+                return "description is required";
+            }
+            if (isBlank(req.getIssuerName())) {
+                return "issuerName is required";
+            }
+            if (isBlank(req.getFundManager())) {
+                return "fundManager is required";
+            }
+            if (isBlank(req.getRiskRating())) {
+                return "riskRating is required";
+            }
+            if (req.getMinimumHoldingDays() == null) {
+                return "minimumHoldingDays is required";
+            }
+            if (req.getMaturityDefaultAction() == null || req.getMaturityDefaultAction().trim().isEmpty()) {
+                return "maturityDefaultAction is required";
+            }
+        }
+
+        Integer minimumHoldingDays = firstInteger(req.getMinimumHoldingDays(),
+                readIntegerFromMeta(existingProduct == null ? null : existingProduct.getMetaJson(), "productGovernance", "minimumHoldingDays"));
+        Integer maximumHoldingDays = firstInteger(req.getMaximumHoldingDays(),
+                readIntegerFromMeta(existingProduct == null ? null : existingProduct.getMetaJson(), "productGovernance", "maximumHoldingDays"));
+        if (minimumHoldingDays != null && minimumHoldingDays < 0) {
+            return "minimumHoldingDays cannot be negative";
+        }
+        if (maximumHoldingDays != null && maximumHoldingDays < 0) {
+            return "maximumHoldingDays cannot be negative";
+        }
+        if (minimumHoldingDays != null && maximumHoldingDays != null && maximumHoldingDays < minimumHoldingDays) {
+            return "maximumHoldingDays cannot be less than minimumHoldingDays";
+        }
+
+        if (req.getMaximumTotalRaise() != null && req.getMaximumTotalRaise().compareTo(BigDecimal.ZERO) <= 0) {
+            return "maximumTotalRaise must be greater than 0 when provided";
+        }
+
+        boolean frequencyLimitProvided = req.getLiquidationFrequencyLimit() != null;
+        boolean frequencyPeriodProvided = !isBlank(req.getLiquidationFrequencyPeriod());
+        if (frequencyLimitProvided && req.getLiquidationFrequencyLimit() <= 0) {
+            return "liquidationFrequencyLimit must be greater than 0 when provided";
+        }
+        if (frequencyLimitProvided != frequencyPeriodProvided) {
+            return "liquidationFrequencyLimit and liquidationFrequencyPeriod must be provided together";
+        }
+        if (frequencyPeriodProvided && !allowedValue(req.getLiquidationFrequencyPeriod(), "MONTH", "QUARTER", "YEAR")) {
+            return "liquidationFrequencyPeriod must be MONTH, QUARTER, or YEAR";
+        }
+        if (!isBlank(req.getMaturityDefaultAction())
+                && !allowedValue(req.getMaturityDefaultAction(), "REDEEM_TO_WALLET", "ROLLOVER_PRINCIPAL", "ROLLOVER_PRINCIPAL_AND_INTEREST")) {
+            return "maturityDefaultAction must be REDEEM_TO_WALLET, ROLLOVER_PRINCIPAL, or ROLLOVER_PRINCIPAL_AND_INTEREST";
         }
 
         return null;
@@ -531,6 +645,55 @@ public class InvestmentProductService {
         }
     }
 
+    private String mergeProductGovernanceConfig(InvestmentProductUpsertRequest req, String currentMetaJson) {
+        try {
+            ObjectNode root = readMetaJson(currentMetaJson);
+            boolean hasGovernanceConfig
+                    = req.getDescription() != null
+                    || req.getIssuerName() != null
+                    || req.getFundManager() != null
+                    || req.getRiskRating() != null
+                    || req.getMinimumHoldingDays() != null
+                    || req.getMaximumHoldingDays() != null
+                    || req.getMaximumTotalRaise() != null
+                    || req.getAutoCloseAtCapacity() != null
+                    || req.getLiquidationFrequencyLimit() != null
+                    || req.getLiquidationFrequencyPeriod() != null
+                    || req.getMaturityDefaultAction() != null;
+
+            if (!hasGovernanceConfig) {
+                return root.isEmpty() ? null : objectMapper.writeValueAsString(root);
+            }
+
+            ObjectNode governance = root.with("productGovernance");
+            putText(governance, "description", req.getDescription());
+            putText(governance, "issuerName", req.getIssuerName());
+            putText(governance, "fundManager", req.getFundManager());
+            putText(governance, "riskRating", req.getRiskRating());
+            if (req.getMinimumHoldingDays() != null) {
+                governance.put("minimumHoldingDays", req.getMinimumHoldingDays());
+            }
+            if (req.getMaximumHoldingDays() != null) {
+                governance.put("maximumHoldingDays", req.getMaximumHoldingDays());
+            }
+            if (req.getMaximumTotalRaise() != null) {
+                governance.put("maximumTotalRaise", req.getMaximumTotalRaise());
+            }
+            if (req.getAutoCloseAtCapacity() != null) {
+                governance.put("autoCloseAtCapacity", req.getAutoCloseAtCapacity());
+            }
+            if (req.getLiquidationFrequencyLimit() != null) {
+                governance.put("liquidationFrequencyLimit", req.getLiquidationFrequencyLimit());
+            }
+            putText(governance, "liquidationFrequencyPeriod", normalizeText(req.getLiquidationFrequencyPeriod()));
+            putText(governance, "maturityDefaultAction", normalizeText(req.getMaturityDefaultAction()));
+
+            return objectMapper.writeValueAsString(root);
+        } catch (Exception ex) {
+            throw new IllegalStateException("Unable to process product governance configuration", ex);
+        }
+    }
+
     private ObjectNode readMetaJson(String metaJson) {
         try {
             if (metaJson == null || metaJson.isBlank()) {
@@ -598,12 +761,59 @@ public class InvestmentProductService {
         }
     }
 
+    private BigDecimal readDecimalFromMeta(String metaJson, String nodeName, String fieldName) {
+        JsonNode value = readMetaJson(metaJson).path(nodeName).path(fieldName);
+        if (value.isMissingNode() || value.isNull() || value.asText().isBlank()) {
+            return null;
+        }
+        try {
+            return value.decimalValue();
+        } catch (Exception ex) {
+            return null;
+        }
+    }
+
     private String readTextFromMeta(String metaJson, String nodeName, String fieldName) {
         JsonNode value = readMetaJson(metaJson).path(nodeName).path(fieldName);
         if (value.isMissingNode() || value.isNull() || value.asText().isBlank()) {
             return null;
         }
         return value.asText();
+    }
+
+    private void putText(ObjectNode node, String fieldName, String value) {
+        if (value != null) {
+            if (value.trim().isEmpty()) {
+                node.remove(fieldName);
+            } else {
+                node.put(fieldName, value.trim());
+            }
+        }
+    }
+
+    private boolean isBlank(String value) {
+        return value == null || value.trim().isEmpty();
+    }
+
+    private boolean allowedValue(String value, String... allowed) {
+        if (isBlank(value)) {
+            return false;
+        }
+        String normalized = normalizeText(value);
+        for (String candidate : allowed) {
+            if (candidate.equals(normalized)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private String normalizeText(String value) {
+        return value == null ? null : value.trim().toUpperCase(Locale.ROOT);
+    }
+
+    private Integer firstInteger(Integer first, Integer second) {
+        return first != null ? first : second;
     }
 
     private void markRollbackOnly() {

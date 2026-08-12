@@ -4,7 +4,6 @@
  */
 package com.finacial.wealth.backoffice.admin.dto;
 
-import com.finacial.wealth.backoffice.auth.entity.BoAdminRole;
 import java.util.Set;
 
 /**
@@ -16,5 +15,5 @@ public record CreateAdminUserRequest(
         String fullName,
         String password,
         String confirmPassword,
-        Set<BoAdminRole> roles
+        Set<String> roles
 ) {}

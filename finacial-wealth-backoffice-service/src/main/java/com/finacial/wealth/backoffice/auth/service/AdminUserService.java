@@ -24,7 +24,10 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -77,7 +80,7 @@ public class AdminUserService {
         }
 
         u.setPasswordHash(passwordEncoder.encode(req.password()));
-        u.setRoles(new HashSet<>(req.roles()));
+        u.setRoles(resolveRoles(req.roles()));
 
         u = userRepo.save(u);
 
@@ -95,7 +98,7 @@ public class AdminUserService {
             u.setFullName(req.fullName().trim());
         }
         if (req.roles() != null && !req.roles().isEmpty()) {
-            u.setRoles(new HashSet<>(req.roles()));
+            u.setRoles(resolveRoles(req.roles()));
         }
 
         u = userRepo.save(u);
@@ -271,5 +274,25 @@ public class AdminUserService {
             auditService.audit("ADMIN_LIST", actorAdminId, null, ip, ua, meta);
         } catch (Exception e) {
         }
+    }
+
+    private Set<BoAdminRole> resolveRoles(Set<String> roleNames) {
+        if (roleNames == null || roleNames.isEmpty()) {
+            throw new IllegalArgumentException("roles is required");
+        }
+        Set<String> normalizedNames = roleNames.stream()
+                .filter(name -> name != null && !name.trim().isEmpty())
+                .map(name -> name.trim().toUpperCase(Locale.ROOT))
+                .collect(Collectors.toCollection(HashSet::new));
+        if (normalizedNames.isEmpty()) {
+            throw new IllegalArgumentException("roles is required");
+        }
+        Set<BoAdminRole> roles = new HashSet<>();
+        for (String roleName : normalizedNames) {
+            BoAdminRole role = roleRepo.findByName(roleName)
+                    .orElseThrow(() -> new IllegalArgumentException("Unknown role: " + roleName));
+            roles.add(role);
+        }
+        return roles;
     }
 }

@@ -159,6 +159,7 @@ public class BoInvestmentController {
     public ResponseEntity<Map<String, Object>> createProduct(@Valid @RequestBody InvestmentProductUpsertRequest req,
             @RequestAttribute("boAdminUserId") Long adminUserId,
             HttpServletRequest httpRequest) {
+        validateBackofficeProductPayload(req, true);
         if (approvalPolicyService.requiresApproval("INVESTMENT_PRODUCT_CREATE")) {
             return ResponseEntity.status(HttpStatus.ACCEPTED)
                     .body(approvalService.submitInvestmentProductCreate(req, adminUserId, httpRequest));
@@ -217,6 +218,39 @@ public class BoInvestmentController {
         return fxPeerClient.getAdminLiquidations(status, productCode, fromDate, toDate, page, size);
     }
 
+    @PostMapping("/liquidations/{orderRef}/retry")
+    @PreAuthorize("hasAnyAuthority('investment.liquidation.remediate','investment.liquidation.approve','ROLE_SUPER_ADMIN','ROLE_ADMIN','ROLE_OPERATIONS')")
+    @Operation(
+            summary = "Retry a failed liquidation",
+            description = "Moves only FAILED or LIQUIDATION_FAILED liquidation orders back to pending approval and re-reserves available investment value.",
+            security = @SecurityRequirement(name = "bearerAuth")
+    )
+    public ResponseEntity<Map<String, Object>> retryLiquidation(
+            @PathVariable String orderRef,
+            @RequestBody(required = false) Map<String, Object> request
+    ) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("orderRef", orderRef);
+        if (request != null && request.get("reason") != null) {
+            payload.put("reason", request.get("reason"));
+        }
+        return toStatusResponse(fxPeerClient.retryLiquidation(payload));
+    }
+
+    @PostMapping("/customers/{email}/investment-freeze")
+    @PreAuthorize("hasAnyAuthority('customer.profile.manage','investment.liquidation.remediate','ROLE_SUPER_ADMIN','ROLE_ADMIN','ROLE_OPERATIONS')")
+    @Operation(
+            summary = "Freeze or unfreeze customer investment activity",
+            description = "Freezes redemption and top-up activity for a customer, optionally scoped to a product code. Existing mobile APIs remain unchanged but will return a locked response while frozen.",
+            security = @SecurityRequirement(name = "bearerAuth")
+    )
+    public ResponseEntity<Map<String, Object>> setCustomerInvestmentFreeze(
+            @PathVariable String email,
+            @RequestBody Map<String, Object> request
+    ) {
+        return toStatusResponse(fxPeerClient.setCustomerInvestmentFreeze(email, request == null ? Collections.emptyMap() : request));
+    }
+
     @GetMapping("/liquidations/history")
     @PreAuthorize("hasAnyRole('SUPER_ADMIN','ADMIN','OPERATIONS','FINANCE')")
     @Operation(
@@ -242,7 +276,7 @@ public class BoInvestmentController {
     }
 
     @GetMapping("/orders")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN','ADMIN','OPERATIONS','FINANCE')")
+    @PreAuthorize("hasAnyAuthority('investment.order.view','ROLE_SUPER_ADMIN','ROLE_ADMIN','ROLE_OPERATIONS','ROLE_FINANCE')")
     @Operation(
             summary = "List investment and topup requests",
             description = "Returns subscription and topup requests for transaction monitoring. "
@@ -369,6 +403,7 @@ public class BoInvestmentController {
             HttpServletRequest httpRequest
     ) {
         req = mergeProductUpdate(productCode, req);
+        validateBackofficeProductPayload(req, false);
         if (approvalPolicyService.requiresApproval("INVESTMENT_PRODUCT_UPDATE")) {
             return ResponseEntity.status(HttpStatus.ACCEPTED)
                     .body(approvalService.submitInvestmentProductUpdate(productCode, req, adminUserId, httpRequest));
@@ -405,6 +440,75 @@ public class BoInvestmentController {
         return merged;
     }
 
+    private void validateBackofficeProductPayload(InvestmentProductUpsertRequest req, boolean creating) {
+        if (req == null) {
+            throw new IllegalArgumentException("request body is required");
+        }
+        if (creating) {
+            requireText(req.getDescription(), "description");
+            requireText(req.getIssuerName(), "issuerName");
+            requireText(req.getFundManager(), "fundManager");
+            requireText(req.getRiskRating(), "riskRating");
+            requirePositiveOrZero(req.getMinimumHoldingDays(), "minimumHoldingDays");
+            requireText(req.getMaturityDefaultAction(), "maturityDefaultAction");
+        }
+        if (req.getMinimumHoldingDays() != null && req.getMinimumHoldingDays() < 0) {
+            throw new IllegalArgumentException("minimumHoldingDays cannot be negative");
+        }
+        if (req.getMaximumHoldingDays() != null && req.getMaximumHoldingDays() < 0) {
+            throw new IllegalArgumentException("maximumHoldingDays cannot be negative");
+        }
+        if (req.getMinimumHoldingDays() != null
+                && req.getMaximumHoldingDays() != null
+                && req.getMaximumHoldingDays() < req.getMinimumHoldingDays()) {
+            throw new IllegalArgumentException("maximumHoldingDays cannot be less than minimumHoldingDays");
+        }
+        if (req.getMaximumTotalRaise() != null && req.getMaximumTotalRaise().compareTo(BigDecimal.ZERO) <= 0) {
+            throw new IllegalArgumentException("maximumTotalRaise must be greater than 0 when provided");
+        }
+        boolean frequencyLimitProvided = req.getLiquidationFrequencyLimit() != null;
+        boolean frequencyPeriodProvided = req.getLiquidationFrequencyPeriod() != null && !req.getLiquidationFrequencyPeriod().trim().isEmpty();
+        if (frequencyLimitProvided && req.getLiquidationFrequencyLimit() <= 0) {
+            throw new IllegalArgumentException("liquidationFrequencyLimit must be greater than 0 when provided");
+        }
+        if (frequencyLimitProvided != frequencyPeriodProvided) {
+            throw new IllegalArgumentException("liquidationFrequencyLimit and liquidationFrequencyPeriod must be provided together");
+        }
+        if (frequencyPeriodProvided && !isAllowedText(req.getLiquidationFrequencyPeriod(), "MONTH", "QUARTER", "YEAR")) {
+            throw new IllegalArgumentException("liquidationFrequencyPeriod must be MONTH, QUARTER, or YEAR");
+        }
+        if (req.getMaturityDefaultAction() != null
+                && !req.getMaturityDefaultAction().trim().isEmpty()
+                && !isAllowedText(req.getMaturityDefaultAction(), "REDEEM_TO_WALLET", "ROLLOVER_PRINCIPAL", "ROLLOVER_PRINCIPAL_AND_INTEREST")) {
+            throw new IllegalArgumentException("maturityDefaultAction must be REDEEM_TO_WALLET, ROLLOVER_PRINCIPAL, or ROLLOVER_PRINCIPAL_AND_INTEREST");
+        }
+    }
+
+    private void requireText(String value, String field) {
+        if (value == null || value.trim().isEmpty()) {
+            throw new IllegalArgumentException(field + " is required");
+        }
+    }
+
+    private void requirePositiveOrZero(Integer value, String field) {
+        if (value == null) {
+            throw new IllegalArgumentException(field + " is required");
+        }
+        if (value < 0) {
+            throw new IllegalArgumentException(field + " cannot be negative");
+        }
+    }
+
+    private boolean isAllowedText(String value, String... allowed) {
+        String normalized = value == null ? "" : value.trim().toUpperCase(Locale.ROOT);
+        for (String candidate : allowed) {
+            if (candidate.equals(normalized)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private InvestmentProductUpsertRequest fromCurrentProduct(String productCode, Map<String, Object> current) {
         InvestmentProductUpsertRequest req = new InvestmentProductUpsertRequest();
         req.setProductCode(firstString(current, "productCode", productCode));
@@ -413,6 +517,17 @@ public class BoInvestmentController {
         req.setCurrency(firstString(current, "currency", null));
         req.setMinimumInvestmentAmount(decimalValue(current.get("minimumInvestmentAmount")));
         req.setValuationMethod(enumValue(ValuationMethod.class, current.get("valuationMethod")));
+        req.setDescription(firstString(current, "description", null));
+        req.setIssuerName(firstString(current, "issuerName", null));
+        req.setFundManager(firstString(current, "fundManager", null));
+        req.setRiskRating(firstString(current, "riskRating", null));
+        req.setMinimumHoldingDays(intValue(current.get("minimumHoldingDays")));
+        req.setMaximumHoldingDays(intValue(current.get("maximumHoldingDays")));
+        req.setMaximumTotalRaise(decimalValue(current.get("maximumTotalRaise")));
+        req.setAutoCloseAtCapacity(booleanValue(current.get("autoCloseAtCapacity")));
+        req.setLiquidationFrequencyLimit(intValue(current.get("liquidationFrequencyLimit")));
+        req.setLiquidationFrequencyPeriod(firstString(current, "liquidationFrequencyPeriod", null));
+        req.setMaturityDefaultAction(firstString(current, "maturityDefaultAction", null));
         req.setUnitPrice(decimalValue(current.get("unitPrice")));
         req.setYieldPa(decimalValue(current.get("yieldPa")));
         req.setYieldYtd(decimalValue(current.get("yieldYtd")));
@@ -452,6 +567,17 @@ public class BoInvestmentController {
         if (patch.getCurrency() != null) target.setCurrency(patch.getCurrency());
         if (patch.getMinimumInvestmentAmount() != null) target.setMinimumInvestmentAmount(patch.getMinimumInvestmentAmount());
         if (patch.getValuationMethod() != null) target.setValuationMethod(patch.getValuationMethod());
+        if (patch.getDescription() != null) target.setDescription(patch.getDescription());
+        if (patch.getIssuerName() != null) target.setIssuerName(patch.getIssuerName());
+        if (patch.getFundManager() != null) target.setFundManager(patch.getFundManager());
+        if (patch.getRiskRating() != null) target.setRiskRating(patch.getRiskRating());
+        if (patch.getMinimumHoldingDays() != null) target.setMinimumHoldingDays(patch.getMinimumHoldingDays());
+        if (patch.getMaximumHoldingDays() != null) target.setMaximumHoldingDays(patch.getMaximumHoldingDays());
+        if (patch.getMaximumTotalRaise() != null) target.setMaximumTotalRaise(patch.getMaximumTotalRaise());
+        if (patch.getAutoCloseAtCapacity() != null) target.setAutoCloseAtCapacity(patch.getAutoCloseAtCapacity());
+        if (patch.getLiquidationFrequencyLimit() != null) target.setLiquidationFrequencyLimit(patch.getLiquidationFrequencyLimit());
+        if (patch.getLiquidationFrequencyPeriod() != null) target.setLiquidationFrequencyPeriod(patch.getLiquidationFrequencyPeriod());
+        if (patch.getMaturityDefaultAction() != null) target.setMaturityDefaultAction(patch.getMaturityDefaultAction());
         if (patch.getUnitPrice() != null) target.setUnitPrice(patch.getUnitPrice());
         if (patch.getYieldPa() != null) target.setYieldPa(patch.getYieldPa());
         if (patch.getYieldYtd() != null) target.setYieldYtd(patch.getYieldYtd());

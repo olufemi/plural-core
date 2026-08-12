@@ -2,13 +2,19 @@ package com.finacial.wealth.api.profiling.testonboarding;
 
 import com.finacial.wealth.api.profiling.domain.RegWalletInfo;
 import com.finacial.wealth.api.profiling.domain.UserDetails;
+import com.finacial.wealth.api.profiling.client.model.WalletSystemResponse;
 import com.finacial.wealth.api.profiling.market.service.impl.MarketProfileSyncService;
+import com.finacial.wealth.api.profiling.models.AddNewUserToLimit;
 import com.finacial.wealth.api.profiling.repo.RegWalletInfoRepository;
 import com.finacial.wealth.api.profiling.repo.UserDetailsRepository;
+import com.finacial.wealth.api.profiling.response.BaseResponse;
 import com.finacial.wealth.api.profiling.services.UniqueIdService;
+import com.finacial.wealth.api.profiling.services.WalletServices;
 import com.finacial.wealth.api.profiling.utils.UttilityMethods;
 import java.util.Date;
 import java.util.Optional;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -17,6 +23,7 @@ import org.springframework.util.StringUtils;
 @Service
 public class TestCadOnboardingService {
 
+    private static final Logger log = LoggerFactory.getLogger(TestCadOnboardingService.class);
     private static final String MARKET_CODE = "CA_RETAIL";
     private static final String COUNTRY_CODE = "CA";
     private static final String CURRENCY_CODE = "CAD";
@@ -26,6 +33,7 @@ public class TestCadOnboardingService {
     private final UniqueIdService uniqueIdService;
     private final MarketProfileSyncService marketProfileSyncService;
     private final UttilityMethods utilityMethods;
+    private final WalletServices walletServices;
 
     @Value("${fin.wealth.otp.encrypt.key}")
     private String encryptionKey;
@@ -34,12 +42,14 @@ public class TestCadOnboardingService {
             UserDetailsRepository userDetailsRepository,
             UniqueIdService uniqueIdService,
             MarketProfileSyncService marketProfileSyncService,
-            UttilityMethods utilityMethods) {
+            UttilityMethods utilityMethods,
+            WalletServices walletServices) {
         this.regWalletInfoRepository = regWalletInfoRepository;
         this.userDetailsRepository = userDetailsRepository;
         this.uniqueIdService = uniqueIdService;
         this.marketProfileSyncService = marketProfileSyncService;
         this.utilityMethods = utilityMethods;
+        this.walletServices = walletServices;
     }
 
     @Transactional
@@ -61,6 +71,7 @@ public class TestCadOnboardingService {
         populateWalletInfo(walletInfo, request, email, phone, fullName, createdCustomer);
         walletInfo = regWalletInfoRepository.save(walletInfo);
         upsertUserDetails(walletInfo, request);
+        String cadAccountProvisionMessage = ensureCadDownstreamAccount(walletInfo);
 
         marketProfileSyncService.syncCanadaOnboarding(walletInfo);
 
@@ -75,8 +86,67 @@ public class TestCadOnboardingService {
         response.setAccountNumber(walletInfo.getAccountNumber());
         response.setWalletId(walletInfo.getWalletId());
         response.setCreatedCustomer(createdCustomer);
-        response.setCreatedCadAccount(false);
+        response.setCreatedCadAccount(true);
+        response.setCadAccountProvisionMessage(cadAccountProvisionMessage);
         return response;
+    }
+
+    private String ensureCadDownstreamAccount(RegWalletInfo walletInfo) {
+        try {
+            log.info("CAD_BYPASS_DOWNSTREAM_START email={} phone={} walletId={} accountNumber={}",
+                    walletInfo.getEmail(), walletInfo.getPhoneNumber(), walletInfo.getWalletId(), walletInfo.getAccountNumber());
+            WalletSystemResponse walletResponse = walletServices.addUserToWalletSystem(walletInfo.getPhoneNumber());
+            log.info("CAD_BYPASS_DOWNSTREAM_WALLET_RESPONSE email={} phone={} walletId={} statusCode={} description={}",
+                    walletInfo.getEmail(), walletInfo.getPhoneNumber(), walletInfo.getWalletId(),
+                    walletResponse != null ? walletResponse.getStatusCode() : null,
+                    walletResponse != null ? walletResponse.getDescription() : null);
+            if (walletResponse == null || walletResponse.getStatusCode() == null || walletResponse.getStatusCode() != 200) {
+                String message = walletResponse != null ? walletResponse.getDescription() : "Downstream wallet response was empty";
+                throw new IllegalArgumentException("Unable to create CAD wallet in downstream service: " + message);
+            }
+
+            BaseResponse tierResponse = addTierToWallet(walletInfo);
+            log.info("CAD_BYPASS_DOWNSTREAM_TIER_RESPONSE email={} phone={} walletId={} statusCode={} description={}",
+                    walletInfo.getEmail(), walletInfo.getPhoneNumber(), walletInfo.getWalletId(),
+                    tierResponse != null ? tierResponse.getStatusCode() : null,
+                    tierResponse != null ? tierResponse.getDescription() : null);
+            if (!isSuccessOrAlreadyExists(tierResponse)) {
+                String message = tierResponse != null ? tierResponse.getDescription() : "Tier assignment response was empty";
+                throw new IllegalArgumentException("Unable to assign CAD wallet tier: " + message);
+            }
+
+            String tierMessage = tierResponse != null ? tierResponse.getDescription() : "Tier ensured";
+            log.info("CAD_BYPASS_DOWNSTREAM_SUCCESS email={} phone={} walletId={}",
+                    walletInfo.getEmail(), walletInfo.getPhoneNumber(), walletInfo.getWalletId());
+            return walletResponse.getDescription() + " " + tierMessage;
+        } catch (IllegalArgumentException ex) {
+            log.warn("CAD_BYPASS_DOWNSTREAM_FAILED email={} phone={} walletId={} reason={}",
+                    walletInfo.getEmail(), walletInfo.getPhoneNumber(), walletInfo.getWalletId(), ex.getMessage());
+            throw ex;
+        } catch (Exception ex) {
+            log.warn("CAD_BYPASS_DOWNSTREAM_FAILED email={} phone={} walletId={} reason={}",
+                    walletInfo.getEmail(), walletInfo.getPhoneNumber(), walletInfo.getWalletId(), ex.getMessage(), ex);
+            throw new IllegalArgumentException("Unable to create CAD wallet in downstream service: " + ex.getMessage(), ex);
+        }
+    }
+
+    private BaseResponse addTierToWallet(RegWalletInfo walletInfo) {
+        AddNewUserToLimit addLimit = new AddNewUserToLimit();
+        addLimit.setCategory(utilityMethods.getTier2());
+        addLimit.setWalletNumber(walletInfo.getWalletId());
+        addLimit.setPhoneNumber(walletInfo.getPhoneNumber());
+        return walletServices.addTierToWallet(addLimit);
+    }
+
+    private boolean isSuccessOrAlreadyExists(BaseResponse response) {
+        if (response == null) {
+            return false;
+        }
+        if (response.getStatusCode() == 200) {
+            return true;
+        }
+        String description = response.getDescription();
+        return description != null && description.toLowerCase().contains("already exist");
     }
 
     private void validate(TestCadOnboardingRequest request) {

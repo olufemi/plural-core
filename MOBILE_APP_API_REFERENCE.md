@@ -1157,7 +1157,8 @@ Redemption policy:
 - Backoffice governs settlement behavior through maker-checker protected `app_config` keys.
 - `investment.redemption.approval-mode=AUTO` settles all pending redemptions from the scheduler.
 - `investment.redemption.approval-mode=MANUAL` leaves pending redemptions for backoffice approval.
-- `investment.redemption.approval-mode=THRESHOLD` auto-settles redemptions up to `investment.redemption.auto-approval-threshold` and leaves higher amounts pending.
+- `investment.redemption.approval-mode=THRESHOLD` auto-settles redemptions up to the threshold for the investment currency and leaves higher amounts pending.
+- FxPeer first checks `investment.redemption.auto-approval-threshold.<CURRENCY>`, for example `investment.redemption.auto-approval-threshold.NGN` or `investment.redemption.auto-approval-threshold.CAD`, then falls back to `investment.redemption.auto-approval-threshold` if no currency-specific value exists.
 - Environment variables remain fallback values only if these `app_config` keys are absent.
 
 ### POST `/investments/request-top-up`

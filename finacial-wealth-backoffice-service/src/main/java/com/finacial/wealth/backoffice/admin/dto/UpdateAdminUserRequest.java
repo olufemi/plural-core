@@ -4,7 +4,6 @@
  */
 package com.finacial.wealth.backoffice.admin.dto;
 
-import com.finacial.wealth.backoffice.auth.entity.BoAdminRole;
 import java.util.Set;
 
 /**
@@ -13,5 +12,5 @@ import java.util.Set;
  */
 public record UpdateAdminUserRequest(
         String fullName,
-        Set<BoAdminRole> roles
+        Set<String> roles
 ) {}

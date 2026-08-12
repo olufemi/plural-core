@@ -20,8 +20,10 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -37,6 +39,7 @@ public class LiquidationActionService {
     private static final String REDEMPTION_APPROVAL_MODE_CONFIG = "investment.redemption.approval-mode";
     private static final String REDEMPTION_AUTO_APPROVAL_THRESHOLD_CONFIG = "investment.redemption.auto-approval-threshold";
     private static final String REDEMPTION_SCHEDULER_ENABLED_CONFIG = "investment.redemption.scheduler-enabled";
+    private static final String INVESTMENT_FREEZE_CUSTOMER_PREFIX = "investment.freeze.customer.";
 
     private final InvestmentOrderRepository orderRepo;
     private final AppConfigRepo appConfigRepo;
@@ -110,8 +113,9 @@ public class LiquidationActionService {
 
                 if (lockedOrder.getStatus() == InvestmentOrderStatus.LIQUIDATION_PENDING_APPROVAL
                         && !shouldAutoProcess(lockedOrder)) {
-                    log.info("Liquidation orderRef={} left pending approval by approvalMode={}",
-                            lockedOrder.getOrderRef(), normalizedApprovalMode());
+                    log.info("Liquidation orderRef={} currency={} amount={} left pending approval by approvalMode={}",
+                            lockedOrder.getOrderRef(), redemptionCurrency(lockedOrder), lockedOrder.getAmount(),
+                            normalizedApprovalMode());
                     continue;
                 }
 
@@ -256,6 +260,125 @@ public class LiquidationActionService {
         }
     }
 
+    @Transactional
+    public BaseResponse retryFailedLiquidation(String liquidationOrderRef, String reason) {
+        BaseResponse res = new BaseResponse();
+
+        if (liquidationOrderRef == null || liquidationOrderRef.trim().isEmpty()) {
+            res.setStatusCode(400);
+            res.setDescription("Liquidation order ref is required");
+            res.setData(Collections.emptyMap());
+            return res;
+        }
+
+        InvestmentOrder order = orderRepo.lockByOrderRef(liquidationOrderRef.trim()).orElse(null);
+        if (order == null) {
+            res.setStatusCode(404);
+            res.setDescription("Liquidation order not found");
+            res.setData(Collections.emptyMap());
+            return res;
+        }
+        if (order.getType() != InvestmentOrderType.LIQUIDATION) {
+            res.setStatusCode(400);
+            res.setDescription("Order is not a liquidation order");
+            res.setData(Collections.emptyMap());
+            return res;
+        }
+        if (order.getStatus() != InvestmentOrderStatus.LIQUIDATION_FAILED
+                && order.getStatus() != InvestmentOrderStatus.FAILED) {
+            res.setStatusCode(409);
+            res.setDescription("Only failed liquidation orders can be retried. Current status: " + order.getStatus());
+            res.setData(Collections.emptyMap());
+            return res;
+        }
+
+        InvestmentPosition position = order.getPosition();
+        if (position == null) {
+            res.setStatusCode(409);
+            res.setDescription("Liquidation has no linked investment position to reserve.");
+            res.setData(Collections.emptyMap());
+            return res;
+        }
+
+        InvestmentPosition lockedPosition = positionRepo.lockById(position.getId()).orElse(null);
+        if (lockedPosition == null) {
+            res.setStatusCode(404);
+            res.setDescription("Investment position not found");
+            res.setData(Collections.emptyMap());
+            return res;
+        }
+
+        BigDecimal amount = nvl(order.getAmount());
+        BigDecimal currentValue = nvl(lockedPosition.getCurrentValue());
+        BigDecimal reserved = nvl(lockedPosition.getReservedLiquidationAmount());
+        BigDecimal additionalReserveNeeded = reserved.compareTo(amount) >= 0 ? BigDecimal.ZERO : amount.subtract(reserved);
+        BigDecimal available = currentValue.subtract(reserved);
+        if (amount.compareTo(BigDecimal.ZERO) <= 0 || additionalReserveNeeded.compareTo(available) > 0) {
+            res.setStatusCode(409);
+            res.setDescription("Liquidation retry cannot reserve amount. Available: " + available);
+            res.setData(Collections.emptyMap());
+            return res;
+        }
+
+        lockedPosition.setReservedLiquidationAmount(reserved.add(additionalReserveNeeded));
+        lockedPosition.setUpdatedAt(Instant.now());
+        positionRepo.save(lockedPosition);
+
+        order.setStatus(InvestmentOrderStatus.LIQUIDATION_PENDING_APPROVAL);
+        order.setFailureReason(reason == null || reason.trim().isEmpty()
+                ? "Retried by backoffice"
+                : "Retried by backoffice: " + reason.trim());
+        order.setUpdatedAt(Instant.now());
+        orderRepo.save(order);
+        redemptionNotificationPublisher.redemptionRequested(order);
+
+        Map<String, Object> data = new HashMap<>();
+        data.put("orderRef", order.getOrderRef());
+        data.put("status", order.getStatus().name());
+        data.put("reservedRedemptionAmount", lockedPosition.getReservedLiquidationAmount());
+        data.put("availableInvestmentAmount", currentValue.subtract(lockedPosition.getReservedLiquidationAmount()));
+
+        res.setStatusCode(200);
+        res.setDescription("Failed liquidation moved back to pending approval.");
+        res.setData(data);
+        return res;
+    }
+
+    @Transactional
+    public BaseResponse setCustomerInvestmentFreeze(String email, Boolean frozen, String productCode, String reason) {
+        BaseResponse res = new BaseResponse();
+        if (email == null || email.trim().isEmpty()) {
+            res.setStatusCode(400);
+            res.setDescription("Customer email is required");
+            res.setData(Collections.emptyMap());
+            return res;
+        }
+        if (frozen == null) {
+            res.setStatusCode(400);
+            res.setDescription("frozen is required");
+            res.setData(Collections.emptyMap());
+            return res;
+        }
+
+        String normalizedEmail = email.trim().toLowerCase(Locale.ROOT);
+        String normalizedProduct = productCode == null ? "" : productCode.trim().toUpperCase(Locale.ROOT);
+        String configName = normalizedProduct.isEmpty()
+                ? INVESTMENT_FREEZE_CUSTOMER_PREFIX + normalizedEmail
+                : INVESTMENT_FREEZE_CUSTOMER_PREFIX + normalizedEmail + "." + normalizedProduct;
+        upsertAppConfig(configName, "Backoffice investment activity freeze. " + (reason == null ? "" : reason.trim()), frozen.toString());
+
+        Map<String, Object> data = new HashMap<>();
+        data.put("email", normalizedEmail);
+        data.put("productCode", normalizedProduct.isEmpty() ? null : normalizedProduct);
+        data.put("frozen", frozen);
+        data.put("configName", configName);
+
+        res.setStatusCode(200);
+        res.setDescription(frozen ? "Investment activity frozen." : "Investment activity unfrozen.");
+        res.setData(data);
+        return res;
+    }
+
     private static BigDecimal nvl(BigDecimal value) {
         return value == null ? BigDecimal.ZERO : value;
     }
@@ -266,7 +389,7 @@ public class LiquidationActionService {
             return false;
         }
         if ("THRESHOLD".equals(mode)) {
-            return nvl(order.getAmount()).compareTo(autoApprovalThresholdAmount()) <= 0;
+            return nvl(order.getAmount()).compareTo(autoApprovalThresholdAmount(order)) <= 0;
         }
         return true;
     }
@@ -280,8 +403,15 @@ public class LiquidationActionService {
         return ("MANUAL".equals(mode) || "THRESHOLD".equals(mode) || "AUTO".equals(mode)) ? mode : "AUTO";
     }
 
-    private BigDecimal autoApprovalThresholdAmount() {
-        String configuredThreshold = appConfigValue(REDEMPTION_AUTO_APPROVAL_THRESHOLD_CONFIG, autoApprovalThreshold);
+    private BigDecimal autoApprovalThresholdAmount(InvestmentOrder order) {
+        String currency = redemptionCurrency(order);
+        String configuredThreshold = null;
+        if (currency != null && !currency.trim().isEmpty()) {
+            configuredThreshold = appConfigValue(REDEMPTION_AUTO_APPROVAL_THRESHOLD_CONFIG + "." + currency, null);
+        }
+        if (configuredThreshold == null || configuredThreshold.trim().isEmpty()) {
+            configuredThreshold = appConfigValue(REDEMPTION_AUTO_APPROVAL_THRESHOLD_CONFIG, autoApprovalThreshold);
+        }
         if (configuredThreshold == null || configuredThreshold.trim().isEmpty()) {
             return BigDecimal.ZERO;
         }
@@ -291,6 +421,24 @@ public class LiquidationActionService {
             log.warn("Invalid redemption auto approval threshold '{}'; defaulting to 0", configuredThreshold);
             return BigDecimal.ZERO;
         }
+    }
+
+    private String redemptionCurrency(InvestmentOrder order) {
+        try {
+            if (order != null && order.getProduct() != null && order.getProduct().getCurrency() != null
+                    && !order.getProduct().getCurrency().trim().isEmpty()) {
+                return order.getProduct().getCurrency().trim().toUpperCase(Locale.ROOT);
+            }
+            if (order != null && order.getPosition() != null && order.getPosition().getProduct() != null
+                    && order.getPosition().getProduct().getCurrency() != null
+                    && !order.getPosition().getProduct().getCurrency().trim().isEmpty()) {
+                return order.getPosition().getProduct().getCurrency().trim().toUpperCase(Locale.ROOT);
+            }
+        } catch (Exception ex) {
+            log.warn("Unable to resolve redemption currency for orderRef={}",
+                    order == null ? null : order.getOrderRef(), ex);
+        }
+        return null;
     }
 
     private String appConfigValue(String configName, String fallback) {
@@ -305,4 +453,13 @@ public class LiquidationActionService {
         }
         return fallback;
     }
+    private void upsertAppConfig(String configName, String description, String value) {
+        List<AppConfig> configs = appConfigRepo.findByConfigName(configName);
+        AppConfig config = configs == null || configs.isEmpty() ? new AppConfig() : configs.get(0);
+        config.setConfigName(configName);
+        config.setConfigDescription(description);
+        config.setConfigValue(value);
+        appConfigRepo.save(config);
+    }
+
 }

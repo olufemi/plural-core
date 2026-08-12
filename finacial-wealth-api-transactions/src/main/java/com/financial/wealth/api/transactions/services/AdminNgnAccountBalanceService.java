@@ -69,8 +69,13 @@ public class AdminNgnAccountBalanceService {
         data.put("coreStatusCode", coreResponse == null ? 502 : coreResponse.getStatusCode());
         data.put("coreDescription", coreResponse == null ? "Core banking cumulative balance response is empty" : coreResponse.getDescription());
 
-        @SuppressWarnings("unchecked")
-        List<Object> balances = coreData.get("balances") instanceof List<?> raw ? (List<Object>) raw : List.of();
+        List<Object> balances = new ArrayList<>();
+        Object rawBalances = coreData.get("balances");
+        if (rawBalances instanceof List<?>) {
+            @SuppressWarnings("unchecked")
+            List<Object> castBalances = (List<Object>) rawBalances;
+            balances = castBalances;
+        }
         if (!balances.isEmpty()) {
             data.put("totalBalance", chooseAmount(data.get("totalBalance"), sumAmounts(balances,
                     "totalBalance", "availableBalance", "ledgerBalance", "currentBalance", "balance")));
@@ -178,9 +183,10 @@ public class AdminNgnAccountBalanceService {
     private BigDecimal sumAmounts(List<Object> rows, String... keys) {
         BigDecimal total = BigDecimal.ZERO;
         for (Object row : rows) {
-            if (!(row instanceof Map<?, ?> map)) {
+            if (!(row instanceof Map<?, ?>)) {
                 continue;
             }
+            Map<?, ?> map = (Map<?, ?>) row;
             for (String key : keys) {
                 Object value = map.get(key);
                 if (value != null) {
@@ -193,15 +199,15 @@ public class AdminNgnAccountBalanceService {
     }
 
     private BigDecimal amount(Object value) {
-        if (value instanceof BigDecimal bigDecimal) {
-            return bigDecimal;
+        if (value instanceof BigDecimal) {
+            return (BigDecimal) value;
         }
-        if (value instanceof Number number) {
-            return BigDecimal.valueOf(number.doubleValue());
+        if (value instanceof Number) {
+            return BigDecimal.valueOf(((Number) value).doubleValue());
         }
-        if (value instanceof String text && StringUtils.hasText(text)) {
+        if (value instanceof String && StringUtils.hasText((String) value)) {
             try {
-                return new BigDecimal(text.replace(",", "").trim());
+                return new BigDecimal(((String) value).replace(",", "").trim());
             } catch (NumberFormatException ignored) {
                 return BigDecimal.ZERO;
             }

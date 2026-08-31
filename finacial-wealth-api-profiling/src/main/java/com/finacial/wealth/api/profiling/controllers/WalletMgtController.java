@@ -7,6 +7,7 @@ package com.finacial.wealth.api.profiling.controllers;
 
 import com.finacial.wealth.api.profiling.breezpay.virt.get.bvn.BvnService;
 import com.finacial.wealth.api.profiling.breezpay.virt.get.bvn.ValidateBvnReq;
+import com.finacial.wealth.api.profiling.chatwoot.ChatwootSessionService;
 import com.finacial.wealth.api.profiling.identity.IdentityLivenessSessionRequest;
 import com.finacial.wealth.api.profiling.identity.IdentityLivenessVerifyRequest;
 import com.finacial.wealth.api.profiling.models.ApiResponseModel;
@@ -64,6 +65,7 @@ public class WalletMgtController {
     private final WalletSystemProxyService walletSystemProxyService;
     private final AddAccountService addAccountService;
     private final IdentityLivenessService identityLivenessService;
+    private final ChatwootSessionService chatwootSessionService;
     private final BvnService bvnService;
     private final CountryService countryService;
     private final ConsentVerificationCoordinator consentVerificationCoordinator;
@@ -84,6 +86,14 @@ public class WalletMgtController {
     ) {
 
         ApiResponseModel baseResponse = countryService.getCountriesDetails(auth);
+        return new ResponseEntity<>(baseResponse, HttpStatus.OK);
+    }
+
+    @GetMapping("/support/chatwoot/session")
+    public ResponseEntity<BaseResponse> getChatwootSession(
+            @RequestHeader(value = "authorization", required = true) String auth) {
+
+        BaseResponse baseResponse = chatwootSessionService.getSession(auth);
         return new ResponseEntity<>(baseResponse, HttpStatus.OK);
     }
 

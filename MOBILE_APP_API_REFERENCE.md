@@ -2,7 +2,7 @@
 
 This document is a single FE/mobile-facing API reference for the Plural mobile app. It is compiled from the current service controllers in this repository.
 
-Last updated: 2026-06-24
+Last updated: 2026-08-31
 
 ## Base URLs
 
@@ -310,6 +310,52 @@ Headers:
 ```http
 authorization: Bearer <accessToken>
 ```
+
+### GET `/walletmgt/support/chatwoot/session`
+
+Fetch a signed Chatwoot live-chat widget session for the logged-in customer.
+
+Gateway path:
+
+```text
+GET /api/profiling/walletmgt/support/chatwoot/session
+```
+
+Headers:
+
+```http
+authorization: Bearer <accessToken>
+```
+
+Response:
+
+```json
+{
+  "statusCode": 200,
+  "description": "Live chat session generated successfully",
+  "data": {
+    "baseUrl": "https://app.chatwoot.com",
+    "websiteToken": "CHATWOOT_WEBSITE_TOKEN",
+    "locale": "en",
+    "colorScheme": "auto",
+    "user": {
+      "identifier": "customer@example.com",
+      "email": "customer@example.com",
+      "name": "Customer Name",
+      "identifier_hash": "generated_hmac_sha256_hash"
+    },
+    "customAttributes": {}
+  }
+}
+```
+
+Notes:
+
+- The backend generates `identifier_hash`; the mobile app must not compute or store the Chatwoot HMAC secret.
+- `user.identifier` is the customer's email address, which is Plural's stable cross-currency customer identifier.
+- For pilot, no walletId, account number, phone number, or balance attributes are returned to Chatwoot.
+- `503` means live chat is disabled in backend config.
+- `500` means Chatwoot backend config is incomplete.
 
 ### POST `/walletmgt/get-account-bal`
 
